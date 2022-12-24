@@ -22,6 +22,7 @@ type route = method_ * path * handler
 let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     unit =
   let { Request.meth; target; _ } = Reqd.request reqd in
+  Log.info (fun m -> m "%s %s" (Method.to_string meth) target);
   (* Parse target *)
   let path, query =
     let u = Uri.of_string target in

@@ -1,5 +1,5 @@
 (library
  (name waq)
  (preprocess
-  (pps ppx_deriving.show ppx_deriving.make))
+  (pps ppx_deriving.show ppx_deriving.make ppx_deriving.enum))
  (libraries httpaf httpaf-lwt-unix lwt lwt.unix jingoo uri))
