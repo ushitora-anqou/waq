@@ -123,3 +123,6 @@ let get (path : string) (handler : handler) =
 
 let respond ?(status = `OK) ?(headers = []) (body : string) : response Lwt.t =
   Lwt.return @@ make_response ~status ~headers ~body ()
+
+let query_opt (k : string) (r : request) : string list option =
+  List.assoc_opt k r.query
