@@ -26,7 +26,10 @@ let log (l : level) : 'a log =
   |> List.iter @@ fun r ->
      if level_implies r.l l then
        f @@ fun fmt ->
-       Format.fprintf r.fmt ("[%s] @[" ^^ fmt ^^ "@]@.") (string_of_level l)
+       Format.fprintf r.fmt
+         ("[%s][%s] @[" ^^ fmt ^^ "@]@.")
+         Time.(now () |> to_string)
+         (string_of_level l)
 
 let debug : 'a log = fun f -> log Debug f
 let info : 'a log = fun f -> log Info f

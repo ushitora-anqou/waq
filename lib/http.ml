@@ -22,7 +22,7 @@ type route = method_ * path * handler
 let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     unit =
   let { Request.meth; target; _ } = Reqd.request reqd in
-  Log.info (fun m -> m "%s %s" (Method.to_string meth) target);
+  Log.debug (fun m -> m "%s %s" (Method.to_string meth) target);
   (* Parse target *)
   let path, query =
     let u = Uri.of_string target in
@@ -70,8 +70,16 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
       Reqd.respond_with_string reqd
         (Response.create ~headers res.status)
         res.body;
+      Log.info (fun m ->
+          m "%s %s %s"
+            (Status.to_string res.status)
+            (Method.to_string meth) target);
       Lwt.return_unit)
-    (fun e -> Lwt_io.printf "Error: %s" (Printexc.to_string e))
+    (fun e ->
+      Log.err (fun m ->
+          m "Exception caught: %s %s: %s" (Method.to_string meth) target
+            (Printexc.to_string e));
+      Lwt.return_unit)
 
 (* FIXME: What is this function for? *)
 let error_handler (_ : Unix.sockaddr) ?request:_
