@@ -4,6 +4,7 @@ open Httpaf_lwt_unix
 type request = {
   query : (string * string list) list;
   param : (string * string) list;
+  body : string Lwt.t;
 }
 [@@deriving make]
 
@@ -23,11 +24,13 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     unit =
   let { Request.meth; target; _ } = Reqd.request reqd in
   Log.debug (fun m -> m "%s %s" (Method.to_string meth) target);
+
   (* Parse target *)
   let path, query =
     let u = Uri.of_string target in
     (Uri.path u |> String.split_on_char '/' |> List.tl, Uri.query u)
   in
+
   (* Choose correct handler via router *)
   let param, handler =
     let default_handler =
@@ -51,13 +54,48 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
              |> Option.map (fun param -> (param, handler)))
     |> Option.value ~default:([], default_handler)
   in
+
+  (* Start a thread to read the body *)
+  let body =
+    let promise, resolver = Lwt.wait () in
+    let body = Reqd.request_body reqd in
+    let length = ref 0 in
+    let buffer = ref (Bigstringaf.create 4096) in
+    (* Callbacks *)
+    let rec on_read chunk ~off ~len =
+      let new_length = !length + len in
+      if new_length > Bigstringaf.length !buffer then (
+        (* Resize buffer *)
+        let new_buffer = Bigstringaf.create (new_length * 2) in
+        Bigstringaf.blit !buffer ~src_off:0 new_buffer ~dst_off:0 ~len:!length;
+        buffer := new_buffer);
+      (* Copy the chunk to the buffer *)
+      Bigstringaf.blit chunk ~src_off:off !buffer ~dst_off:!length ~len;
+      length := new_length;
+      Body.schedule_read body ~on_eof ~on_read
+    and on_eof () =
+      Bigstringaf.sub !buffer ~off:0 ~len:!length
+      |> Bigstringaf.to_string |> Lwt.wakeup_later resolver
+    in
+    Body.schedule_read body ~on_eof ~on_read;
+    promise
+  in
+
   (* Return the response asynchronously *)
   Lwt.async @@ fun () ->
   Lwt.catch
     (fun () ->
       let open Lwt.Syntax in
       (* Invoke the handler *)
-      let* res = handler (make_request ~query ~param ()) in
+      let* res =
+        try handler (make_request ~query ~param ~body ())
+        with e ->
+          Log.err (fun m ->
+              m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
+                (Printexc.to_string e)
+                (Printexc.get_backtrace ()));
+          Lwt.return @@ make_response ~status:`Internal_server_error ()
+      in
       (* Construct headers *)
       let headers =
         let src =
@@ -80,7 +118,7 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
       Lwt.return_unit)
     (fun e ->
       Log.err (fun m ->
-          m "Exception caught: %s %s: %s\n%s" (Method.to_string meth) target
+          m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth) target
             (Printexc.to_string e)
             (Printexc.get_backtrace ()));
       Lwt.return_unit)
@@ -128,6 +166,10 @@ let get (path : string) (handler : handler) =
   let path = parse_path path in
   (`GET, path, handler)
 
+let post (path : string) (handler : handler) =
+  let path = parse_path path in
+  (`POST, path, handler)
+
 let respond ?(status = `OK) ?(headers = []) (body : string) : response Lwt.t =
   Lwt.return @@ make_response ~status ~headers ~body ()
 
@@ -135,3 +177,4 @@ let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
 
 let param (k : string) (r : request) : string = List.assoc k r.param
+let body (r : request) : string Lwt.t = r.body

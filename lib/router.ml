@@ -113,6 +113,28 @@ let get_users req =
     ~headers:[ ("Content-Type", "application/jrd+json; charset=utf-8") ]
     body
 
+type post_inbox_req = {
+  context : Yojson.Safe.t; [@key "@context"]
+  id : string;
+  typ : string; [@key "type"]
+  actor : Yojson.Safe.t;
+  obj : Yojson.Safe.t; [@key "object"]
+}
+[@@deriving yojson { strict = false }]
+
+let post_inbox req =
+  let open Lwt.Syntax in
+  let* body = Http.body req in
+  let j = Yojson.Safe.from_string body in
+  match post_inbox_req_of_yojson j with
+  | Error _ ->
+      Log.debug (fun m -> m "Error:\n%s" (Yojson.Safe.pretty_to_string j));
+      Http.respond ~status:`Bad_request ""
+  | Ok r ->
+      Log.debug (fun m ->
+          m "Activity: %s\n%s" r.typ (Yojson.Safe.pretty_to_string j));
+      Http.respond ~status:`OK ""
+
 let routes =
   let open Http in
   router
@@ -120,4 +142,5 @@ let routes =
       get "/.well-known/host-meta" well_known_host_meta;
       get "/.well-known/webfinger" well_known_webfinger;
       get "/users/:name" get_users;
+      post "/users/:name/inbox" post_inbox;
     ]
