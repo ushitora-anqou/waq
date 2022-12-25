@@ -6,4 +6,4 @@
    ppx_deriving.make
    ppx_deriving.enum
    ppx_deriving_yaml))
- (libraries httpaf httpaf-lwt-unix lwt lwt.unix jingoo uri yaml yaml.unix))
+ (libraries httpaf httpaf-lwt-unix jingoo lwt lwt.unix uri yaml yaml.unix))

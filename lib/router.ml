@@ -1,4 +1,3 @@
-open Waq
 open Jingoo
 open Jg_types
 module C = Config
@@ -43,3 +42,11 @@ let well_known_webfinger req =
         ~headers:[ ("Content-Type", "application/jrd+json; charset=utf-8") ]
         body
   | _ -> Http.respond ~status:`Bad_request ""
+
+let routes =
+  let open Http in
+  router
+    [
+      get "/.well-known/host-meta" well_known_host_meta;
+      get "/.well-known/webfinger" well_known_webfinger;
+    ]

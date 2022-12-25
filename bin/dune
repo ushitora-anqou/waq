@@ -1,4 +1,4 @@
 (executable
  (public_name waq)
  (name main)
- (libraries waq httpaf httpaf-lwt-unix lwt lwt.unix jingoo uri))
+ (libraries waq))
