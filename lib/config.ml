@@ -10,8 +10,7 @@ let listen_host () = Uri.of_string ("//" ^ !c.listen) |> Uri.host |> Option.get
 let listen_port () = Uri.of_string ("//" ^ !c.listen) |> Uri.port |> Option.get
 let server_name () = !c.server_name
 
-let domain () =
+let is_my_domain s =
+  (* FIXME: Consider port *)
   let u = !c.server_name |> Uri.of_string in
-  (Uri.host u |> Option.get)
-  ^ ":"
-  ^ (Uri.port u |> Option.value ~default:443 |> string_of_int)
+  s = (Uri.host u |> Option.get)
