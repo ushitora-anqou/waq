@@ -12,5 +12,4 @@ let server_name () = !c.server_name
 
 let is_my_domain s =
   (* FIXME: Consider port *)
-  let u = !c.server_name |> Uri.of_string in
-  s = (Uri.host u |> Option.get)
+  s = !c.server_name

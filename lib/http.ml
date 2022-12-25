@@ -15,7 +15,7 @@ type response = {
 [@@deriving make]
 
 type handler = request -> response Lwt.t
-type path = [ `L of string ] list
+type path = [ `L of string | `P of string ] list
 type method_ = Method.t
 type route = method_ * path * handler
 
@@ -29,7 +29,7 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     (Uri.path u |> String.split_on_char '/' |> List.tl, Uri.query u)
   in
   (* Choose correct handler via router *)
-  let handler =
+  let param, handler =
     let default_handler =
       Fun.const @@ Lwt.return
       @@ make_response
@@ -37,16 +37,19 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
              (match meth with `GET -> `Not_found | _ -> `Method_not_allowed)
            ()
     in
-    let rec match_path = function
-      | [], [] -> Some ()
-      | x :: xs, `L y :: ys when x = y -> match_path (xs, ys)
+    let rec match_path param = function
+      | [], [] -> Some param
+      | x :: xs, `L y :: ys when x = y -> match_path param (xs, ys)
+      | x :: xs, `P y :: ys -> match_path ((y, x) :: param) (xs, ys)
       | _ -> None
     in
     routes
     |> List.find_map (fun (meth', ptn, handler) ->
            if meth <> meth' then None
-           else match_path (path, ptn) |> Option.map (Fun.const handler))
-    |> Option.value ~default:default_handler
+           else
+             match_path [] (path, ptn)
+             |> Option.map (fun param -> (param, handler)))
+    |> Option.value ~default:([], default_handler)
   in
   (* Return the response asynchronously *)
   Lwt.async @@ fun () ->
@@ -54,7 +57,7 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     (fun () ->
       let open Lwt.Syntax in
       (* Invoke the handler *)
-      let* res = handler (make_request ~query ()) in
+      let* res = handler (make_request ~query ~param ()) in
       (* Construct headers *)
       let headers =
         let src =
@@ -77,8 +80,9 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
       Lwt.return_unit)
     (fun e ->
       Log.err (fun m ->
-          m "Exception caught: %s %s: %s" (Method.to_string meth) target
-            (Printexc.to_string e));
+          m "Exception caught: %s %s: %s\n%s" (Method.to_string meth) target
+            (Printexc.to_string e)
+            (Printexc.get_backtrace ()));
       Lwt.return_unit)
 
 (* FIXME: What is this function for? *)
@@ -115,7 +119,10 @@ let start_server ?(host = "127.0.0.1") ?(port = 8080) f routes =
 let router (routes : route list) = routes
 
 let parse_path (src : string) : path =
-  src |> String.split_on_char '/' |> List.tl |> List.map (fun x -> `L x)
+  src |> String.split_on_char '/' |> List.tl
+  |> List.map (function
+       | x when String.starts_with ~prefix:":" x -> `P x
+       | x -> `L x)
 
 let get (path : string) (handler : handler) =
   let path = parse_path path in
@@ -126,3 +133,5 @@ let respond ?(status = `OK) ?(headers = []) (body : string) : response Lwt.t =
 
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
+
+let param (k : string) (r : request) : string = List.assoc k r.param
