@@ -1,10 +1,12 @@
 open Waq
+module C = Config
 module H = Handler
 
 let () =
   Log.(add_reporter (make_reporter ~l:Debug ()));
   let open Http in
-  let host, port = ("localhost", 8000) in
+  C.load_file "config.yml";
+  let host, port = (C.listen_host (), C.listen_port ()) in
   router
     [
       get "/.well-known/host-meta" H.well_known_host_meta;

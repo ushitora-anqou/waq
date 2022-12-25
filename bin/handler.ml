@@ -1,17 +1,15 @@
 open Waq
 open Jingoo
 open Jg_types
-
-let schema = "http"
-let domain_name = "localhost:8080"
+module C = Config
 
 let well_known_host_meta _req =
   let body =
     Jg_template.from_string
-      ~models:[ ("schema", Tstr schema); ("domain", Tstr domain_name) ]
+      ~models:[ ("server_name", Tstr (C.server_name ())) ]
       {|<?xml version="1.0" encoding="UTF-8"?>
 <XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
-  <Link rel="lrdd" template="{{ schema }}://{{ domain }}/.well-known/webfinger?resource={uri}"/>
+  <Link rel="lrdd" template="{{ server_name }}/.well-known/webfinger?resource={uri}"/>
 </XRD>
 |}
   in
@@ -20,8 +18,9 @@ let well_known_host_meta _req =
     body
 
 let well_known_webfinger req =
+  let dom = C.domain () in
   match req |> Http.query_opt "resource" with
-  | Some [ "acct:anqou@localhost:8000" ] ->
+  | Some [ s ] when s = "acct:anqou@" ^ dom ->
       let body =
         String.trim
           {|
