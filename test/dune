@@ -1,2 +1,3 @@
-(test
- (name waq))
+(tests
+ (names test_http)
+ (libraries waq alcotest))
