@@ -17,7 +17,7 @@ let unpack req f g =
       Http.respond ~status:`Bad_request ""
   | Ok r -> g j r
 
-module ToServer = struct
+module FromServer = struct
   let well_known_host_meta _req =
     let body =
       Jg_template.from_string
@@ -141,7 +141,28 @@ module ToServer = struct
     Http.respond ~status:`OK ""
 end
 
+module ToServer = struct
+  type post_inbox_req = {
+    context : Yojson.Safe.t; [@key "@context"]
+    id : string;
+    typ : string; [@key "type"]
+    actor : Yojson.Safe.t;
+    obj : Yojson.Safe.t; [@key "object"]
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  let post_users_inbox_follow _id =
+    let link = url [ "users"; "anqou" ] in
+    make_post_inbox_req
+      ~context:(`String "https://www.w3.org/ns/activitystreams")
+      ~id:(link ^ "#follow/1") ~typ:"Follow" ~actor:(`String link)
+      ~obj:(`String "http://localhost:3000/users/admin")
+    |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
+    |> Http.fetch ~meth:`POST ~url:"http://localhost:3000/users/admin/inbox"
+end
+
 module ToClient = struct
+  (*
   type post_api_v1_statuses_req = { status : string }
   [@@deriving make, yojson { strict = false }]
 
@@ -152,10 +173,42 @@ module ToClient = struct
   }
   [@@deriving make, yojson { strict = false }]
 
-  let post_api_v1_statuses req =
+  let post_api_v1_statuses _req =
     unpack req post_api_v1_statuses_req_of_yojson @@ fun _ r ->
     Log.debug (fun m -> m "Post \"%s\"" r.status);
     Http.respond ~status:`OK ""
+    *)
+
+  type post_api_v1_accounts_follow_res = {
+    id : string;
+    following : bool;
+    showing_reblogs : bool;
+    notifying : bool;
+    followed_by : bool;
+    blocking : bool;
+    blocked_by : bool;
+    muting : bool;
+    muting_notifications : bool;
+    requested : bool;
+    domain_blocking : bool;
+    endorsed : bool;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  let post_api_v1_accounts_follow req =
+    let open Lwt.Syntax in
+    let id = Http.param ":id" req in
+    let* status, body = ToServer.post_users_inbox_follow id in
+    match (status, body) with
+    | `OK, _body ->
+        make_post_api_v1_accounts_follow_res ~id ~following:true
+          ~showing_reblogs:true ~notifying:false ~followed_by:false
+          ~blocking:false ~blocked_by:false ~muting:false
+          ~muting_notifications:false ~requested:false ~domain_blocking:false
+          ~endorsed:false
+        |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
+        |> Http.respond ~status:`OK
+    | _ -> Http.respond ~status:`Internal_server_error ""
 end
 
 let routes =
@@ -163,10 +216,13 @@ let routes =
   router
     [
       (* to servers *)
-      get "/.well-known/host-meta" ToServer.well_known_host_meta;
-      get "/.well-known/webfinger" ToServer.well_known_webfinger;
-      get "/users/:name" ToServer.get_users;
-      post "/users/:name/inbox" ToServer.post_inbox;
+      get "/.well-known/host-meta" FromServer.well_known_host_meta;
+      get "/.well-known/webfinger" FromServer.well_known_webfinger;
+      get "/users/:name" FromServer.get_users;
+      post "/users/:name/inbox" FromServer.post_inbox;
       (* to clients *)
+      (*
       post "/api/v1/statuses" ToClient.post_api_v1_statuses;
+      *)
+      post "/api/v1/accounts/:id/follow" ToClient.post_api_v1_accounts_follow;
     ]

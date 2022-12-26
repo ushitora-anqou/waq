@@ -179,7 +179,8 @@ let query_opt (k : string) (r : request) : string list option =
 let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
 
-let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url : string Lwt.t =
+let fetch ?(headers = []) ?(meth = `GET) ?(url = "") body :
+    (Status.t * string) Lwt.t =
   let open Lwt.Syntax in
   let url = Uri.of_string url in
   let host = Uri.host url |> Option.get in
@@ -197,14 +198,11 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url : string Lwt.t =
   in
   let response_handler response response_body =
     match response with
-    | { Response.status = `OK; _ } ->
+    | { Response.status; _ } ->
         Lwt.async @@ fun () ->
         let* body = read_body_async response_body in
-        Lwt.wakeup_later resolver body;
+        Lwt.wakeup_later resolver (status, body);
         Lwt.return_unit
-    | response ->
-        Format.fprintf Format.err_formatter "%a\n%!" Response.pp_hum response;
-        exit 1
   in
   let error_handler error =
     let error =
@@ -221,4 +219,8 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url : string Lwt.t =
   in
   Body.write_string request_body body;
   Body.close_writer request_body;
-  promise
+  let* status, body = promise in
+  Log.debug (fun m ->
+      m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
+        (Uri.to_string url) (Status.to_string status) body);
+  Lwt.return (status, body)
