@@ -106,7 +106,8 @@ module FromServer = struct
     name : string;
     summary : string;
     url : string;
-    tag : string list; (*publicKey : get_users_res_public_key;*)
+    tag : string list;
+    publicKey : get_users_res_public_key;
   }
   [@@deriving make, yojson { strict = false }]
 
@@ -114,9 +115,9 @@ module FromServer = struct
     (* FIXME: Check if the account exists *)
     let username = Http.param ":name" req in
     let link = url [ "users"; username ] in
-    let _key =
+    let publicKey =
       make_get_users_res_public_key ~id:(link ^ "#main-key") ~owner:link
-        ~publicKeyPem:"FIXME"
+        ~publicKeyPem:(Http.Signature.encode_public_key public_key)
     in
     let body =
       make_get_users_res ~context:"https://www.w3.org/ns/activitystreams"
@@ -124,7 +125,7 @@ module FromServer = struct
         ~followers:(link ^/ "followers") ~inbox:(link ^/ "inbox")
         ~outbox:(link ^/ "outbox") ~preferredUsername:username
         ~name:"Name is here" ~summary:"Summary is here" ~url:link ~tag:[]
-        (*~publicKey:key*) ()
+        ~publicKey ()
       |> get_users_res_to_yojson |> Yojson.Safe.to_string
     in
     Http.respond
@@ -162,6 +163,7 @@ module ToServer = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_users_inbox_follow _id =
+    let open Lwt.Syntax in
     let link = url [ "users"; "anqou" ] in
     let body =
       make_post_inbox_req
@@ -175,20 +177,22 @@ module ToServer = struct
     let signed_headers =
       [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
     in
-    let headers =
-      [
-        ("Host", "localhost:3000");
-        ("Date", Time.(now () |> to_http_date));
-        ("Content-Type", "application/activity+json");
-      ]
-    in
+    let headers = [ ("Content-Type", "application/activity+json") ] in
     let meth = `POST in
     let path = "/users/admin/inbox" in
-    let headers =
+    let hook_headers headers =
       Http.Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth ~path
         ~body:(Some body)
     in
-    Http.fetch ~meth ~headers ~body "http://localhost:3000/users/admin/inbox"
+    let* res =
+      Http.fetch ~meth ~headers ~body ~hook_headers
+        "http://localhost:3000/users/admin/inbox"
+    in
+    Lwt.return
+    @@
+    match res with
+    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok ()
+    | _ -> Error ()
 end
 
 module ToClient = struct
@@ -230,7 +234,7 @@ module ToClient = struct
     let id = Http.param ":id" req in
     let* res = ToServer.post_users_inbox_follow id in
     match res with
-    | Ok (`OK, _body) ->
+    | Ok _ ->
         make_post_api_v1_accounts_follow_res ~id ~following:true
           ~showing_reblogs:true ~notifying:false ~followed_by:false
           ~blocking:false ~blocked_by:false ~muting:false

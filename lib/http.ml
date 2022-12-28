@@ -180,8 +180,8 @@ let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
 let headers (r : request) : (string * string) list = r.headers
 
-let fetch ?(headers = []) ?(meth = `GET) ?(body = "") (url : string) :
-    (Status.t * string, unit) result Lwt.t =
+let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(hook_headers = Fun.id)
+    (url : string) : (Status.t * string, unit) result Lwt.t =
   let open Lwt.Syntax in
   try
     let url = Uri.of_string url in
@@ -197,8 +197,10 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") (url : string) :
     let promise, resolver = Lwt.wait () in
     let headers =
       ("content-length", body |> String.length |> string_of_int)
-      :: ("connection", "close") :: ("host", host) :: headers
-      |> Headers.of_list
+      :: ("connection", "close") :: ("host", host)
+      :: ("date", Time.(now () |> to_http_date))
+      :: headers
+      |> hook_headers |> Headers.of_list
     in
     let response_handler response response_body =
       match response with
@@ -239,6 +241,9 @@ module Signature = struct
   type private_key = X509.Private_key.t
   type public_key = X509.Public_key.t
   type keypair = private_key * public_key
+
+  let encode_public_key (pub_key : public_key) : string =
+    X509.Public_key.encode_pem pub_key |> Cstruct.to_string
 
   type signature_header = {
     key_id : string;
