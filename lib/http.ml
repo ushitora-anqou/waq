@@ -5,6 +5,7 @@ type request = {
   query : (string * string list) list;
   param : (string * string) list;
   body : string Lwt.t;
+  headers : (string * string) list;
 }
 [@@deriving make]
 
@@ -45,7 +46,8 @@ let read_body_async (body : [ `read ] Body.t) : string Lwt.t =
 
 let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
     unit =
-  let { Request.meth; target; _ } = Reqd.request reqd in
+  let { Request.meth; target; headers; _ } = Reqd.request reqd in
+  let headers = headers |> Headers.to_list in
   Log.debug (fun m -> m "%s %s" (Method.to_string meth) target);
 
   (* Parse target *)
@@ -88,7 +90,7 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
       let open Lwt.Syntax in
       (* Invoke the handler *)
       let* res =
-        try handler (make_request ~query ~param ~body ())
+        try handler (make_request ~query ~param ~body ~headers ())
         with e ->
           Log.err (fun m ->
               m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
@@ -178,6 +180,7 @@ let query_opt (k : string) (r : request) : string list option =
 
 let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
+let headers (r : request) : (string * string) list = r.headers
 
 let fetch ?(headers = []) ?(meth = `GET) ?(url = "") body :
     (Status.t * string) Lwt.t =
@@ -224,3 +227,126 @@ let fetch ?(headers = []) ?(meth = `GET) ?(url = "") body :
       m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
         (Uri.to_string url) (Status.to_string status) body);
   Lwt.return (status, body)
+
+module Signature = struct
+  type private_key = X509.Private_key.t
+  type public_key = X509.Public_key.t
+  type keypair = private_key * public_key
+
+  type signature_header = {
+    key_id : string;
+    signature : string;
+    algorithm : string;
+    headers : string list;
+  }
+  [@@deriving make]
+
+  let string_of_signature_header (p : signature_header) : string =
+    [
+      ("keyId", p.key_id);
+      ("algorithm", p.algorithm);
+      ("headers", p.headers |> String.concat " ");
+      ("signature", p.signature);
+    ]
+    |> List.map (fun (k, v) -> k ^ "=\"" ^ v ^ "\"" (* FIXME: escape? *))
+    |> String.concat ","
+
+  let initialize () = Mirage_crypto_rng_lwt.initialize ()
+
+  let generate_keypair () : keypair =
+    let priv = X509.Private_key.generate ~bits:2048 `RSA in
+    let pub = X509.Private_key.public priv in
+    (priv, pub)
+
+  let build_signing_string ~(signed_headers : string list)
+      ~(headers : (string * string) list) ~(meth : string) ~(path : string) :
+      string =
+    let pseudo_headers =
+      headers |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
+    in
+    signed_headers
+    |> List.map (function
+         | "(request-target)" ->
+             "(request-target): " ^ String.lowercase_ascii meth ^ " " ^ path
+         | "(created)" | "(expires)" -> failwith "Not implemented"
+         | header ->
+             let values =
+               pseudo_headers
+               |> List.filter_map (function
+                    | k, v when k = header -> Some v
+                    | _ -> None)
+             in
+             if List.length values = 0 then
+               failwith ("Specified signed header not found: " ^ header)
+             else
+               let value = values |> String.concat ", " in
+               header ^ ": " ^ value)
+    |> String.concat "\n"
+
+  let may_cons_digest_header ?(prefix = "SHA-256")
+      (headers : (string * string) list) (body : string option) :
+      (string * string) list =
+    body
+    |> Option.fold ~none:headers ~some:(fun body ->
+           let digest = Sha256.(string body |> to_bin |> Base64.encode_exn) in
+           let digest = prefix ^ "=" ^ digest in
+           match List.assoc_opt "Digest" headers with
+           | Some v when v <> digest -> failwith "Digest not match"
+           | Some _ -> headers
+           | _ -> ("Digest", digest) :: headers)
+
+  let sign ~(priv_key : private_key) ~(key_id : string)
+      ~(signed_headers : string list) ~(headers : (string * string) list)
+      ~(meth : string) ~(path : string) ~(body : string option) :
+      (string * string) list =
+    let algorithm = "rsa-sha256" in
+    let headers = may_cons_digest_header headers body in
+    let signing_string =
+      build_signing_string ~signed_headers ~headers ~meth ~path
+    in
+    let signature =
+      match
+        X509.Private_key.sign `SHA256 priv_key ~scheme:`RSA_PKCS1
+          (`Message (Cstruct.of_string signing_string))
+      with
+      | Ok s -> Cstruct.to_string s |> Base64.encode_exn
+      | Error (`Msg s) -> failwith ("Sign error: " ^ s)
+    in
+    let sig_header =
+      make_signature_header ~key_id ~signature ~algorithm
+        ~headers:signed_headers ()
+      |> string_of_signature_header
+    in
+    ("Signature", sig_header) :: headers
+
+  let parse_signature_header (src : string) : signature_header =
+    let fields =
+      src |> String.split_on_char ','
+      |> List.map (fun s ->
+             let pos = String.index s '=' in
+             ( String.sub s 0 pos,
+               String.sub s (pos + 1) (String.length s - (pos + 1)) ))
+      |> List.map (fun (k, v) -> (k, String.sub v 1 (String.length v - 2)))
+    in
+    let key_id = List.assoc "keyId" fields in
+    let signature = List.assoc "signature" fields in
+    let algorithm = List.assoc "algorithm" fields in
+    let headers = List.assoc "headers" fields in
+    let headers = String.split_on_char ' ' headers in
+    make_signature_header ~key_id ~signature ~algorithm ~headers ()
+
+  let verify ~(pub_key : public_key) ~(algorithm : string)
+      ~(signed_headers : string list) ~(signature : string)
+      ~(headers : (string * string) list) ~(meth : string) ~(path : string)
+      ~(body : string option) : _ result =
+    if algorithm <> "rsa-sha256" then Error `AlgorithmNotImplemented
+    else
+      let headers = may_cons_digest_header headers body in
+      let signing_string =
+        build_signing_string ~signed_headers ~headers ~meth ~path
+      in
+      X509.Public_key.verify `SHA256 ~scheme:`RSA_PKCS1
+        ~signature:(signature |> Base64.decode_exn |> Cstruct.of_string)
+        pub_key
+        (`Message (Cstruct.of_string signing_string))
+end

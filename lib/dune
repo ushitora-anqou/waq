@@ -13,8 +13,11 @@
   jingoo
   lwt
   lwt.unix
+  mirage-crypto-rng.lwt
   ppx_deriving_yojson.runtime
+  sha
   uri
   yaml
   yaml.unix
-  yojson))
+  yojson
+  x509))
