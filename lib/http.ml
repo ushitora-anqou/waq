@@ -85,45 +85,43 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
 
   (* Return the response asynchronously *)
   Lwt.async @@ fun () ->
-  Lwt.catch
-    (fun () ->
-      let open Lwt.Syntax in
-      (* Invoke the handler *)
-      let* res =
-        try handler (make_request ~query ~param ~body ~headers ())
-        with e ->
+  try
+    let open Lwt.Syntax in
+    (* Invoke the handler *)
+    let* res =
+      Lwt.catch
+        (fun () -> handler (make_request ~query ~param ~body ~headers ()))
+        (fun e ->
           Log.err (fun m ->
               m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
                 (Printexc.to_string e)
                 (Printexc.get_backtrace ()));
-          Lwt.return @@ make_response ~status:`Internal_server_error ()
+          Lwt.return @@ make_response ~status:`Internal_server_error ())
+    in
+    (* Construct headers *)
+    let headers =
+      let src =
+        ("Content-length", res.body |> String.length |> string_of_int)
+        (* :: ("Connection", "close") *)
+        :: res.headers
       in
-      (* Construct headers *)
-      let headers =
-        let src =
-          ("Content-length", res.body |> String.length |> string_of_int)
-          (* :: ("Connection", "close") *)
-          :: res.headers
-        in
-        let t = Hashtbl.create (List.length src) in
-        src |> List.iter (fun (k, v) -> Hashtbl.replace t k v);
-        t |> Hashtbl.to_seq |> List.of_seq |> Headers.of_list
-      in
-      (* Format the response *)
-      Reqd.respond_with_string reqd
-        (Response.create ~headers res.status)
-        res.body;
-      Log.info (fun m ->
-          m "%s %s %s"
-            (Status.to_string res.status)
-            (Method.to_string meth) target);
-      Lwt.return_unit)
-    (fun e ->
-      Log.err (fun m ->
-          m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth) target
-            (Printexc.to_string e)
-            (Printexc.get_backtrace ()));
-      Lwt.return_unit)
+      let t = Hashtbl.create (List.length src) in
+      src |> List.iter (fun (k, v) -> Hashtbl.replace t k v);
+      t |> Hashtbl.to_seq |> List.of_seq |> Headers.of_list
+    in
+    (* Format the response *)
+    Reqd.respond_with_string reqd (Response.create ~headers res.status) res.body;
+    Log.info (fun m ->
+        m "%s %s %s"
+          (Status.to_string res.status)
+          (Method.to_string meth) target);
+    Lwt.return_unit
+  with e ->
+    Log.err (fun m ->
+        m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth) target
+          (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
+    Lwt.return_unit
 
 (* FIXME: What is this function for? *)
 let error_handler (_ : Unix.sockaddr) ?request:_
@@ -183,50 +181,59 @@ let body (r : request) : string Lwt.t = r.body
 let headers (r : request) : (string * string) list = r.headers
 
 let fetch ?(headers = []) ?(meth = `GET) ?(body = "") (url : string) :
-    (Status.t * string) Lwt.t =
+    (Status.t * string, unit) result Lwt.t =
   let open Lwt.Syntax in
-  let url = Uri.of_string url in
-  let host = Uri.host url |> Option.get in
-  let scheme = Uri.scheme url |> Option.get in
-  let port = url |> Uri.port |> Option.fold ~none:scheme ~some:string_of_int in
-  let path = url |> Uri.path in
-  let* addr = Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ] in
-  let socket = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let* () = Lwt_unix.connect socket (List.hd addr).Unix.ai_addr in
-  let promise, resolver = Lwt.wait () in
-  let headers =
-    ("content-length", body |> String.length |> string_of_int)
-    :: ("connection", "close") :: ("host", host) :: headers
-    |> Headers.of_list
-  in
-  let response_handler response response_body =
-    match response with
-    | { Response.status; _ } ->
-        Lwt.async @@ fun () ->
-        let* body = read_body_async response_body in
-        Lwt.wakeup_later resolver (status, body);
-        Lwt.return_unit
-  in
-  let error_handler error =
-    let error =
-      match error with
-      | `Malformed_response err -> Format.sprintf "Malformed response: %s" err
-      | `Invalid_response_body_length _ -> "Invalid body length"
-      | `Exn exn -> Format.sprintf "Exn raised: %s" (Printexc.to_string exn)
+  try
+    let url = Uri.of_string url in
+    let host = Uri.host url |> Option.get in
+    let scheme = Uri.scheme url |> Option.get in
+    let port =
+      url |> Uri.port |> Option.fold ~none:scheme ~some:string_of_int
     in
-    Log.err (fun m -> m "Error handling response: %s" error)
-  in
-  let request_body =
-    Client.request ~response_handler ~error_handler socket
-      (Request.create ~headers meth path)
-  in
-  Body.write_string request_body body;
-  Body.close_writer request_body;
-  let* status, body = promise in
-  Log.debug (fun m ->
-      m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
-        (Uri.to_string url) (Status.to_string status) body);
-  Lwt.return (status, body)
+    let path = url |> Uri.path in
+    let* addr = Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ] in
+    let socket = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    let* () = Lwt_unix.connect socket (List.hd addr).Unix.ai_addr in
+    let promise, resolver = Lwt.wait () in
+    let headers =
+      ("content-length", body |> String.length |> string_of_int)
+      :: ("connection", "close") :: ("host", host) :: headers
+      |> Headers.of_list
+    in
+    let response_handler response response_body =
+      match response with
+      | { Response.status; _ } ->
+          Lwt.async @@ fun () ->
+          let* body = read_body_async response_body in
+          Lwt.wakeup_later resolver (status, body);
+          Lwt.return_unit
+    in
+    let error_handler error =
+      let error =
+        match error with
+        | `Malformed_response err -> Format.sprintf "Malformed response: %s" err
+        | `Invalid_response_body_length _ -> "Invalid body length"
+        | `Exn exn -> Format.sprintf "Exn raised: %s" (Printexc.to_string exn)
+      in
+      Log.err (fun m -> m "Error handling response: %s" error)
+    in
+    let request_body =
+      Client.request ~response_handler ~error_handler socket
+        (Request.create ~headers meth path)
+    in
+    Body.write_string request_body body;
+    Body.close_writer request_body;
+    let* status, body = promise in
+    Log.debug (fun m ->
+        m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
+          (Uri.to_string url) (Status.to_string status) body);
+    Lwt.return (Ok (status, body))
+  with e ->
+    let backtrace = Printexc.get_backtrace () in
+    Log.err (fun m ->
+        m "[fetch] %s %s: %s\n%s" (Method.to_string meth) url
+          (Printexc.to_string e) backtrace);
+    Lwt.return (Error ())
 
 module Signature = struct
   type private_key = X509.Private_key.t

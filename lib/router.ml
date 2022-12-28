@@ -228,9 +228,9 @@ module ToClient = struct
   let post_api_v1_accounts_follow req =
     let open Lwt.Syntax in
     let id = Http.param ":id" req in
-    let* status, body = ToServer.post_users_inbox_follow id in
-    match (status, body) with
-    | `OK, _body ->
+    let* res = ToServer.post_users_inbox_follow id in
+    match res with
+    | Ok (`OK, _body) ->
         make_post_api_v1_accounts_follow_res ~id ~following:true
           ~showing_reblogs:true ~notifying:false ~followed_by:false
           ~blocking:false ~blocked_by:false ~muting:false
