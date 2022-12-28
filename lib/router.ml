@@ -172,20 +172,18 @@ module ToServer = struct
         ~obj:(`String "http://localhost:3000/users/admin")
       |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
     in
-    let priv_key = private_key in
-    let key_id = link ^ "#main-key" in
-    let signed_headers =
-      [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+    let sign =
+      let priv_key = private_key in
+      let key_id = link ^ "#main-key" in
+      let signed_headers =
+        [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+      in
+      Some (priv_key, key_id, signed_headers)
     in
-    let headers = [ ("Content-Type", "application/activity+json") ] in
     let meth = `POST in
-    let path = "/users/admin/inbox" in
-    let hook_headers headers =
-      Http.Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth ~path
-        ~body:(Some body)
-    in
+    let headers = [ ("Content-Type", "application/activity+json") ] in
     let* res =
-      Http.fetch ~meth ~headers ~body ~hook_headers
+      Http.fetch ~meth ~headers ~body ~sign
         "http://localhost:3000/users/admin/inbox"
     in
     Lwt.return
