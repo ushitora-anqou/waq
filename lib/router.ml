@@ -13,8 +13,7 @@ let url (l : string list) =
   "https:/" ^ (C.server_name () :: l |> List.fold_left ( ^/ ) "")
 
 let unpack req f g =
-  let open Lwt.Syntax in
-  let* body = Http.body req in
+  let%lwt body = Http.body req in
   Log.debug (fun m -> m "Body:\n%s\n%!" body);
   let j = Yojson.Safe.from_string body in
   match f j with
@@ -163,7 +162,6 @@ module ToServer = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_users_inbox_follow _id =
-    let open Lwt.Syntax in
     let link = url [ "users"; "anqou" ] in
     let body =
       make_post_inbox_req
@@ -182,7 +180,7 @@ module ToServer = struct
     in
     let meth = `POST in
     let headers = [ ("Content-Type", "application/activity+json") ] in
-    let* res =
+    let%lwt res =
       Http.fetch ~meth ~headers ~body ~sign
         "http://localhost:3000/users/admin/inbox"
     in
@@ -228,9 +226,8 @@ module ToClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_accounts_follow req =
-    let open Lwt.Syntax in
     let id = Http.param ":id" req in
-    let* res = ToServer.post_users_inbox_follow id in
+    let%lwt res = ToServer.post_users_inbox_follow id in
     match res with
     | Ok _ ->
         make_post_api_v1_accounts_follow_res ~id ~following:true

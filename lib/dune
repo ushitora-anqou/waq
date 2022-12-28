@@ -6,7 +6,8 @@
    ppx_deriving.make
    ppx_deriving.show
    ppx_deriving_yojson
-   ppx_deriving_yaml))
+   ppx_deriving_yaml
+   lwt_ppx))
  (libraries
   httpaf
   httpaf-lwt-unix

@@ -211,18 +211,16 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
 
   (* Return the response asynchronously *)
   Lwt.async @@ fun () ->
-  try
-    let open Lwt.Syntax in
+  try%lwt
     (* Invoke the handler *)
-    let* res =
-      Lwt.catch
-        (fun () -> handler (make_request ~query ~param ~body ~headers ()))
-        (fun e ->
-          Log.err (fun m ->
-              m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
-                (Printexc.to_string e)
-                (Printexc.get_backtrace ()));
-          Lwt.return @@ make_response ~status:`Internal_server_error ())
+    let%lwt res =
+      try%lwt handler (make_request ~query ~param ~body ~headers ())
+      with e ->
+        Log.err (fun m ->
+            m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
+              (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        Lwt.return @@ make_response ~status:`Internal_server_error ()
     in
     (* Construct headers *)
     let headers =
@@ -273,8 +271,7 @@ let start_server ?(host = "127.0.0.1") ?(port = 8080) f routes =
       ~request_handler:(request_handler routes)
   in
   Lwt.async (fun () ->
-      let open Lwt.Syntax in
-      let* _ = Lwt_io.establish_server_with_client_socket addr handler in
+      let%lwt _ = Lwt_io.establish_server_with_client_socket addr handler in
       f ();
       Lwt.return_unit);
   let forever, _ = Lwt.wait () in
@@ -308,8 +305,7 @@ let headers (r : request) : (string * string) list = r.headers
 
 let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     (url : string) : (Status.t * string, unit) result Lwt.t =
-  let open Lwt.Syntax in
-  try
+  try%lwt
     let url = Uri.of_string url in
     let host = Uri.host url |> Option.get in
     let scheme = Uri.scheme url |> Option.get in
@@ -317,9 +313,11 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
       url |> Uri.port |> Option.fold ~none:scheme ~some:string_of_int
     in
     let path = url |> Uri.path in
-    let* addr = Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ] in
+    let%lwt addr =
+      Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ]
+    in
     let socket = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    let* () = Lwt_unix.connect socket (List.hd addr).Unix.ai_addr in
+    let%lwt () = Lwt_unix.connect socket (List.hd addr).Unix.ai_addr in
     let promise, resolver = Lwt.wait () in
     let headers =
       let headers =
@@ -341,7 +339,7 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
       match response with
       | { Response.status; _ } ->
           Lwt.async @@ fun () ->
-          let* body = read_body_async response_body in
+          let%lwt body = read_body_async response_body in
           Lwt.wakeup_later resolver (status, body);
           Lwt.return_unit
     in
@@ -360,7 +358,7 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     in
     Body.write_string request_body body;
     Body.close_writer request_body;
-    let* status, body = promise in
+    let%lwt status, body = promise in
     Log.debug (fun m ->
         m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
           (Uri.to_string url) (Status.to_string status) body);
