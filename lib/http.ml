@@ -182,7 +182,7 @@ let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
 let headers (r : request) : (string * string) list = r.headers
 
-let fetch ?(headers = []) ?(meth = `GET) ?(url = "") body :
+let fetch ?(headers = []) ?(meth = `GET) ?(body = "") (url : string) :
     (Status.t * string) Lwt.t =
   let open Lwt.Syntax in
   let url = Uri.of_string url in
@@ -259,15 +259,15 @@ module Signature = struct
     (priv, pub)
 
   let build_signing_string ~(signed_headers : string list)
-      ~(headers : (string * string) list) ~(meth : string) ~(path : string) :
+      ~(headers : (string * string) list) ~(meth : Method.t) ~(path : string) :
       string =
     let pseudo_headers =
       headers |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
     in
+    let meth = Method.to_string meth |> String.lowercase_ascii in
     signed_headers
     |> List.map (function
-         | "(request-target)" ->
-             "(request-target): " ^ String.lowercase_ascii meth ^ " " ^ path
+         | "(request-target)" -> "(request-target): " ^ meth ^ " " ^ path
          | "(created)" | "(expires)" -> failwith "Not implemented"
          | header ->
              let values =
@@ -297,7 +297,7 @@ module Signature = struct
 
   let sign ~(priv_key : private_key) ~(key_id : string)
       ~(signed_headers : string list) ~(headers : (string * string) list)
-      ~(meth : string) ~(path : string) ~(body : string option) :
+      ~(meth : Method.t) ~(path : string) ~(body : string option) :
       (string * string) list =
     let algorithm = "rsa-sha256" in
     let headers = may_cons_digest_header headers body in
@@ -337,7 +337,7 @@ module Signature = struct
 
   let verify ~(pub_key : public_key) ~(algorithm : string)
       ~(signed_headers : string list) ~(signature : string)
-      ~(headers : (string * string) list) ~(meth : string) ~(path : string)
+      ~(headers : (string * string) list) ~(meth : Method.t) ~(path : string)
       ~(body : string option) : _ result =
     if algorithm <> "rsa-sha256" then Error `AlgorithmNotImplemented
     else

@@ -20,7 +20,7 @@ let test_build_signing_string () =
       ("Content-Length", "18");
     ]
   in
-  let meth = "POST" in
+  let meth = `POST in
   let path = "/foo?param=value&pet=dog" in
   assert (
     Http.Signature.build_signing_string ~signed_headers ~headers ~meth ~path
@@ -59,7 +59,7 @@ QwIDAQAB
       ("Host", "c5ab-220-153-158-42.ngrok.io");
     ]
   in
-  let meth = "POST" in
+  let meth = `POST in
   let path = "/users/anqou/inbox" in
   let body =
     Some
@@ -147,7 +147,7 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
       ("Host", "c5ab-220-153-158-42.ngrok.io");
     ]
   in
-  let meth = "POST" in
+  let meth = `POST in
   let path = "/users/anqou/inbox" in
   let key_id = "http://localhost:3000/users/admin#main-key" in
   let body =

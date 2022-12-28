@@ -3,6 +3,7 @@ module C = Config
 
 let () =
   Log.(add_reporter (make_reporter ~l:Debug ()));
+  Http.Signature.initialize ();
   C.load_file "config.yml";
   let host, port = (C.listen_host (), C.listen_port ()) in
   Router.routes

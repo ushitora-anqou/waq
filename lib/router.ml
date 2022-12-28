@@ -2,6 +2,11 @@ open Jingoo
 open Jg_types
 module C = Config
 
+(* FIXME: Don't fix keypair *)
+let private_key, public_key =
+  Http.Signature.initialize ();
+  Http.Signature.generate_keypair ()
+
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
 
 let url (l : string list) =
@@ -10,6 +15,7 @@ let url (l : string list) =
 let unpack req f g =
   let open Lwt.Syntax in
   let* body = Http.body req in
+  Log.debug (fun m -> m "Body:\n%s\n%!" body);
   let j = Yojson.Safe.from_string body in
   match f j with
   | Error _ ->
@@ -137,7 +143,11 @@ module FromServer = struct
   let post_inbox req =
     unpack req post_inbox_req_of_yojson @@ fun j r ->
     Log.debug (fun m ->
-        m "Activity: %s\n%s" r.typ (Yojson.Safe.pretty_to_string j));
+        m "Activity: %s\n%s\n%s" r.typ
+          (Http.headers req
+          |> List.map (fun (k, v) -> k ^ ": " ^ v)
+          |> String.concat "\n")
+          (Yojson.Safe.pretty_to_string j));
     Http.respond ~status:`OK ""
 end
 
@@ -153,12 +163,32 @@ module ToServer = struct
 
   let post_users_inbox_follow _id =
     let link = url [ "users"; "anqou" ] in
-    make_post_inbox_req
-      ~context:(`String "https://www.w3.org/ns/activitystreams")
-      ~id:(link ^ "#follow/1") ~typ:"Follow" ~actor:(`String link)
-      ~obj:(`String "http://localhost:3000/users/admin")
-    |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
-    |> Http.fetch ~meth:`POST ~url:"http://localhost:3000/users/admin/inbox"
+    let body =
+      make_post_inbox_req
+        ~context:(`String "https://www.w3.org/ns/activitystreams")
+        ~id:(link ^ "#follow/1") ~typ:"Follow" ~actor:(`String link)
+        ~obj:(`String "http://localhost:3000/users/admin")
+      |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
+    in
+    let priv_key = private_key in
+    let key_id = link ^ "#main-key" in
+    let signed_headers =
+      [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+    in
+    let headers =
+      [
+        ("Host", "localhost:3000");
+        ("Date", Time.(now () |> to_http_date));
+        ("Content-Type", "application/activity+json");
+      ]
+    in
+    let meth = `POST in
+    let path = "/users/admin/inbox" in
+    let headers =
+      Http.Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth ~path
+        ~body:(Some body)
+    in
+    Http.fetch ~meth ~headers ~body "http://localhost:3000/users/admin/inbox"
 end
 
 module ToClient = struct
