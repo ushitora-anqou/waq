@@ -1,4 +1,5 @@
 module Config = Config
+module Db = Db
 module Http = Http
 module Log = Log
 module Router = Router

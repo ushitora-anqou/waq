@@ -272,8 +272,7 @@ let start_server ?(host = "127.0.0.1") ?(port = 8080) f routes =
   in
   Lwt.async (fun () ->
       let%lwt _ = Lwt_io.establish_server_with_client_socket addr handler in
-      f ();
-      Lwt.return_unit);
+      f ());
   let forever, _ = Lwt.wait () in
   Lwt_main.run forever
 

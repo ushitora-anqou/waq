@@ -1,4 +1,6 @@
 (executable
  (public_name waq)
  (name main)
- (libraries waq))
+ (preprocess
+  (pps lwt_ppx))
+ (libraries waq lwt lwt.unix))

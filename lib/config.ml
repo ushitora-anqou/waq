@@ -1,4 +1,8 @@
-type t = { listen : string; [@default ""] server_name : string [@default ""] }
+type t = {
+  listen : string; [@default ""]
+  server_name : string; [@default ""]
+  db_url : string; [@default ""]
+}
 [@@deriving make, yaml]
 
 let c = ref (make ())
@@ -13,3 +17,5 @@ let server_name () = !c.server_name
 let is_my_domain s =
   (* FIXME: Consider port *)
   s = !c.server_name
+
+let db_url () = !c.db_url
