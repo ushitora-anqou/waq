@@ -6,6 +6,7 @@ type t = {
 [@@deriving make, yaml]
 
 let c = ref (make ())
+let load_string s = c := s |> Yaml.of_string_exn |> of_yaml |> Result.get_ok
 
 let load_file fpath =
   c := Yaml_unix.of_file_exn Fpath.(v fpath) |> of_yaml |> Result.get_ok

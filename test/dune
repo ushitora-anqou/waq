@@ -1,3 +1,5 @@
 (tests
- (names test_http)
- (libraries waq alcotest))
+ (names test_db test_http)
+ (preprocess
+  (pps lwt_ppx))
+ (libraries waq alcotest alcotest-lwt))

@@ -67,7 +67,7 @@ module FromServer = struct
         raise (failwith "Invalid request");
       (* Return the body *)
       let name, dom = (List.hd s, List.nth s 1) in
-      let%lwt _ = Db.get_user ~username:name in
+      let%lwt _ = Db.get_user_by_username name in
       let link = url [ "users"; name ] in
       let body =
         make_webfinger_res
