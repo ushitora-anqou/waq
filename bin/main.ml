@@ -2,7 +2,7 @@ open Waq
 module C = Config
 
 let () =
-  Log.(add_reporter (make_reporter ~l:Debug ()));
+  Log.initialize Debug;
   C.load_file "config.yml";
   Http.Signature.initialize ();
   Db.initialize ();
