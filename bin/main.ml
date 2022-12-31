@@ -10,9 +10,5 @@ let () =
   Router.routes
   |> Http.start_server ~host ~port @@ fun () ->
      Log.info (fun m -> m "Listening on %s:%d" host port);
-     let%lwt _ = Db.rollback () in
-     match%lwt Db.migrate () with
-     | Ok () -> Lwt.return_unit
-     | Error e ->
-         Log.err (fun m -> m "Migration failed: %s" e);
-         Lwt.fail_with "Migration failed"
+     (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
+     try%lwt Db.migrate () with _ -> Lwt.fail_with "Migration failed"

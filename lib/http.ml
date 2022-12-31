@@ -298,6 +298,7 @@ let respond ?(status = `OK) ?(headers = []) (body : string) : response Lwt.t =
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
 
+let query (k : string) (r : request) : string list = query_opt k r |> Option.get
 let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
 let headers (r : request) : (string * string) list = r.headers
