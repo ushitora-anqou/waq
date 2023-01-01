@@ -158,6 +158,76 @@ module FromServer = struct
 end
 
 module ToServer = struct
+  type get_users_res_public_key = {
+    id : string;
+    owner : string;
+    publicKeyPem : string;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  type get_users_res = {
+    context : Yojson.Safe.t; [@key "@context"]
+    id : string;
+    typ : string; [@key "type"]
+    following : string;
+    followers : string;
+    inbox : string;
+    outbox : string;
+    preferredUsername : string;
+    name : string;
+    summary : string;
+    url : string;
+    tag : string list;
+    publicKey : get_users_res_public_key;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  type webfinger_res_link = {
+    rel : string;
+    typ : string; [@key "type"]
+    href : string;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  type webfinger_res = {
+    subject : string;
+    aliases : string list;
+    links : Yojson.Safe.t list;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  let fetch_account ?(scheme = "https") domain username =
+    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+
+    let%lwt body =
+      Http.fetch_exn @@ scheme ^ ":/" ^/ domain
+      ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
+    in
+    let webfinger =
+      body |> Yojson.Safe.from_string |> webfinger_res_of_yojson
+      |> Result.get_ok
+    in
+    let href =
+      webfinger.links
+      |> List.find_map (fun l ->
+             match webfinger_res_link_of_yojson l with
+             | Ok l when l.rel = "self" -> Some l.href
+             | _ -> None)
+      |> Option.get
+    in
+
+    let%lwt body =
+      Http.fetch_exn ~headers:[ ("Accept", "application/activity+json") ] href
+    in
+    let r =
+      body |> Yojson.Safe.from_string |> get_users_res_of_yojson
+      |> Result.get_ok
+    in
+    Db.make_account ~username:r.preferredUsername ~domain
+      ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
+      ~url:r.url ~inbox_url:r.inbox ~created_at:now ~updated_at:now ()
+    |> Db.insert_account
+
   type post_inbox_req = {
     context : Yojson.Safe.t; [@key "@context"]
     id : string;
@@ -167,14 +237,15 @@ module ToServer = struct
   }
   [@@deriving make, yojson { strict = false }]
 
-  let post_users_inbox_follow self_id _id =
+  let post_users_inbox_follow self_id id =
     let%lwt self = Db.get_account ~id:self_id in
     let link = url [ "users"; self.username ] in
+    let%lwt acc = Db.get_account ~id in
     let body =
       make_post_inbox_req
         ~context:(`String "https://www.w3.org/ns/activitystreams")
         ~id:(link ^ "#follow/1") ~typ:"Follow" ~actor:(`String link)
-        ~obj:(`String "http://localhost:3000/users/admin")
+        ~obj:(`String acc.uri)
       |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
     in
     let sign =
@@ -189,10 +260,7 @@ module ToServer = struct
     in
     let meth = `POST in
     let headers = [ ("Content-Type", "application/activity+json") ] in
-    let%lwt res =
-      Http.fetch ~meth ~headers ~body ~sign
-        "http://localhost:3000/users/admin/inbox"
-    in
+    let%lwt res = Http.fetch ~meth ~headers ~body ~sign acc.inbox_url in
     Lwt.return
     @@
     match res with
@@ -235,13 +303,13 @@ module ToClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_accounts_follow req =
-    let id = Http.param ":id" req in
+    let id = Http.param ":id" req |> int_of_string in
     let%lwt res = ToServer.post_users_inbox_follow 1 (* FIXME *) id in
     match res with
     | Ok _ ->
-        make_post_api_v1_accounts_follow_res ~id ~following:true
-          ~showing_reblogs:true ~notifying:false ~followed_by:false
-          ~blocking:false ~blocked_by:false ~muting:false
+        make_post_api_v1_accounts_follow_res ~id:(string_of_int id)
+          ~following:true ~showing_reblogs:true ~notifying:false
+          ~followed_by:false ~blocking:false ~blocked_by:false ~muting:false
           ~muting_notifications:false ~requested:false ~domain_blocking:false
           ~endorsed:false
         |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string

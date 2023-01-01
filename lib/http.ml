@@ -1,6 +1,29 @@
 open Httpaf
 open Httpaf_lwt_unix
 
+module Uri = struct
+  include Uri
+
+  let getaddrinfo_port (u : t) =
+    let scheme = Uri.scheme u |> Option.get in
+    u |> Uri.port |> Option.fold ~none:scheme ~some:string_of_int
+
+  let http_host (u : t) =
+    let host = Uri.host u |> Option.get in
+    let port = Uri.port u |> Option.fold ~none:"" ~some:string_of_int in
+    host ^ ":" ^ port
+
+  let path_query_fragment (u : t) =
+    let res = Uri.path u in
+    let res =
+      match Uri.verbatim_query u with None -> res | Some q -> res ^ "?" ^ q
+    in
+    let res =
+      match Uri.fragment u with None -> res | Some f -> res ^ "#" ^ f
+    in
+    res
+end
+
 module Signature = struct
   type private_key = X509.Private_key.t
   type public_key = X509.Public_key.t
@@ -316,13 +339,10 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     (url : string) : (Status.t * string, unit) result Lwt.t =
   try%lwt
     let url = Uri.of_string url in
-    let host = Uri.host url |> Option.get in
-    let scheme = Uri.scheme url |> Option.get in
-    let port =
-      url |> Uri.port |> Option.fold ~none:scheme ~some:string_of_int
-    in
-    let path = url |> Uri.path in
+    let path = Uri.path_query_fragment url in
     let%lwt addr =
+      let host = Uri.host url |> Option.get in
+      let port = Uri.getaddrinfo_port url in
       Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ]
     in
     let socket = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
@@ -331,7 +351,8 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     let headers =
       let headers =
         ("content-length", body |> String.length |> string_of_int)
-        :: ("connection", "close") :: ("host", host)
+        :: ("connection", "close")
+        :: ("host", Uri.http_host url)
         :: ("date", Time.(now () |> to_http_date))
         :: headers
       in
@@ -359,8 +380,12 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
         | `Invalid_response_body_length _ -> "Invalid body length"
         | `Exn exn -> Format.sprintf "Exn raised: %s" (Printexc.to_string exn)
       in
-      Log.err (fun m -> m "Error handling response: %s" error)
+      Log.err (fun m -> m "[fetch] Error handling response: %s" error);
+      Lwt.wakeup_later_exn resolver (Failure "Error handling response")
     in
+    Log.debug (fun m ->
+        m "[fetch] %s %s\n%s" (Method.to_string meth) (Uri.to_string url)
+          (Headers.to_string headers));
     let request_body =
       Client.request ~response_handler ~error_handler socket
         (Request.create ~headers meth path)
@@ -378,3 +403,9 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
         m "[fetch] %s %s: %s\n%s" (Method.to_string meth) url
           (Printexc.to_string e) backtrace);
     Lwt.return (Error ())
+
+let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
+    (url : string) : string Lwt.t =
+  match%lwt fetch ~headers ~meth ~body ~sign url with
+  | Ok (`OK, body) -> Lwt.return body
+  | _ -> failwith "fetch_exn failed"

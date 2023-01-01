@@ -12,9 +12,13 @@ type user = {
 type account = {
   id : int; [@default 0]
   username : string;
+  domain : string option;
   private_key : string option;
   public_key : string;
   display_name : string;
+  uri : string;
+  url : string option;
+  inbox_url : string;
   created_at : Ptime.t;
   updated_at : Ptime.t;
 }
@@ -58,9 +62,13 @@ end = struct
     SELECT
       @int{id},
       @string{username},
+      @string?{domain},
       @string?{private_key},
       @string{public_key},
       @string{display_name},
+      @string{uri},
+      @string?{url},
+      @string{inbox_url},
       @ptime{created_at},
       @ptime{updated_at}
     FROM
@@ -78,24 +86,36 @@ end = struct
          {|
         INSERT INTO accounts (
           username,
+          domain,
           private_key,
           public_key,
           display_name,
+          uri,
+          url,
+          inbox_url,
           created_at,
           updated_at)
         VALUES (
           %string{username},
+          %string?{domain},
           %string?{private_key},
           %string{public_key},
           %string{display_name},
+          %string{uri},
+          %string?{url},
+          %string{inbox_url},
           %ptime{created_at},
           %ptime{updated_at})
         RETURNING
           @int{id},
           @string{username},
+          @string?{domain},
           @string?{private_key},
           @string{public_key},
           @string{display_name},
+          @string{uri},
+          @string?{url},
+          @string{inbox_url},
           @ptime{created_at},
           @ptime{updated_at}
       |}
@@ -186,10 +206,14 @@ end = struct
               {|
               CREATE TABLE accounts (
                 id SERIAL PRIMARY KEY,
-                username CHARACTER VARYING NOT NULL,
+                username TEXT NOT NULL,
+                domain TEXT,
                 private_key TEXT,
                 public_key TEXT NOT NULL,
-                display_name CHARACTER VARYING NOT NULL,
+                display_name TEXT NOT NULL,
+                uri TEXT NOT NULL,
+                url TEXT,
+                inbox_url TEXT NOT NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
               );
@@ -199,7 +223,7 @@ end = struct
               {|
               CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
-                email CHARACTER VARYING NOT NULL,
+                email TEXT NOT NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 account_id BIGINT NOT NULL,

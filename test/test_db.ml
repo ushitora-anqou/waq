@@ -15,7 +15,7 @@ let test_user _ _ =
 
   let%lwt a =
     make_account ~username:"anqou" ~public_key:"" ~display_name:"Ushitora Anqou"
-      ~created_at ~updated_at ()
+      ~uri:"" ~inbox_url:"" ~created_at ~updated_at ()
     |> insert_account
   in
   assert (a.id = 1);

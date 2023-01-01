@@ -178,6 +178,19 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
     @@ Http.Signature.verify ~pub_key ~algorithm ~signed_headers ~signature
          ~headers ~meth ~path ~body)
 
+let test_url () =
+  (* Thanks to: https://ja.wikipedia.org/wiki/Uniform_Resource_Identifier *)
+  let url =
+    Uri.of_string
+      "https://user:password@www.example.com:123/forum/questions/?tag=networking&order=newest#top"
+  in
+  assert (Uri.getaddrinfo_port url = "123");
+  assert (Uri.http_host url = "www.example.com:123");
+  assert (
+    Uri.path_query_fragment url
+    = "/forum/questions/?tag=networking&order=newest#top");
+  ()
+
 let () =
   let open Alcotest in
   Http.Signature.initialize ();
@@ -188,4 +201,5 @@ let () =
         [ test_case "case1" `Quick test_build_signing_string ] );
       ("sign", [ test_case "case1" `Quick test_sign ]);
       ("verify", [ test_case "case1" `Quick test_verify ]);
+      ("url", [ test_case "case1" `Quick test_url ]);
     ]
