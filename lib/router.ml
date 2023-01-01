@@ -31,7 +31,8 @@ let routes =
                 |> List.map (fun (k, v) -> k ^ ": " ^ v)
                 |> String.concat "\n")
                 body);
-          dispatch @@ Job.FromServer.post_users_inbox body);
+          Lwt.async @@ Job.FromServer.post_users_inbox body;
+          respond ~status:`Accepted "");
     ]
   in
   let routes_from_clients =

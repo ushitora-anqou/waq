@@ -187,10 +187,10 @@ module FromServer = struct
       Lwt.return (Error `Not_found)
 
   (* Recv POST /users/:name/inbox *)
-  let post_users_inbox body =
+  let post_users_inbox body () =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
-    | Error _ -> Lwt.return (Error `Bad_request)
-    | Ok _r -> Lwt.return (Ok "")
+    | Error _ -> Lwt.return_unit
+    | Ok _r -> Lwt.return_unit
 end
 
 module FromClient = struct
