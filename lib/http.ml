@@ -9,6 +9,15 @@ module Signature = struct
   let encode_public_key (pub_key : public_key) : string =
     X509.Public_key.encode_pem pub_key |> Cstruct.to_string
 
+  let encode_private_key (priv_key : private_key) : string =
+    X509.Private_key.encode_pem priv_key |> Cstruct.to_string
+
+  let decode_private_key (src : string) : private_key =
+    src |> Cstruct.of_string |> X509.Private_key.decode_pem |> Result.get_ok
+
+  let decode_public_key (src : string) : public_key =
+    src |> Cstruct.of_string |> X509.Public_key.decode_pem |> Result.get_ok
+
   type signature_header = {
     key_id : string;
     signature : string;

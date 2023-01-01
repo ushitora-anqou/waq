@@ -2,11 +2,6 @@ open Jingoo
 open Jg_types
 module C = Config
 
-(* FIXME: Don't fix keypair *)
-let private_key, public_key =
-  Http.Signature.initialize ();
-  Http.Signature.generate_keypair ()
-
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
 
 let url (l : string list) =
@@ -116,25 +111,32 @@ module FromServer = struct
   [@@deriving make, yojson { strict = false }]
 
   let get_users req =
-    (* FIXME: Check if the account exists *)
-    let username = Http.param ":name" req in
-    let link = url [ "users"; username ] in
-    let publicKey =
-      make_get_users_res_public_key ~id:(link ^ "#main-key") ~owner:link
-        ~publicKeyPem:(Http.Signature.encode_public_key public_key)
-    in
-    let body =
-      make_get_users_res ~context:"https://www.w3.org/ns/activitystreams"
-        ~id:link ~typ:"Person" ~following:(link ^/ "following")
-        ~followers:(link ^/ "followers") ~inbox:(link ^/ "inbox")
-        ~outbox:(link ^/ "outbox") ~preferredUsername:username
-        ~name:"Name is here" ~summary:"Summary is here" ~url:link ~tag:[]
-        ~publicKey ()
-      |> get_users_res_to_yojson |> Yojson.Safe.to_string
-    in
-    Http.respond
-      ~headers:[ ("Content-Type", "application/jrd+json; charset=utf-8") ]
-      body
+    try%lwt
+      let username = Http.param ":name" req in
+      let%lwt u = Db.get_user_by_username username in
+      let%lwt a = Db.get_account ~id:u.account_id in
+      let link = url [ "users"; username ] in
+      let publicKey =
+        make_get_users_res_public_key ~id:(link ^ "#main-key") ~owner:link
+          ~publicKeyPem:a.public_key
+      in
+      let body =
+        make_get_users_res ~context:"https://www.w3.org/ns/activitystreams"
+          ~id:link ~typ:"Person" ~following:(link ^/ "following")
+          ~followers:(link ^/ "followers") ~inbox:(link ^/ "inbox")
+          ~outbox:(link ^/ "outbox") ~preferredUsername:username
+          ~name:a.display_name ~summary:"Summary is here" ~url:link ~tag:[]
+          ~publicKey ()
+        |> get_users_res_to_yojson |> Yojson.Safe.to_string
+      in
+      Http.respond
+        ~headers:[ ("Content-Type", "application/jrd+json; charset=utf-8") ]
+        body
+    with e ->
+      Log.debug (fun m ->
+          m "[get_users] Can't find user: %s\n%s" (Printexc.to_string e)
+            (Printexc.get_backtrace ()));
+      Http.respond ~status:`Not_found ""
 
   type post_inbox_req = {
     context : Yojson.Safe.t; [@key "@context"]
@@ -166,8 +168,9 @@ module ToServer = struct
   }
   [@@deriving make, yojson { strict = false }]
 
-  let post_users_inbox_follow _id =
-    let link = url [ "users"; "anqou" ] in
+  let post_users_inbox_follow self_id _id =
+    let%lwt self = Db.get_account ~id:self_id in
+    let link = url [ "users"; self.username ] in
     let body =
       make_post_inbox_req
         ~context:(`String "https://www.w3.org/ns/activitystreams")
@@ -176,7 +179,9 @@ module ToServer = struct
       |> post_inbox_req_to_yojson |> Yojson.Safe.to_string
     in
     let sign =
-      let priv_key = private_key in
+      let priv_key =
+        self.private_key |> Option.get |> Http.Signature.decode_private_key
+      in
       let key_id = link ^ "#main-key" in
       let signed_headers =
         [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
@@ -232,7 +237,7 @@ module ToClient = struct
 
   let post_api_v1_accounts_follow req =
     let id = Http.param ":id" req in
-    let%lwt res = ToServer.post_users_inbox_follow id in
+    let%lwt res = ToServer.post_users_inbox_follow 1 (* FIXME *) id in
     match res with
     | Ok _ ->
         make_post_api_v1_accounts_follow_res ~id ~following:true

@@ -24,6 +24,7 @@ module Internal : sig
   val initialize : unit -> unit
   val get_account : id:int -> account Lwt.t
   val insert_account : account -> account Lwt.t
+  val get_user : id:int -> user Lwt.t
   val get_user_by_username : string -> user Lwt.t
   val insert_user : user -> user Lwt.t
   val migrate : unit -> unit Lwt.t
@@ -100,6 +101,23 @@ end = struct
       |}
          record_in record_out]
        a [@warning "-9"])
+    |> do_query
+
+  let get_user ~id =
+    [%rapper
+      get_one
+        {|
+        SELECT
+          @int{users.id},
+          @string{users.email},
+          @ptime{users.created_at},
+          @ptime{users.updated_at},
+          @int{users.account_id}
+        FROM users
+        WHERE id = %int{id}
+      |}
+        function_out]
+      make_user ~id
     |> do_query
 
   let get_user_by_username username =
