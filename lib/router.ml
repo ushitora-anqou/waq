@@ -55,8 +55,7 @@ module FromServer = struct
           String.sub s 5 (String.length s - 5)
         else s
       in
-      (* Get account name and domain and check if they are correct
-         FIXME: Check if the account exists *)
+      (* Get account name and domain and check if they are correct *)
       let s = String.split_on_char '@' s in
       if not (List.length s = 2 && C.is_my_domain (List.nth s 1)) then
         raise (failwith "Invalid request");
