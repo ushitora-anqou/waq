@@ -20,12 +20,13 @@ let () =
        let private_key, public_key = Http.Signature.generate_keypair () in
        let public_key = Http.Signature.encode_public_key public_key in
        let private_key = Http.Signature.encode_private_key private_key in
-       let uri = Router.url [ "users"; username ] in
-       let inbox_url = Router.(uri ^/ "inbox") in
+       let uri = Job.url [ "users"; username ] in
+       let inbox_url = Job.(uri ^/ "inbox") in
        Db.make_account ~username ~public_key ~private_key ~display_name ~uri
          ~inbox_url ~created_at ~updated_at ()
        |> Db.insert_account
      in
+     assert (a.id = 1);
      let%lwt _u =
        let email = "foobar@example.com" in
        let created_at, updated_at = (now, now) in
@@ -33,6 +34,6 @@ let () =
        |> Db.insert_user
      in
      let%lwt _ =
-       Router.ToServer.fetch_account ~scheme:"http" "localhost:3000" "admin"
+       Job.ToServer.fetch_account ~scheme:"http" "localhost:3000" "admin"
      in
      Lwt.return_unit
