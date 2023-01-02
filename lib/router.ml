@@ -1,3 +1,5 @@
+open Util
+
 let routes =
   let open Http in
   let app_xrd_xml = "application/xrd+xml; charset=utf-8" in
@@ -38,11 +40,24 @@ let routes =
   let routes_from_clients =
     (* From clients *)
     let dispatch = dispatch app_json in
+    let self_id = 1 (* FIXME *) in
     [
       post "/api/v1/accounts/:id/follow" (fun req ->
-          let self_id = 1 (* FIXME *) in
           let id = param ":id" req |> int_of_string in
           dispatch @@ Job.FromClient.post_api_v1_accounts_follow self_id id);
+      get "/api/v1/accounts/search" (fun req ->
+          let q = req |> query "q" |> List.hd in
+          let resolve =
+            req |> query_opt "resolve"
+            |> Option.fold ~none:false ~some:(List.hd |$> bool_of_string)
+          in
+          let re = Regex.compile {|^@?([^@]+)(?:@([^@]+))?$|} in
+          match Regex.match_group re q with
+          | Ok [ _; username; domain ] ->
+              dispatch
+              @@ Job.FromClient.get_api_v1_accounts_search resolve ~username
+                   ~domain
+          | _ -> respond ~status:`Bad_request "");
     ]
   in
   router (routes_from_servers @ routes_from_clients)

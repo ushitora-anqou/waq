@@ -24,7 +24,7 @@ let () =
        let inbox_url = Job.(uri ^/ "inbox") in
        Db.make_account ~username ~public_key ~private_key ~display_name ~uri
          ~inbox_url ~created_at ~updated_at ()
-       |> Db.insert_account
+       |> Db.upsert_account
      in
      assert (a.id = 1);
      let%lwt _u =
@@ -32,8 +32,5 @@ let () =
        let created_at, updated_at = (now, now) in
        Db.make_user ~id:0 ~email ~created_at ~updated_at ~account_id:a.id
        |> Db.insert_user
-     in
-     let%lwt _ =
-       Job.ToServer.fetch_account ~scheme:"http" "localhost:3000" "admin"
      in
      Lwt.return_unit

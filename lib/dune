@@ -23,6 +23,8 @@
   mirage-crypto-rng.lwt
   ppx_deriving_yojson.runtime
   ppx_rapper_lwt
+  re
+  re.pcre
   sha
   uri
   yaml

@@ -79,10 +79,10 @@ module ToServer = struct
     let r =
       body |> Yojson.Safe.from_string |> ap_user_of_yojson |> Result.get_ok
     in
-    Db.make_account ~username:r.preferredUsername ~domain
-      ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
-      ~url:r.url ~inbox_url:r.inbox ~created_at:now ~updated_at:now ()
-    |> Db.insert_account
+    Lwt.return
+    @@ Db.make_account ~username:r.preferredUsername ~domain
+         ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
+         ~url:r.url ~inbox_url:r.inbox ~created_at:now ~updated_at:now ()
 
   (* Send Follow to POST /users/:name/inbox *)
   let post_users_inbox_follow self_id id =
@@ -223,4 +223,34 @@ module FromClient = struct
         |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
         |> Result.ok |> Lwt.return
     | _ -> Lwt.return (Error `Internal_server_error)
+
+  (* Recv GET /api/v1/accounts/search *)
+  type get_api_v1_accounts_search_res = {
+    id : string;
+    username : string;
+    acct : string;
+    display_name : string;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  let get_api_v1_accounts_search _resolve ~username ~domain =
+    try%lwt
+      let%lwt acc =
+        match%lwt Db.get_account_by_username domain username with
+        | Some acc -> Lwt.return acc
+        | None when domain = "" -> raise Not_found
+        | None ->
+            let%lwt acc = ToServer.fetch_account domain username in
+            Db.upsert_account acc
+      in
+      let acct =
+        match acc.domain with
+        | None -> username
+        | Some _ -> username ^ "@" ^ domain
+      in
+      make_get_api_v1_accounts_search_res ~id:(string_of_int acc.id) ~username
+        ~acct ~display_name:acc.display_name
+      |> get_api_v1_accounts_search_res_to_yojson |> Yojson.Safe.to_string
+      |> Result.ok |> Lwt.return
+    with _ -> Lwt.return (Error `Not_found)
 end
