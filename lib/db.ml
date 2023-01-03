@@ -19,6 +19,7 @@ type account = {
   uri : string;
   url : string option;
   inbox_url : string;
+  followers_url : string;
   created_at : Ptime.t;
   updated_at : Ptime.t;
 }
@@ -26,14 +27,15 @@ type account = {
 
 type status = {
   id : int;
+  uri : string;
   text : string;
   created_at : Ptime.t;
   updated_at : Ptime.t;
   account_id : int;
 }
 
-let make_status ~id ~text ~created_at ~updated_at ~account_id =
-  { id; text; created_at; updated_at; account_id }
+let make_status ~id ~uri ~text ~created_at ~updated_at ~account_id =
+  { id; uri; text; created_at; updated_at; account_id }
 
 let now () = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get
 
@@ -46,6 +48,7 @@ module Internal : sig
   val get_user_by_username : string -> user Lwt.t
   val insert_user : user -> user Lwt.t
   val insert_status : status -> status Lwt.t
+  val update_status_uri : status -> status Lwt.t
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -84,6 +87,7 @@ end = struct
       @string{uri},
       @string?{url},
       @string{inbox_url},
+      @string{followers_url},
       @ptime{created_at},
       @ptime{updated_at}
     FROM
@@ -109,6 +113,7 @@ end = struct
       @string{uri},
       @string?{url},
       @string{inbox_url},
+      @string{followers_url},
       @ptime{created_at},
       @ptime{updated_at}
     FROM
@@ -134,6 +139,7 @@ end = struct
           uri,
           url,
           inbox_url,
+          followers_url,
           created_at,
           updated_at)
         VALUES (
@@ -145,6 +151,7 @@ end = struct
           %string{uri},
           %string?{url},
           %string{inbox_url},
+          %string{followers_url},
           %ptime{created_at},
           %ptime{updated_at})
         ON CONFLICT (username, domain)
@@ -157,6 +164,7 @@ end = struct
           uri = %string{uri},
           url = %string?{url},
           inbox_url = %string{inbox_url},
+          followers_url = %string{followers_url},
           created_at = %ptime{created_at},
           updated_at = %ptime{updated_at}
         RETURNING
@@ -169,6 +177,7 @@ end = struct
           @string{uri},
           @string?{url},
           @string{inbox_url},
+          @string{followers_url},
           @ptime{created_at},
           @ptime{updated_at}
       |}
@@ -241,17 +250,20 @@ end = struct
        get_one
          {|
 INSERT INTO statuses (
+  uri,
   text,
   created_at,
   updated_at,
   account_id)
 VALUES (
+  %string{uri},
   %string{text},
   %ptime{created_at},
   %ptime{updated_at},
   %int{account_id})
 RETURNING
   @int{id},
+  @string{uri},
   @string{text},
   @ptime{created_at},
   @ptime{updated_at},
@@ -259,6 +271,26 @@ RETURNING
     |}
          record_in function_out]
        make_status s [@warning "-9"])
+    |> do_query
+
+  let update_status_uri s =
+    [%rapper
+      get_one
+        {|
+UPDATE statuses SET
+  uri = %string{uri}
+WHERE
+  id = %int{id}
+RETURNING
+  @int{id},
+  @string{uri},
+  @string{text},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id}
+        |}
+        function_out]
+      ~id:s.id ~uri:s.uri make_status
     |> do_query
 
   module Migration = struct
@@ -292,6 +324,7 @@ RETURNING
                 uri TEXT NOT NULL,
                 url TEXT,
                 inbox_url TEXT NOT NULL,
+                followers_url TEXT NOT NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
 
@@ -316,6 +349,7 @@ RETURNING
               {|
               CREATE TABLE statuses (
                 id SERIAL PRIMARY KEY,
+                uri TEXT NOT NULL,
                 text TEXT NOT NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,

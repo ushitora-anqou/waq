@@ -15,7 +15,7 @@ let test_user _ _ =
 
   let%lwt a =
     make_account ~username:"anqou" ~public_key:"" ~display_name:"Ushitora Anqou"
-      ~uri:"" ~inbox_url:"" ~created_at ~updated_at ()
+      ~uri:"" ~inbox_url:"" ~followers_url:"" ~created_at ~updated_at ()
     |> upsert_account
   in
   assert (a.id = 1);
@@ -69,16 +69,16 @@ let test_account_upsert _ _ =
 
   let%lwt a =
     make_account ~username:"anqou" ~domain:"mstdn.anqou.net" ~public_key:""
-      ~display_name:"Ushitora Anqou" ~uri:"" ~inbox_url:"" ~created_at
-      ~updated_at ()
+      ~display_name:"Ushitora Anqou" ~uri:"" ~inbox_url:"" ~followers_url:""
+      ~created_at ~updated_at ()
     |> upsert_account
   in
   assert (a.id = 1);
   assert (a.display_name = "Ushitora Anqou");
   let%lwt a =
     make_account ~username:"anqou" ~domain:"mstdn.anqou.net" ~public_key:""
-      ~display_name:"Ushitora Anqou 2" ~uri:"" ~inbox_url:"" ~created_at
-      ~updated_at ()
+      ~display_name:"Ushitora Anqou 2" ~uri:"" ~inbox_url:"" ~followers_url:""
+      ~created_at ~updated_at ()
     |> upsert_account
   in
   assert (a.id = 1);

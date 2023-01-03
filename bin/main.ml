@@ -22,8 +22,9 @@ let () =
        let private_key = Http.Signature.encode_private_key private_key in
        let uri = Job.url [ "users"; username ] in
        let inbox_url = Job.(uri ^/ "inbox") in
+       let followers_url = Job.(uri ^/ "followers") in
        Db.make_account ~username ~public_key ~private_key ~display_name ~uri
-         ~inbox_url ~created_at ~updated_at ()
+         ~inbox_url ~followers_url ~created_at ~updated_at ()
        |> Db.upsert_account
      in
      assert (a.id = 1);

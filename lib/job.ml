@@ -51,6 +51,31 @@ type ap_inbox = {
 }
 [@@deriving make, yojson { strict = false }]
 
+(* Note *)
+type ap_note = {
+  id : string;
+  typ : string; [@key "type"]
+  published : string;
+  attributedTo : string;
+  to_ : string list; [@key "to"]
+  cc : string list;
+  content : string;
+}
+[@@deriving make, yojson { strict = false }]
+
+(* Create *)
+type ap_create = {
+  context : Yojson.Safe.t; [@key "@context"]
+  id : string;
+  typ : string; [@key "type"]
+  actor : Yojson.Safe.t;
+  published : string;
+  to_ : string list; [@key "to"]
+  cc : string list;
+  obj : ap_note; [@key "object"]
+}
+[@@deriving make, yojson { strict = false }]
+
 module ToServer = struct
   (* Send GET /.well-known/webfinger and GET /users/:name *)
   let fetch_account ?(scheme = "https") domain username =
@@ -82,7 +107,8 @@ module ToServer = struct
     Lwt.return
     @@ Db.make_account ~username:r.preferredUsername ~domain
          ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
-         ~url:r.url ~inbox_url:r.inbox ~created_at:now ~updated_at:now ()
+         ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers
+         ~created_at:now ~updated_at:now ()
 
   (* Send Follow to POST /users/:name/inbox *)
   let post_users_inbox_follow self_id id =
@@ -107,6 +133,43 @@ module ToServer = struct
     in
     let meth = `POST in
     let headers = [ ("Content-Type", "application/activity+json") ] in
+    let%lwt res = Http.fetch ~meth ~headers ~body ~sign acc.inbox_url in
+    Lwt.return
+    @@
+    match res with
+    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok ()
+    | _ -> Error ()
+
+  (* Send Create/Note to POST /users/:name/inbox *)
+  let post_users_inbox_create_note id (s : Db.status) =
+    let%lwt self = Db.get_account ~id:s.account_id in
+    let body =
+      let published = s.created_at |> Ptime.to_rfc3339 in
+      let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
+      let cc = [ self.followers_url ] in
+      let note =
+        make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
+          ~attributedTo:self.uri ~content:s.text ()
+      in
+      make_ap_create ~context:(`String "https://www.w3.org/ns/activitystreams")
+        ~id:(s.uri ^/ "activity") ~typ:"Create" ~actor:(`String self.uri)
+        ~published ~to_ ~cc ~obj:note ()
+      |> ap_create_to_yojson |> Yojson.Safe.to_string
+    in
+    Log.debug (fun m -> m ">>> %s" body);
+    let sign =
+      let priv_key =
+        self.private_key |> Option.get |> Http.Signature.decode_private_key
+      in
+      let key_id = self.uri ^ "#main-key" in
+      let signed_headers =
+        [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+      in
+      Some (priv_key, key_id, signed_headers)
+    in
+    let meth = `POST in
+    let headers = [ ("Content-Type", "application/activity+json") ] in
+    let%lwt acc = Db.get_account ~id in
     let%lwt res = Http.fetch ~meth ~headers ~body ~sign acc.inbox_url in
     Lwt.return
     @@
@@ -264,11 +327,18 @@ module FromClient = struct
 
   let post_api_v1_statuses self_id status =
     let now = Db.now () in
+    let%lwt self = Db.get_account ~id:self_id in
     let%lwt s =
-      Db.make_status ~id:0 ~text:status ~created_at:now ~updated_at:now
+      Db.make_status ~id:0 ~text:status ~uri:"" ~created_at:now ~updated_at:now
         ~account_id:self_id
       |> Db.insert_status
     in
+    let%lwt s =
+      { s with uri = self.uri ^/ "statuses" ^/ string_of_int s.id }
+      |> Db.update_status_uri
+    in
+    (* FIXME *)
+    let%lwt _ = ToServer.post_users_inbox_create_note 2 s in
     make_post_api_v1_statuses_res ~id:(string_of_int s.id)
       ~created_at:(Ptime.to_rfc3339 now) ~content:s.text
     |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string |> Result.ok
