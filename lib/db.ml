@@ -24,6 +24,19 @@ type account = {
 }
 [@@deriving make]
 
+type status = {
+  id : int;
+  text : string;
+  created_at : Ptime.t;
+  updated_at : Ptime.t;
+  account_id : int;
+}
+
+let make_status ~id ~text ~created_at ~updated_at ~account_id =
+  { id; text; created_at; updated_at; account_id }
+
+let now () = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get
+
 module Internal : sig
   val initialize : unit -> unit
   val get_account : id:int -> account Lwt.t
@@ -32,6 +45,7 @@ module Internal : sig
   val get_user : id:int -> user Lwt.t
   val get_user_by_username : string -> user Lwt.t
   val insert_user : user -> user Lwt.t
+  val insert_status : status -> status Lwt.t
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -222,6 +236,31 @@ end = struct
        make_user u [@warning "-9"])
     |> do_query
 
+  let insert_status s =
+    ([%rapper
+       get_one
+         {|
+INSERT INTO statuses (
+  text,
+  created_at,
+  updated_at,
+  account_id)
+VALUES (
+  %string{text},
+  %ptime{created_at},
+  %ptime{updated_at},
+  %int{account_id})
+RETURNING
+  @int{id},
+  @string{text},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id}
+    |}
+         record_in function_out]
+       make_status s [@warning "-9"])
+    |> do_query
+
   module Migration = struct
     module type S = sig
       val up :
@@ -272,10 +311,24 @@ end = struct
                 FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE
               );
             |}];
+          [%rapper
+            execute
+              {|
+              CREATE TABLE statuses (
+                id SERIAL PRIMARY KEY,
+                text TEXT NOT NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                account_id BIGINT NOT NULL,
+
+                FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE
+              );
+            |}];
         ]
 
       let down =
         [
+          [%rapper execute {| DROP TABLE statuses; |}];
           [%rapper execute {| DROP TABLE users; |}];
           [%rapper execute {| DROP TABLE accounts; |}];
         ]

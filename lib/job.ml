@@ -253,4 +253,24 @@ module FromClient = struct
       |> get_api_v1_accounts_search_res_to_yojson |> Yojson.Safe.to_string
       |> Result.ok |> Lwt.return
     with _ -> Lwt.return (Error `Not_found)
+
+  (* Recv POST /api/v1/statuses *)
+  type post_api_v1_statuses_res = {
+    id : string;
+    created_at : string;
+    content : string;
+  }
+  [@@deriving make, yojson { strict = false }]
+
+  let post_api_v1_statuses self_id status =
+    let now = Db.now () in
+    let%lwt s =
+      Db.make_status ~id:0 ~text:status ~created_at:now ~updated_at:now
+        ~account_id:self_id
+      |> Db.insert_status
+    in
+    make_post_api_v1_statuses_res ~id:(string_of_int s.id)
+      ~created_at:(Ptime.to_rfc3339 now) ~content:s.text
+    |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string |> Result.ok
+    |> Lwt.return
 end

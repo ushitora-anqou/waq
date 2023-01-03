@@ -1,4 +1,4 @@
-open Util
+open Util [@@warning "-33"]
 
 let routes =
   let open Http in
@@ -41,15 +41,40 @@ let routes =
     (* From clients *)
     let dispatch = dispatch app_json in
     let self_id = 1 (* FIXME *) in
+    let parse_req req =
+      let%lwt body = body req in
+      let hs =
+        headers req |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
+      in
+      Lwt.return
+      @@
+      match List.assoc_opt "content-type" hs with
+      | Some "application/json" -> `Json (Yojson.Safe.from_string body)
+      | _ -> `Form (req, body)
+    in
+    let query name = function
+      | `Json (`Assoc l) -> (
+          match List.assoc name l with
+          | `Bool b -> string_of_bool b
+          | `Int i -> string_of_int i
+          | `String s -> s
+          | _ -> failwith "invalid value")
+      | `Json _ -> raise Not_found
+      | `Form (req, _body) ->
+          (* FIXME: use body *)
+          query name req |> List.hd
+    in
+    let query_opt name req = try Some (query name req) with _ -> None in
     [
       post "/api/v1/accounts/:id/follow" (fun req ->
           let id = param ":id" req |> int_of_string in
           dispatch @@ Job.FromClient.post_api_v1_accounts_follow self_id id);
       get "/api/v1/accounts/search" (fun req ->
-          let q = req |> query "q" |> List.hd in
+          let%lwt req = parse_req req in
+          let q = req |> query "q" in
           let resolve =
             req |> query_opt "resolve"
-            |> Option.fold ~none:false ~some:(List.hd |$> bool_of_string)
+            |> Option.fold ~none:false ~some:bool_of_string
           in
           let re = Regex.compile {|^@?([^@]+)(?:@([^@]+))?$|} in
           match Regex.match_group re q with
@@ -58,6 +83,12 @@ let routes =
               @@ Job.FromClient.get_api_v1_accounts_search resolve ~username
                    ~domain
           | _ -> respond ~status:`Bad_request "");
+      post "/api/v1/statuses" (fun req ->
+          let%lwt req = parse_req req in
+          match query_opt "status" req with
+          | None -> respond ~status:`Bad_request ""
+          | Some status ->
+              dispatch @@ Job.FromClient.post_api_v1_statuses self_id status);
     ]
   in
   router (routes_from_servers @ routes_from_clients)
