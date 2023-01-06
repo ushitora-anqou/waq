@@ -113,11 +113,10 @@ module ToServer = struct
   (* Send Follow to POST /users/:name/inbox *)
   let post_users_inbox_follow self_id id =
     let%lwt self = Db.get_account ~id:self_id in
-    let link = url [ "users"; self.username ] in
     let%lwt acc = Db.get_account ~id in
     let body =
       make_ap_inbox ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id:(link ^ "#follow/1") ~typ:"Follow" ~actor:(`String link)
+        ~id:(self.uri ^ "#follow/1") ~typ:"Follow" ~actor:(`String self.uri)
         ~obj:(`String acc.uri)
       |> ap_inbox_to_yojson |> Yojson.Safe.to_string
     in
@@ -125,7 +124,7 @@ module ToServer = struct
       let priv_key =
         self.private_key |> Option.get |> Http.Signature.decode_private_key
       in
-      let key_id = link ^ "#main-key" in
+      let key_id = self.uri ^ "#main-key" in
       let signed_headers =
         [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
       in
@@ -206,14 +205,15 @@ module FromServer = struct
       (* Return the body *)
       let name, dom = (List.hd s, List.nth s 1) in
       let%lwt _ = Db.get_user_by_username name in
-      let link = url [ "users"; name ] in
+      let%lwt a = Db.get_account_by_username "" name in
+      let a = Option.get a in
       make_webfinger
         ~subject:("acct:" ^ name ^ "@" ^ dom)
-        ~aliases:[ link ]
+        ~aliases:[ a.uri ]
         ~links:
           [
             make_webfinger_link ~rel:"self" ~typ:"application/activity+json"
-              ~href:link
+              ~href:a.uri
             |> webfinger_link_to_yojson;
           ]
         ()
@@ -230,16 +230,15 @@ module FromServer = struct
     try%lwt
       let%lwt u = Db.get_user_by_username username in
       let%lwt a = Db.get_account ~id:u.account_id in
-      let link = url [ "users"; username ] in
       let publicKey =
-        make_ap_user_public_key ~id:(link ^ "#main-key") ~owner:link
+        make_ap_user_public_key ~id:(a.uri ^ "#main-key") ~owner:a.uri
           ~publicKeyPem:a.public_key
       in
       make_ap_user ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id:link ~typ:"Person" ~following:(link ^/ "following")
-        ~followers:(link ^/ "followers") ~inbox:a.inbox_url
-        ~outbox:(link ^/ "outbox") ~preferredUsername:username
-        ~name:a.display_name ~summary:"Summary is here" ~url:link ~tag:[]
+        ~id:a.uri ~typ:"Person" ~following:(a.uri ^/ "following")
+        ~followers:a.followers_url ~inbox:a.inbox_url
+        ~outbox:(a.uri ^/ "outbox") ~preferredUsername:username
+        ~name:a.display_name ~summary:"Summary is here" ~url:a.uri ~tag:[]
         ~publicKey ()
       |> ap_user_to_yojson |> Yojson.Safe.to_string |> Result.ok |> Lwt.return
     with e ->
