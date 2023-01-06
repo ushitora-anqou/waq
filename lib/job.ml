@@ -1,9 +1,15 @@
 module C = Config
 
+exception Bad_request
+
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
 
 let url (l : string list) =
   "https:/" ^ (C.server_name () :: l |> List.fold_left ( ^/ ) "")
+
+let is_my_domain (u : string) =
+  u |> Uri.of_string |> Uri.host
+  |> Option.fold ~none:false ~some:(fun h -> C.is_my_domain h)
 
 (* .well-known/webfinger *)
 type webfinger_link = {
@@ -77,38 +83,56 @@ type ap_create = {
 [@@deriving make, yojson { strict = false }]
 
 module ToServer = struct
-  (* Send GET /.well-known/webfinger and GET /users/:name *)
-  let fetch_account ?(scheme = "https") domain username =
-    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+  (* Send GET /users/:name *)
+  let get_uri href =
+    let%lwt body =
+      Http.fetch_exn ~headers:[ ("Accept", "application/activity+json") ] href
+    in
+    body |> Yojson.Safe.from_string |> ap_user_of_yojson |> Result.get_ok
+    |> Lwt.return
 
+  (* Send GET /.well-known/webfinger *)
+  let get_webfinger ~scheme ~domain ~username =
     (* FIXME: Check /.well-known/host-meta if necessary *)
     let%lwt body =
       Http.fetch_exn @@ scheme ^ ":/" ^/ domain
       ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
     in
-    let webfinger =
-      body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
-    in
-    let href =
-      webfinger.links
-      |> List.find_map (fun l ->
-             match webfinger_link_of_yojson l with
-             | Ok l when l.rel = "self" -> Some l.href
-             | _ -> None)
-      |> Option.get
-    in
+    body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
+    |> Lwt.return
 
-    let%lwt body =
-      Http.fetch_exn ~headers:[ ("Accept", "application/activity+json") ] href
+  (* Utility function to get an account. Send GET requests if necessary *)
+  let fetch_account ?(scheme = "https") by =
+    let make_new_account (uri : string) =
+      let%lwt r = get_uri uri in
+      let domain = Uri.of_string uri |> Uri.host |> Option.get in
+      let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+      Db.make_account ~username:r.preferredUsername ~domain
+        ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
+        ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
+        ~updated_at:now ()
+      |> Db.upsert_account
     in
-    let r =
-      body |> Yojson.Safe.from_string |> ap_user_of_yojson |> Result.get_ok
-    in
-    Lwt.return
-    @@ Db.make_account ~username:r.preferredUsername ~domain
-         ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
-         ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers
-         ~created_at:now ~updated_at:now ()
+    match by with
+    | `Webfinger (domain, username) -> (
+        match%lwt Db.get_account_by_username domain username with
+        | Some acc -> Lwt.return acc
+        | None when domain = "" (* Local *) -> raise Not_found
+        | None ->
+            let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
+            let href =
+              webfinger.links
+              |> List.find_map (fun l ->
+                     match webfinger_link_of_yojson l with
+                     | Ok l when l.rel = "self" -> Some l.href
+                     | _ -> None)
+              |> Option.get
+            in
+            make_new_account href)
+    | `Uri uri -> (
+        match%lwt Db.get_account_by_uri uri with
+        | Some acc -> Lwt.return acc
+        | None -> make_new_account uri)
 
   (* Send Follow to POST /users/:name/inbox *)
   let post_users_inbox_follow self_id id =
@@ -248,10 +272,31 @@ module FromServer = struct
             (Printexc.get_backtrace ()));
       Lwt.return (Error `Not_found)
 
+  (* Recv Follow in inbox *)
+  let inbox_follow (req : ap_inbox) =
+    assert (req.typ = "Follow");
+    let src, dst =
+      match (req.actor, req.obj) with
+      | `String s, `String d when is_my_domain d -> (s, d)
+      | _ -> raise Bad_request
+    in
+    let%lwt src = ToServer.fetch_account (`Uri src) in
+    match%lwt Db.get_account_by_uri dst with
+    | None -> raise Not_found
+    | Some dst ->
+        let now = Db.now () in
+        let%lwt _ =
+          Db.make_follow ~id:0 ~created_at:now ~updated_at:now
+            ~account_id:src.id ~target_account_id:dst.id ~uri:req.id
+          |> Db.insert_follow
+        in
+        Lwt.return_unit
+
   (* Recv POST /users/:name/inbox *)
   let post_users_inbox body () =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
     | Error _ -> Lwt.return_unit
+    | Ok ({ typ = "Follow"; _ } as r) -> inbox_follow r
     | Ok _r -> Lwt.return_unit
 end
 
@@ -297,14 +342,7 @@ module FromClient = struct
 
   let get_api_v1_accounts_search _resolve ~username ~domain =
     try%lwt
-      let%lwt acc =
-        match%lwt Db.get_account_by_username domain username with
-        | Some acc -> Lwt.return acc
-        | None when domain = "" -> raise Not_found
-        | None ->
-            let%lwt acc = ToServer.fetch_account domain username in
-            Db.upsert_account acc
-      in
+      let%lwt acc = ToServer.fetch_account (`Webfinger (domain, username)) in
       let acct =
         match acc.domain with
         | None -> username

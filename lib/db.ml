@@ -37,18 +37,33 @@ type status = {
 let make_status ~id ~uri ~text ~created_at ~updated_at ~account_id =
   { id; uri; text; created_at; updated_at; account_id }
 
+type follow = {
+  id : int;
+  created_at : Ptime.t;
+  updated_at : Ptime.t;
+  account_id : int;
+  target_account_id : int;
+  uri : string;
+}
+
+let make_follow ~id ~created_at ~updated_at ~account_id ~target_account_id ~uri
+    =
+  { id; created_at; updated_at; account_id; target_account_id; uri }
+
 let now () = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get
 
 module Internal : sig
   val initialize : unit -> unit
   val get_account : id:int -> account Lwt.t
   val get_account_by_username : string -> string -> account option Lwt.t
+  val get_account_by_uri : string -> account option Lwt.t
   val upsert_account : account -> account Lwt.t
   val get_user : id:int -> user Lwt.t
   val get_user_by_username : string -> user Lwt.t
   val insert_user : user -> user Lwt.t
   val insert_status : status -> status Lwt.t
   val update_status_uri : status -> status Lwt.t
+  val insert_follow : follow -> follow Lwt.t
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -124,6 +139,32 @@ end = struct
     |}
         record_out]
       ~username ~domain
+    |> do_query
+
+  let get_account_by_uri uri =
+    [%rapper
+      get_opt
+        {|
+    SELECT
+      @int{id},
+      @string{username},
+      @string?{domain},
+      @string?{private_key},
+      @string{public_key},
+      @string{display_name},
+      @string{uri},
+      @string?{url},
+      @string{inbox_url},
+      @string{followers_url},
+      @ptime{created_at},
+      @ptime{updated_at}
+    FROM
+      accounts
+    WHERE
+      uri = %string{uri}
+    |}
+        record_out]
+      ~uri
     |> do_query
 
   let upsert_account a =
@@ -273,7 +314,7 @@ RETURNING
        make_status s [@warning "-9"])
     |> do_query
 
-  let update_status_uri s =
+  let update_status_uri (s : status) =
     [%rapper
       get_one
         {|
@@ -291,6 +332,34 @@ RETURNING
         |}
         function_out]
       ~id:s.id ~uri:s.uri make_status
+    |> do_query
+
+  let insert_follow (f : follow) =
+    ([%rapper
+       get_one
+         {|
+INSERT INTO follows (
+  created_at,
+  updated_at,
+  account_id,
+  target_account_id,
+  uri)
+VALUES (
+  %ptime{created_at},
+  %ptime{updated_at},
+  %int{account_id},
+  %int{target_account_id},
+  %string{uri})
+RETURNING
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+    |}
+         record_in record_out]
+       f [@warning "-9"])
     |> do_query
 
   module Migration = struct
@@ -358,10 +427,26 @@ RETURNING
                 FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE
               );
             |}];
+          [%rapper
+            execute
+              {|
+              CREATE TABLE follows (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                account_id BIGINT,
+                target_account_id BIGINT,
+                uri TEXT,
+
+                FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE (account_id, target_account_id)
+                )
+            |}];
         ]
 
       let down =
         [
+          [%rapper execute {| DROP TABLE follows; |}];
           [%rapper execute {| DROP TABLE statuses; |}];
           [%rapper execute {| DROP TABLE users; |}];
           [%rapper execute {| DROP TABLE accounts; |}];
