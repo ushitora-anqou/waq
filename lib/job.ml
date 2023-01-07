@@ -185,24 +185,23 @@ module ToServer = struct
     | _ -> raise Internal_server_error
 
   (* Send Follow to POST inbox *)
-  let kick_post_follow_to_inbox self_id id =
+  let kick_post_follow_to_inbox (self : Db.account) (acc : Db.account) =
     Internal.kick ~name:__FUNCTION__
-    @@ (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
-       let%lwt self = Db.get_account ~id:self_id in
-       let%lwt acc = Db.get_account ~id in
-       (* Insert follow_request *)
-       let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
-       let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
-       Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
-         ~account_id:self_id ~target_account_id:id ~uri
-       |> Db.insert_follow_request |> ignore_lwt;%lwt
-       (* Post activity *)
-       let body =
-         make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
-           ~obj:(`String acc.uri)
-         |> ap_inbox_to_yojson
-       in
-       post_activity_to_inbox ~body ~src:self ~dst:acc
+    @@
+    (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
+    (* Insert follow_request *)
+    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+    let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
+    Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
+      ~account_id:self.id ~target_account_id:acc.id ~uri
+    |> Db.insert_follow_request |> ignore_lwt;%lwt
+    (* Post activity *)
+    let body =
+      make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
+        ~obj:(`String acc.uri)
+      |> ap_inbox_to_yojson
+    in
+    post_activity_to_inbox ~body ~src:self ~dst:acc
 
   (* Send Create/Note to POST /users/:name/inbox *)
   let kick_post_create_note_to_inbox id (s : Db.status) =
@@ -380,6 +379,9 @@ module FromClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_accounts_follow self_id id =
+    (* Check if accounts are valid *)
+    let%lwt self = Db.get_account ~id:self_id in
+    let%lwt acc = Db.get_account ~id in
     (* Check if already followed or follow-requested *)
     let%lwt f =
       Db.get_follow_by_accounts ~account_id:self_id ~target_account_id:id
@@ -388,7 +390,9 @@ module FromClient = struct
       Db.get_follow_request_by_accounts ~account_id:self_id
         ~target_account_id:id
     in
-    if f = None && frq = None then ToServer.kick_post_follow_to_inbox self_id id;
+    (* If valid, send Follow to the server *)
+    if f = None && frq = None then ToServer.kick_post_follow_to_inbox self acc;
+    (* Return the result to the client *)
     make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
       ~showing_reblogs:true ~notifying:false ~followed_by:false ~blocking:false
       ~blocked_by:false ~muting:false ~muting_notifications:false
