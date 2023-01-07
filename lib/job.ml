@@ -145,7 +145,7 @@ module ToServer = struct
     let make_new_account (uri : string) =
       let%lwt r = get_uri uri in
       let domain = Uri.of_string uri |> Uri.host |> Option.get in
-      let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+      let now = Db.now () in
       Db.make_account ~username:r.preferredUsername ~domain
         ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
         ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
@@ -220,7 +220,7 @@ module ToServer = struct
     Internal.kick ~name:__FUNCTION__ @@ fun () ->
     (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
     (* Insert follow_request *)
-    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+    let now = Db.now () in
     let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
     Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
       ~account_id:self.id ~target_account_id:acc.id ~uri
