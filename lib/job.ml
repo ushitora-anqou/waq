@@ -2,6 +2,7 @@ open Util
 module C = Config
 
 exception Bad_request
+exception Internal_server_error
 
 let context = `String "https://www.w3.org/ns/activitystreams"
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
@@ -84,6 +85,30 @@ type ap_create = {
 }
 [@@deriving make, yojson { strict = false }]
 
+module Internal = struct
+  let kick ~name (f : unit Lwt.t) =
+    Lwt.async @@ fun () ->
+    let num_repeats = 3 in
+    let sleep_duration i =
+      (* Thanks to: https://github.com/mperham/sidekiq/wiki/Error-Handling *)
+      (i * i * i * i) + 15 + (Random.int 10 * (i + 1)) |> float_of_int
+    in
+    let rec loop i =
+      try%lwt f
+      with e ->
+        Log.warn (fun m -> m "Job failed: %s: %s" name (Printexc.to_string e));
+        if i + 1 = num_repeats then (
+          Log.err (fun m -> m "Job killed: %s: Limit reached" name);
+          Lwt.return_unit)
+        else
+          let dur = sleep_duration i in
+          Log.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
+          Lwt_unix.sleep dur;%lwt
+          loop (i + 1)
+    in
+    loop 0
+end
+
 module ToServer = struct
   (* Send GET /users/:name *)
   let get_uri href =
@@ -156,45 +181,47 @@ module ToServer = struct
     Lwt.return
     @@
     match res with
-    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok res
-    | _ -> Error res
+    | Ok (status, _body) when Httpaf.Status.is_successful status -> ()
+    | _ -> raise Internal_server_error
 
   (* Send Follow to POST inbox *)
-  let post_follow_to_inbox self_id id =
-    (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
-    let%lwt self = Db.get_account ~id:self_id in
-    let%lwt acc = Db.get_account ~id in
-    (* Insert follow_request *)
-    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
-    let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
-    Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
-      ~account_id:self_id ~target_account_id:id ~uri
-    |> Db.insert_follow_request |> ignore_lwt;%lwt
-    (* Post activity *)
-    let body =
-      make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
-        ~obj:(`String acc.uri)
-      |> ap_inbox_to_yojson
-    in
-    post_activity_to_inbox ~body ~src:self ~dst:acc
+  let kick_post_follow_to_inbox self_id id =
+    Internal.kick ~name:__FUNCTION__
+    @@ (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
+       let%lwt self = Db.get_account ~id:self_id in
+       let%lwt acc = Db.get_account ~id in
+       (* Insert follow_request *)
+       let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+       let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
+       Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
+         ~account_id:self_id ~target_account_id:id ~uri
+       |> Db.insert_follow_request |> ignore_lwt;%lwt
+       (* Post activity *)
+       let body =
+         make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
+           ~obj:(`String acc.uri)
+         |> ap_inbox_to_yojson
+       in
+       post_activity_to_inbox ~body ~src:self ~dst:acc
 
   (* Send Create/Note to POST /users/:name/inbox *)
-  let post_create_note_to_inbox id (s : Db.status) =
-    let%lwt self = Db.get_account ~id:s.account_id in
-    let body =
-      let published = s.created_at |> Ptime.to_rfc3339 in
-      let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-      let cc = [ self.followers_url ] in
-      let note =
-        make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
-          ~attributedTo:self.uri ~content:s.text ()
-      in
-      make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
-        ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
-      |> ap_create_to_yojson
-    in
-    let%lwt dst = Db.get_account ~id in
-    post_activity_to_inbox ~body ~src:self ~dst
+  let kick_post_create_note_to_inbox id (s : Db.status) =
+    Internal.kick ~name:__FUNCTION__
+    @@ let%lwt self = Db.get_account ~id:s.account_id in
+       let body =
+         let published = s.created_at |> Ptime.to_rfc3339 in
+         let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
+         let cc = [ self.followers_url ] in
+         let note =
+           make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
+             ~attributedTo:self.uri ~content:s.text ()
+         in
+         make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
+           ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
+         |> ap_create_to_yojson
+       in
+       let%lwt dst = Db.get_account ~id in
+       post_activity_to_inbox ~body ~src:self ~dst
 
   (* Send Accept to POST inbox *)
   let post_accept_to_inbox ~(follow_req : ap_inbox) ~(followee : Db.account)
@@ -279,8 +306,10 @@ module FromServer = struct
       Lwt.return (Error `Not_found)
 
   (* Recv Follow in inbox *)
-  let inbox_follow (req : ap_inbox) =
+  let kick_inbox_follow (req : ap_inbox) =
     assert (req.typ = "Follow");
+    Internal.kick ~name:__FUNCTION__
+    @@
     let src, dst =
       match (req.actor, req.obj) with
       | `String s, `String d when is_my_domain d -> (s, d)
@@ -301,8 +330,10 @@ module FromServer = struct
         |> ignore_lwt
 
   (* Recv Accept in inbox *)
-  let inbox_accept (req : ap_inbox) =
+  let kick_inbox_accept (req : ap_inbox) =
     assert (req.typ = "Accept");
+    Internal.kick ~name:__FUNCTION__
+    @@
     let uri =
       match req.obj with
       | `Assoc l -> (
@@ -322,12 +353,12 @@ module FromServer = struct
         |> Db.insert_follow |> ignore_lwt
 
   (* Recv POST /users/:name/inbox *)
-  let post_users_inbox body () =
+  let kick_post_users_inbox body =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
-    | Error _ -> Lwt.return_unit
-    | Ok ({ typ = "Accept"; _ } as r) -> inbox_accept r
-    | Ok ({ typ = "Follow"; _ } as r) -> inbox_follow r
-    | Ok _r -> Lwt.return_unit
+    | Error _ -> ()
+    | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
+    | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
+    | Ok _r -> ()
 end
 
 module FromClient = struct
@@ -357,25 +388,13 @@ module FromClient = struct
       Db.get_follow_request_by_accounts ~account_id:self_id
         ~target_account_id:id
     in
-    let%lwt res =
-      match (f, frq) with
-      | None, None -> (
-          let%lwt res = ToServer.post_follow_to_inbox self_id id in
-          match res with
-          | Ok _ -> Lwt.return (Ok ())
-          | Error _ -> Lwt.return (Error ()))
-      | _ -> Lwt.return (Ok ())
-    in
-    match res with
-    | Ok _ ->
-        make_post_api_v1_accounts_follow_res ~id:(string_of_int id)
-          ~following:true ~showing_reblogs:true ~notifying:false
-          ~followed_by:false ~blocking:false ~blocked_by:false ~muting:false
-          ~muting_notifications:false ~requested:false ~domain_blocking:false
-          ~endorsed:false
-        |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
-        |> Result.ok |> Lwt.return
-    | _ -> Lwt.return (Error `Internal_server_error)
+    if f = None && frq = None then ToServer.kick_post_follow_to_inbox self_id id;
+    make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
+      ~showing_reblogs:true ~notifying:false ~followed_by:false ~blocking:false
+      ~blocked_by:false ~muting:false ~muting_notifications:false
+      ~requested:false ~domain_blocking:false ~endorsed:false
+    |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
+    |> Result.ok |> Lwt.return
 
   (* Recv GET /api/v1/accounts/search *)
   type get_api_v1_accounts_search_res = {
@@ -426,8 +445,7 @@ module FromClient = struct
     let%lwt followers = Db.get_follows_by_target_account_id self_id in
     followers
     |> List.iter (fun (f : Db.follow) ->
-           Lwt.async @@ fun () ->
-           ToServer.post_create_note_to_inbox f.account_id s |> ignore_lwt);
+           ToServer.kick_post_create_note_to_inbox f.account_id s);
     (* Return the result to the client *)
     make_post_api_v1_statuses_res ~id:(string_of_int s.id)
       ~created_at:(Ptime.to_rfc3339 now) ~content:s.text

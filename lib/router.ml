@@ -33,7 +33,7 @@ let routes =
                 |> List.map (fun (k, v) -> k ^ ": " ^ v)
                 |> String.concat "\n")
                 body);
-          Lwt.async @@ Job.FromServer.post_users_inbox body;
+          Job.FromServer.kick_post_users_inbox body;
           respond ~status:`Accepted "");
     ]
   in
