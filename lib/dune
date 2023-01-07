@@ -27,6 +27,7 @@
   re.pcre
   sha
   uri
+  uuidm
   yaml
   yaml.unix
   yojson

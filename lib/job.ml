@@ -163,9 +163,16 @@ module ToServer = struct
   let post_follow_to_inbox self_id id =
     let%lwt self = Db.get_account ~id:self_id in
     let%lwt acc = Db.get_account ~id in
+    (* Insert follow_request *)
+    let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
+    let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
+    Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
+      ~account_id:self_id ~target_account_id:id ~uri
+    |> Db.insert_follow_request |> ignore_lwt;%lwt
+    (* Post activity *)
     let body =
-      make_ap_inbox ~context ~id:(self.uri ^ "#follow/1") ~typ:"Follow"
-        ~actor:(`String self.uri) ~obj:(`String acc.uri)
+      make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
+        ~obj:(`String acc.uri)
       |> ap_inbox_to_yojson
     in
     post_activity_to_inbox ~body ~src:self ~dst:acc
@@ -292,10 +299,32 @@ module FromServer = struct
           ~follower:src
         |> ignore_lwt
 
+  (* Recv Accept in inbox *)
+  let inbox_accept (req : ap_inbox) =
+    assert (req.typ = "Accept");
+    let uri =
+      match req.obj with
+      | `Assoc l -> (
+          match l |> List.assoc_opt "id" with
+          | Some (`String uri) -> uri
+          | _ -> raise Bad_request)
+      | _ -> raise Bad_request
+    in
+    match%lwt Db.get_follow_request_by_uri uri with
+    | None -> raise Bad_request
+    | Some r ->
+        let now = Db.now () in
+        Db.delete_follow_request r.id |> ignore_lwt;%lwt
+        Db.make_follow ~id:0 ~account_id:r.account_id
+          ~target_account_id:r.target_account_id ~uri ~created_at:now
+          ~updated_at:now
+        |> Db.insert_follow |> ignore_lwt
+
   (* Recv POST /users/:name/inbox *)
   let post_users_inbox body () =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
     | Error _ -> Lwt.return_unit
+    | Ok ({ typ = "Accept"; _ } as r) -> inbox_accept r
     | Ok ({ typ = "Follow"; _ } as r) -> inbox_follow r
     | Ok _r -> Lwt.return_unit
 end

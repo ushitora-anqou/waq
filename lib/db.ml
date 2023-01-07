@@ -50,6 +50,19 @@ let make_follow ~id ~created_at ~updated_at ~account_id ~target_account_id ~uri
     =
   { id; created_at; updated_at; account_id; target_account_id; uri }
 
+type follow_request = {
+  id : int;
+  created_at : Ptime.t;
+  updated_at : Ptime.t;
+  account_id : int;
+  target_account_id : int;
+  uri : string;
+}
+
+let make_follow_request ~id ~created_at ~updated_at ~account_id
+    ~target_account_id ~uri =
+  { id; created_at; updated_at; account_id; target_account_id; uri }
+
 let now () = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get
 
 module Internal : sig
@@ -65,6 +78,9 @@ module Internal : sig
   val update_status_uri : status -> status Lwt.t
   val insert_follow : follow -> follow Lwt.t
   val get_follows_by_target_account_id : int -> follow list Lwt.t
+  val insert_follow_request : follow_request -> follow_request Lwt.t
+  val delete_follow_request : int -> unit Lwt.t
+  val get_follow_request_by_uri : string -> follow_request option Lwt.t
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -349,8 +365,8 @@ SELECT
 FROM follows
 WHERE follows.target_account_id = %int{target_account_id}
     |}
-        record_out]
-      ~target_account_id:aid
+        function_out]
+      make_follow ~target_account_id:aid
     |> do_query
 
   let insert_follow (f : follow) =
@@ -377,8 +393,67 @@ RETURNING
   @int{target_account_id},
   @string{uri}
     |}
-         record_in record_out]
-       f [@warning "-9"])
+         function_out]
+       make_follow ~created_at:f.created_at ~updated_at:f.updated_at
+       ~account_id:f.account_id ~target_account_id:f.target_account_id
+       ~uri:f.uri [@warning "-9"])
+    |> do_query
+
+  let insert_follow_request (f : follow_request) : follow_request Lwt.t =
+    ([%rapper
+       get_one
+         {|
+INSERT INTO follow_requests (
+  created_at,
+  updated_at,
+  account_id,
+  target_account_id,
+  uri)
+VALUES (
+  %ptime{created_at},
+  %ptime{updated_at},
+  %int{account_id},
+  %int{target_account_id},
+  %string{uri})
+RETURNING
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+    |}
+         function_out]
+       make_follow_request ~created_at:f.created_at ~updated_at:f.updated_at
+       ~account_id:f.account_id ~target_account_id:f.target_account_id
+       ~uri:f.uri [@warning "-9"])
+    |> do_query
+
+  let delete_follow_request (id : int) : unit Lwt.t =
+    [%rapper execute {|
+DELETE FROM follow_requests
+WHERE id = %int{id}
+    |}]
+      ~id
+    |> do_query
+
+  let get_follow_request_by_uri (uri : string) =
+    [%rapper
+      get_opt
+        {|
+SELECT
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+FROM follow_requests
+WHERE
+  uri = %string{uri}
+    |}
+        function_out]
+      make_follow_request ~uri
     |> do_query
 
   module Migration = struct
@@ -458,6 +533,23 @@ RETURNING
                 uri TEXT,
 
                 FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (target_account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
+                UNIQUE (account_id, target_account_id)
+                )
+            |}];
+          [%rapper
+            execute
+              {|
+              CREATE TABLE follow_requests (
+                id SERIAL PRIMARY KEY,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                account_id BIGINT,
+                target_account_id BIGINT,
+                uri TEXT,
+
+                FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
+                FOREIGN KEY (target_account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
                 UNIQUE (account_id, target_account_id)
                 )
             |}];
@@ -465,6 +557,7 @@ RETURNING
 
       let down =
         [
+          [%rapper execute {| DROP TABLE follow_requests; |}];
           [%rapper execute {| DROP TABLE follows; |}];
           [%rapper execute {| DROP TABLE statuses; |}];
           [%rapper execute {| DROP TABLE users; |}];
