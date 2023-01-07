@@ -192,6 +192,25 @@ module ToServer = struct
     | Ok (status, _body) when Httpaf.Status.is_successful status -> ()
     | _ -> raise Internal_server_error
 
+  (* Send Undo of Follow to POST inbox *)
+  let kick_post_undo_follow_to_inbox (self : Db.account) (acc : Db.account)
+      (f : Db.follow) =
+    Internal.kick ~name:__FUNCTION__
+    @@ (Db.delete_follow_by_uri f.uri;%lwt
+        (* Post activity *)
+        let obj =
+          make_ap_inbox_no_context ~id:f.uri ~typ:"Follow"
+            ~actor:(`String self.uri) ~obj:(`String acc.uri)
+          |> ap_inbox_no_context_to_yojson
+        in
+        let body =
+          make_ap_inbox ~context
+            ~id:(self.uri ^ "#follows" ^/ string_of_int f.id ^/ "undo")
+            ~typ:"Undo" ~actor:(`String self.uri) ~obj
+          |> ap_inbox_to_yojson
+        in
+        post_activity_to_inbox ~body ~src:self ~dst:acc)
+
   (* Send Follow to POST inbox *)
   let kick_post_follow_to_inbox (self : Db.account) (acc : Db.account) =
     Internal.kick ~name:__FUNCTION__
@@ -413,6 +432,27 @@ module FromClient = struct
     (* Return the result to the client *)
     make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
       ~showing_reblogs:true ~notifying:false ~followed_by:false ~blocking:false
+      ~blocked_by:false ~muting:false ~muting_notifications:false
+      ~requested:false ~domain_blocking:false ~endorsed:false
+    |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
+    |> Result.ok |> Lwt.return
+
+  (* Recv POST /api/v1/accounts/:id/unfollow *)
+  (* Use post_api_v1_accounts_follow_res as a result *)
+  let post_api_v1_accounts_unfollow self_id id =
+    (* Check if accounts are valid *)
+    let%lwt self = Db.get_account ~id:self_id in
+    let%lwt acc = Db.get_account ~id in
+    (* Check if followed *)
+    let%lwt f =
+      Db.get_follow_by_accounts ~account_id:self_id ~target_account_id:id
+    in
+    (* If valid, send Undo of Follow to the server *)
+    if f <> None then
+      ToServer.kick_post_undo_follow_to_inbox self acc (Option.get f);
+    (* Return the result to the client *)
+    make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:false
+      ~showing_reblogs:false ~notifying:false ~followed_by:false ~blocking:false
       ~blocked_by:false ~muting:false ~muting_notifications:false
       ~requested:false ~domain_blocking:false ~endorsed:false
     |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string

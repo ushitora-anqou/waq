@@ -79,6 +79,10 @@ module Internal : sig
   val insert_follow : follow -> follow Lwt.t
   val insert_follow_no_conflict : follow -> unit Lwt.t
   val delete_follow_by_uri : string -> unit Lwt.t
+
+  val delete_follow_by_accounts :
+    account_id:int -> target_account_id:int -> unit Lwt.t
+
   val get_follows_by_target_account_id : int -> follow list Lwt.t
 
   val get_follow_by_accounts :
@@ -458,6 +462,18 @@ DELETE FROM follows
 WHERE uri = %string{uri}
     |}]
       ~uri
+    |> do_query
+
+  let delete_follow_by_accounts ~account_id ~target_account_id =
+    [%rapper
+      execute
+        {|
+DELETE FROM follows
+WHERE
+  account_id = %int{account_id} AND
+  target_account_id = %int{target_account_id}
+    |}]
+      ~account_id ~target_account_id
     |> do_query
 
   let insert_follow_request (f : follow_request) : follow_request Lwt.t =

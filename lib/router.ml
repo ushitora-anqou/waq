@@ -69,6 +69,9 @@ let routes =
       post "/api/v1/accounts/:id/follow" (fun req ->
           let id = param ":id" req |> int_of_string in
           dispatch @@ Job.FromClient.post_api_v1_accounts_follow self_id id);
+      post "/api/v1/accounts/:id/unfollow" (fun req ->
+          let id = param ":id" req |> int_of_string in
+          dispatch @@ Job.FromClient.post_api_v1_accounts_unfollow self_id id);
       get "/api/v1/accounts/search" (fun req ->
           let%lwt req = parse_req req in
           let q = req |> query "q" in
