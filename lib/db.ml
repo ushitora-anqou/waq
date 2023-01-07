@@ -77,6 +77,7 @@ module Internal : sig
   val insert_status : status -> status Lwt.t
   val update_status_uri : status -> status Lwt.t
   val insert_follow : follow -> follow Lwt.t
+  val insert_follow_no_conflict : follow -> unit Lwt.t
   val get_follows_by_target_account_id : int -> follow list Lwt.t
 
   val get_follow_by_accounts :
@@ -423,6 +424,29 @@ RETURNING
     |}
          function_out]
        make_follow ~created_at:f.created_at ~updated_at:f.updated_at
+       ~account_id:f.account_id ~target_account_id:f.target_account_id
+       ~uri:f.uri [@warning "-9"])
+    |> do_query
+
+  let insert_follow_no_conflict (f : follow) =
+    ([%rapper
+       execute
+         {|
+INSERT INTO follows (
+  created_at,
+  updated_at,
+  account_id,
+  target_account_id,
+  uri)
+VALUES (
+  %ptime{created_at},
+  %ptime{updated_at},
+  %int{account_id},
+  %int{target_account_id},
+  %string{uri})
+ON CONFLICT (account_id, target_account_id) DO NOTHING
+    |}]
+       ~created_at:f.created_at ~updated_at:f.updated_at
        ~account_id:f.account_id ~target_account_id:f.target_account_id
        ~uri:f.uri [@warning "-9"])
     |> do_query

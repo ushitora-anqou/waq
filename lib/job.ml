@@ -320,10 +320,10 @@ module FromServer = struct
     | None -> raise Not_found
     | Some dst ->
         let now = Db.now () in
-        (* Insert to table follows *)
+        (* Insert to table 'follows' *)
         Db.make_follow ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
           ~target_account_id:dst.id ~uri:req.id
-        |> Db.insert_follow |> ignore_lwt;%lwt
+        |> Db.insert_follow_no_conflict;%lwt
         (* Send 'Accept' *)
         ToServer.post_accept_to_inbox ~follow_req:req ~followee:dst
           ~follower:src
