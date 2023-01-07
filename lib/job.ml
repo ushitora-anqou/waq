@@ -137,7 +137,7 @@ module ToServer = struct
         | None -> make_new_account uri)
 
   (* Send activity+json to POST inbox *)
-  let post_activity ~(body : Yojson.Safe.t) ~(src : Db.account)
+  let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.account)
       ~(dst : Db.account) =
     let body = Yojson.Safe.to_string body in
     let sign =
@@ -168,7 +168,7 @@ module ToServer = struct
         ~actor:(`String self.uri) ~obj:(`String acc.uri)
       |> ap_inbox_to_yojson
     in
-    post_activity ~body ~src:self ~dst:acc
+    post_activity_to_inbox ~body ~src:self ~dst:acc
 
   (* Send Create/Note to POST /users/:name/inbox *)
   let post_users_inbox_create_note id (s : Db.status) =
@@ -186,7 +186,7 @@ module ToServer = struct
       |> ap_create_to_yojson
     in
     let%lwt dst = Db.get_account ~id in
-    post_activity ~body ~src:self ~dst
+    post_activity_to_inbox ~body ~src:self ~dst
 
   (* Send Accept to POST inbox *)
   let post_accept_to_inbox ~(follow_req : ap_inbox) ~(followee : Db.account)
@@ -197,7 +197,7 @@ module ToServer = struct
         ~obj:(follow_req |> ap_inbox_to_yojson)
       |> ap_inbox_to_yojson
     in
-    post_activity ~body ~src:followee ~dst:follower
+    post_activity_to_inbox ~body ~src:followee ~dst:follower
 end
 
 module FromServer = struct
