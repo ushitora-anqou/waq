@@ -384,8 +384,9 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
       Lwt.wakeup_later_exn resolver (Failure "Error handling response")
     in
     Log.debug (fun m ->
-        m "[fetch] %s %s\n%s" (Method.to_string meth) (Uri.to_string url)
-          (Headers.to_string headers));
+        m "[fetch] %s %s\n%s\n%s" (Method.to_string meth) (Uri.to_string url)
+          (Headers.to_string headers)
+          body);
     let request_body =
       Client.request ~response_handler ~error_handler socket
         (Request.create ~headers meth path)

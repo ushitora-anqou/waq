@@ -1,3 +1,4 @@
+open Util
 module C = Config
 
 exception Bad_request
@@ -134,6 +135,29 @@ module ToServer = struct
         | Some acc -> Lwt.return acc
         | None -> make_new_account uri)
 
+  (* Send activity+json to POST inbox *)
+  let post_activity ~(body : Yojson.Safe.t) ~(src : Db.account)
+      ~(dst : Db.account) =
+    let body = Yojson.Safe.to_string body in
+    let sign =
+      let priv_key =
+        src.private_key |> Option.get |> Http.Signature.decode_private_key
+      in
+      let key_id = src.uri ^ "#main-key" in
+      let signed_headers =
+        [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+      in
+      Some (priv_key, key_id, signed_headers)
+    in
+    let meth = `POST in
+    let headers = [ ("Content-Type", "application/activity+json") ] in
+    let%lwt res = Http.fetch ~meth ~headers ~body ~sign dst.inbox_url in
+    Lwt.return
+    @@
+    match res with
+    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok res
+    | _ -> Error res
+
   (* Send Follow to POST /users/:name/inbox *)
   let post_users_inbox_follow self_id id =
     let%lwt self = Db.get_account ~id:self_id in
@@ -142,26 +166,9 @@ module ToServer = struct
       make_ap_inbox ~context:(`String "https://www.w3.org/ns/activitystreams")
         ~id:(self.uri ^ "#follow/1") ~typ:"Follow" ~actor:(`String self.uri)
         ~obj:(`String acc.uri)
-      |> ap_inbox_to_yojson |> Yojson.Safe.to_string
+      |> ap_inbox_to_yojson
     in
-    let sign =
-      let priv_key =
-        self.private_key |> Option.get |> Http.Signature.decode_private_key
-      in
-      let key_id = self.uri ^ "#main-key" in
-      let signed_headers =
-        [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
-      in
-      Some (priv_key, key_id, signed_headers)
-    in
-    let meth = `POST in
-    let headers = [ ("Content-Type", "application/activity+json") ] in
-    let%lwt res = Http.fetch ~meth ~headers ~body ~sign acc.inbox_url in
-    Lwt.return
-    @@
-    match res with
-    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok ()
-    | _ -> Error ()
+    post_activity ~body ~src:self ~dst:acc
 
   (* Send Create/Note to POST /users/:name/inbox *)
   let post_users_inbox_create_note id (s : Db.status) =
@@ -177,28 +184,22 @@ module ToServer = struct
       make_ap_create ~context:(`String "https://www.w3.org/ns/activitystreams")
         ~id:(s.uri ^/ "activity") ~typ:"Create" ~actor:(`String self.uri)
         ~published ~to_ ~cc ~obj:note ()
-      |> ap_create_to_yojson |> Yojson.Safe.to_string
+      |> ap_create_to_yojson
     in
-    Log.debug (fun m -> m ">>> %s" body);
-    let sign =
-      let priv_key =
-        self.private_key |> Option.get |> Http.Signature.decode_private_key
-      in
-      let key_id = self.uri ^ "#main-key" in
-      let signed_headers =
-        [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
-      in
-      Some (priv_key, key_id, signed_headers)
+    let%lwt dst = Db.get_account ~id in
+    post_activity ~body ~src:self ~dst
+
+  (* Send Accept to POST inbox *)
+  let post_accept_to_inbox ~(follow_req : ap_inbox) ~(followee : Db.account)
+      ~(follower : Db.account) =
+    let id = followee.uri ^ "#accepts/follows/1" in
+    let body =
+      make_ap_inbox ~context:(`String "https://www.w3.org/ns/activitystreams")
+        ~id ~typ:"Accept" ~actor:(`String followee.uri)
+        ~obj:(follow_req |> ap_inbox_to_yojson)
+      |> ap_inbox_to_yojson
     in
-    let meth = `POST in
-    let headers = [ ("Content-Type", "application/activity+json") ] in
-    let%lwt acc = Db.get_account ~id in
-    let%lwt res = Http.fetch ~meth ~headers ~body ~sign acc.inbox_url in
-    Lwt.return
-    @@
-    match res with
-    | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok ()
-    | _ -> Error ()
+    post_activity ~body ~src:followee ~dst:follower
 end
 
 module FromServer = struct
@@ -285,12 +286,14 @@ module FromServer = struct
     | None -> raise Not_found
     | Some dst ->
         let now = Db.now () in
-        let%lwt _ =
-          Db.make_follow ~id:0 ~created_at:now ~updated_at:now
-            ~account_id:src.id ~target_account_id:dst.id ~uri:req.id
-          |> Db.insert_follow
-        in
-        Lwt.return_unit
+        (* Insert to table follows *)
+        Db.make_follow ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
+          ~target_account_id:dst.id ~uri:req.id
+        |> Db.insert_follow |> ignore_lwt;%lwt
+        (* Send 'Accept' *)
+        ToServer.post_accept_to_inbox ~follow_req:req ~followee:dst
+          ~follower:src
+        |> ignore_lwt
 
   (* Recv POST /users/:name/inbox *)
   let post_users_inbox body () =
