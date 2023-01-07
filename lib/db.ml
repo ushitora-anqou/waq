@@ -64,6 +64,7 @@ module Internal : sig
   val insert_status : status -> status Lwt.t
   val update_status_uri : status -> status Lwt.t
   val insert_follow : follow -> follow Lwt.t
+  val get_follows_by_target_account_id : int -> follow list Lwt.t
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -332,6 +333,24 @@ RETURNING
         |}
         function_out]
       ~id:s.id ~uri:s.uri make_status
+    |> do_query
+
+  let get_follows_by_target_account_id (aid : int) =
+    [%rapper
+      get_many
+        {|
+SELECT
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+FROM follows
+WHERE follows.target_account_id = %int{target_account_id}
+    |}
+        record_out]
+      ~target_account_id:aid
     |> do_query
 
   let insert_follow (f : follow) =
