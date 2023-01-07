@@ -161,6 +161,7 @@ module ToServer = struct
 
   (* Send Follow to POST inbox *)
   let post_follow_to_inbox self_id id =
+    (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
     let%lwt self = Db.get_account ~id:self_id in
     let%lwt acc = Db.get_account ~id in
     (* Insert follow_request *)
@@ -348,7 +349,23 @@ module FromClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_accounts_follow self_id id =
-    let%lwt res = ToServer.post_follow_to_inbox self_id id in
+    (* Check if already followed or follow-requested *)
+    let%lwt f =
+      Db.get_follow_by_accounts ~account_id:self_id ~target_account_id:id
+    in
+    let%lwt frq =
+      Db.get_follow_request_by_accounts ~account_id:self_id
+        ~target_account_id:id
+    in
+    let%lwt res =
+      match (f, frq) with
+      | None, None -> (
+          let%lwt res = ToServer.post_follow_to_inbox self_id id in
+          match res with
+          | Ok _ -> Lwt.return (Ok ())
+          | Error _ -> Lwt.return (Error ()))
+      | _ -> Lwt.return (Ok ())
+    in
     match res with
     | Ok _ ->
         make_post_api_v1_accounts_follow_res ~id:(string_of_int id)

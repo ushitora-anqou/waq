@@ -78,9 +78,17 @@ module Internal : sig
   val update_status_uri : status -> status Lwt.t
   val insert_follow : follow -> follow Lwt.t
   val get_follows_by_target_account_id : int -> follow list Lwt.t
+
+  val get_follow_by_accounts :
+    account_id:int -> target_account_id:int -> follow option Lwt.t
+
   val insert_follow_request : follow_request -> follow_request Lwt.t
   val delete_follow_request : int -> unit Lwt.t
   val get_follow_request_by_uri : string -> follow_request option Lwt.t
+
+  val get_follow_request_by_accounts :
+    account_id:int -> target_account_id:int -> follow_request option Lwt.t
+
   val migrate : unit -> unit Lwt.t
   val rollback : unit -> unit Lwt.t
 end = struct
@@ -351,6 +359,26 @@ RETURNING
       ~id:s.id ~uri:s.uri make_status
     |> do_query
 
+  let get_follow_by_accounts ~account_id ~target_account_id =
+    [%rapper
+      get_opt
+        {|
+SELECT
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+FROM follows
+WHERE
+  account_id = %int{account_id} AND
+  target_account_id = %int{target_account_id}
+    |}
+        function_out]
+      make_follow ~account_id ~target_account_id
+    |> do_query
+
   let get_follows_by_target_account_id (aid : int) =
     [%rapper
       get_many
@@ -454,6 +482,26 @@ WHERE
     |}
         function_out]
       make_follow_request ~uri
+    |> do_query
+
+  let get_follow_request_by_accounts ~account_id ~target_account_id =
+    [%rapper
+      get_opt
+        {|
+SELECT
+  @int{id},
+  @ptime{created_at},
+  @ptime{updated_at},
+  @int{account_id},
+  @int{target_account_id},
+  @string{uri}
+FROM follow_requests
+WHERE
+  account_id = %int{account_id} AND
+  target_account_id = %int{target_account_id}
+    |}
+        function_out]
+      make_follow_request ~account_id ~target_account_id
     |> do_query
 
   module Migration = struct
