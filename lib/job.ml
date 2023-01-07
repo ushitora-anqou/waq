@@ -115,6 +115,10 @@ module Internal = struct
           loop (i + 1)
     in
     loop 0
+
+  let kick_lwt ~name (f : unit -> unit Lwt.t) =
+    kick ~name f;
+    Lwt.return_unit
 end
 
 module ToServer = struct
@@ -249,12 +253,18 @@ module ToServer = struct
     post_activity_to_inbox ~body ~src:self ~dst
 
   (* Send Accept to POST inbox *)
-  let post_accept_to_inbox ~(follow_req : ap_inbox) ~(followee : Db.account)
+  let kick_post_accept_to_inbox ~(f : Db.follow) ~(followee : Db.account)
       ~(follower : Db.account) =
-    let id = followee.uri ^ "#accepts/follows/1" in
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
+    let id = followee.uri ^ "#accepts/follows/" ^ string_of_int f.id in
+    let obj =
+      make_ap_inbox_no_context ~id:f.uri ~typ:"Follow"
+        ~actor:(`String follower.uri) ~obj:(`String followee.uri)
+      |> ap_inbox_no_context_to_yojson
+    in
     let body =
       make_ap_inbox ~context ~id ~typ:"Accept" ~actor:(`String followee.uri)
-        ~obj:(follow_req |> ap_inbox_to_yojson)
+        ~obj
       |> ap_inbox_to_yojson
     in
     post_activity_to_inbox ~body ~src:followee ~dst:follower
@@ -333,7 +343,6 @@ module FromServer = struct
   (* Recv Follow in inbox *)
   let kick_inbox_follow (req : ap_inbox) =
     assert (req.typ = "Follow");
-    Internal.kick ~name:__FUNCTION__ @@ fun () ->
     let src, dst =
       match (req.actor, req.obj) with
       | `String s, `String d when is_my_domain d -> (s, d)
@@ -341,22 +350,29 @@ module FromServer = struct
     in
     let%lwt src = ToServer.fetch_account (`Uri src) in
     match%lwt Db.get_account_by_uri dst with
-    | None -> raise Not_found
+    | None -> raise Bad_request
     | Some dst ->
-        let now = Db.now () in
-        (* Insert to table 'follows' *)
-        Db.make_follow ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
-          ~target_account_id:dst.id ~uri:req.id
-        |> Db.insert_follow_no_conflict;%lwt
+        Internal.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+        let%lwt f =
+          match%lwt
+            Db.get_follow_by_accounts ~account_id:src.id
+              ~target_account_id:dst.id
+          with
+          | Some f -> Lwt.return f
+          | None ->
+              (* Insert to table 'follows' *)
+              let now = Db.now () in
+              Db.make_follow ~id:0 ~created_at:now ~updated_at:now
+                ~account_id:src.id ~target_account_id:dst.id ~uri:req.id
+              |> Db.insert_follow
+        in
         (* Send 'Accept' *)
-        ToServer.post_accept_to_inbox ~follow_req:req ~followee:dst
-          ~follower:src
-        |> ignore_lwt
+        ToServer.kick_post_accept_to_inbox ~f ~followee:dst ~follower:src;
+        Lwt.return_unit
 
   (* Recv Accept in inbox *)
   let kick_inbox_accept (req : ap_inbox) =
     assert (req.typ = "Accept");
-    Internal.kick ~name:__FUNCTION__ @@ fun () ->
     let uri =
       match req.obj with
       | `Assoc l -> (
@@ -368,6 +384,7 @@ module FromServer = struct
     match%lwt Db.get_follow_request_by_uri uri with
     | None -> raise Bad_request
     | Some r ->
+        Internal.kick_lwt ~name:__FUNCTION__ @@ fun () ->
         let now = Db.now () in
         Db.delete_follow_request r.id |> ignore_lwt;%lwt
         Db.make_follow ~id:0 ~account_id:r.account_id
@@ -381,18 +398,17 @@ module FromServer = struct
     let obj = ap_inbox_no_context_of_yojson req.obj |> Result.get_ok in
     match obj.typ with
     | "Follow" ->
-        Internal.kick ~name:__FUNCTION__ @@ fun () ->
+        Internal.kick_lwt ~name:__FUNCTION__ @@ fun () ->
         Db.delete_follow_by_uri obj.id
     | _ -> raise Bad_request
 
   (* Recv POST /users/:name/inbox *)
   let kick_post_users_inbox body =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
-    | Error _ -> ()
     | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
     | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
     | Ok ({ typ = "Undo"; _ } as r) -> kick_inbox_undo r
-    | Ok _r -> ()
+    | _ -> Lwt.return_unit
 end
 
 module FromClient = struct
