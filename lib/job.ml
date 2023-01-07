@@ -171,7 +171,7 @@ module ToServer = struct
     post_activity_to_inbox ~body ~src:self ~dst:acc
 
   (* Send Create/Note to POST /users/:name/inbox *)
-  let post_users_inbox_create_note id (s : Db.status) =
+  let post_create_note_to_inbox id (s : Db.status) =
     let%lwt self = Db.get_account ~id:s.account_id in
     let body =
       let published = s.created_at |> Ptime.to_rfc3339 in
@@ -381,7 +381,7 @@ module FromClient = struct
     followers
     |> List.iter (fun (f : Db.follow) ->
            Lwt.async @@ fun () ->
-           ToServer.post_users_inbox_create_note f.account_id s |> ignore_lwt);
+           ToServer.post_create_note_to_inbox f.account_id s |> ignore_lwt);
     (* Return the result to the client *)
     make_post_api_v1_statuses_res ~id:(string_of_int s.id)
       ~created_at:(Ptime.to_rfc3339 now) ~content:s.text
