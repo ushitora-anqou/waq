@@ -94,7 +94,7 @@ type ap_create = {
 [@@deriving make, yojson { strict = false }]
 
 module Internal = struct
-  let kick ~name (f : unit Lwt.t) =
+  let kick ~name (f : unit -> unit Lwt.t) =
     Lwt.async @@ fun () ->
     let num_repeats = 3 in
     let sleep_duration i =
@@ -102,7 +102,7 @@ module Internal = struct
       (i * i * i * i) + 15 + (Random.int 10 * (i + 1)) |> float_of_int
     in
     let rec loop i =
-      try%lwt f
+      try%lwt f ()
       with e ->
         Log.warn (fun m -> m "Job failed: %s: %s" name (Printexc.to_string e));
         if i + 1 = num_repeats then (
@@ -195,26 +195,25 @@ module ToServer = struct
   (* Send Undo of Follow to POST inbox *)
   let kick_post_undo_follow_to_inbox (self : Db.account) (acc : Db.account)
       (f : Db.follow) =
-    Internal.kick ~name:__FUNCTION__
-    @@ (Db.delete_follow_by_uri f.uri;%lwt
-        (* Post activity *)
-        let obj =
-          make_ap_inbox_no_context ~id:f.uri ~typ:"Follow"
-            ~actor:(`String self.uri) ~obj:(`String acc.uri)
-          |> ap_inbox_no_context_to_yojson
-        in
-        let body =
-          make_ap_inbox ~context
-            ~id:(self.uri ^ "#follows" ^/ string_of_int f.id ^/ "undo")
-            ~typ:"Undo" ~actor:(`String self.uri) ~obj
-          |> ap_inbox_to_yojson
-        in
-        post_activity_to_inbox ~body ~src:self ~dst:acc)
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
+    Db.delete_follow_by_uri f.uri;%lwt
+    (* Post activity *)
+    let obj =
+      make_ap_inbox_no_context ~id:f.uri ~typ:"Follow" ~actor:(`String self.uri)
+        ~obj:(`String acc.uri)
+      |> ap_inbox_no_context_to_yojson
+    in
+    let body =
+      make_ap_inbox ~context
+        ~id:(self.uri ^ "#follows" ^/ string_of_int f.id ^/ "undo")
+        ~typ:"Undo" ~actor:(`String self.uri) ~obj
+      |> ap_inbox_to_yojson
+    in
+    post_activity_to_inbox ~body ~src:self ~dst:acc
 
   (* Send Follow to POST inbox *)
   let kick_post_follow_to_inbox (self : Db.account) (acc : Db.account) =
-    Internal.kick ~name:__FUNCTION__
-    @@
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
     (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
     (* Insert follow_request *)
     let now = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get in
@@ -232,22 +231,22 @@ module ToServer = struct
 
   (* Send Create/Note to POST /users/:name/inbox *)
   let kick_post_create_note_to_inbox id (s : Db.status) =
-    Internal.kick ~name:__FUNCTION__
-    @@ let%lwt self = Db.get_account ~id:s.account_id in
-       let body =
-         let published = s.created_at |> Ptime.to_rfc3339 in
-         let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-         let cc = [ self.followers_url ] in
-         let note =
-           make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
-             ~attributedTo:self.uri ~content:s.text ()
-         in
-         make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
-           ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
-         |> ap_create_to_yojson
-       in
-       let%lwt dst = Db.get_account ~id in
-       post_activity_to_inbox ~body ~src:self ~dst
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
+    let%lwt self = Db.get_account ~id:s.account_id in
+    let body =
+      let published = s.created_at |> Ptime.to_rfc3339 in
+      let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
+      let cc = [ self.followers_url ] in
+      let note =
+        make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
+          ~attributedTo:self.uri ~content:s.text ()
+      in
+      make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
+        ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
+      |> ap_create_to_yojson
+    in
+    let%lwt dst = Db.get_account ~id in
+    post_activity_to_inbox ~body ~src:self ~dst
 
   (* Send Accept to POST inbox *)
   let post_accept_to_inbox ~(follow_req : ap_inbox) ~(followee : Db.account)
@@ -334,8 +333,7 @@ module FromServer = struct
   (* Recv Follow in inbox *)
   let kick_inbox_follow (req : ap_inbox) =
     assert (req.typ = "Follow");
-    Internal.kick ~name:__FUNCTION__
-    @@
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
     let src, dst =
       match (req.actor, req.obj) with
       | `String s, `String d when is_my_domain d -> (s, d)
@@ -358,8 +356,7 @@ module FromServer = struct
   (* Recv Accept in inbox *)
   let kick_inbox_accept (req : ap_inbox) =
     assert (req.typ = "Accept");
-    Internal.kick ~name:__FUNCTION__
-    @@
+    Internal.kick ~name:__FUNCTION__ @@ fun () ->
     let uri =
       match req.obj with
       | `Assoc l -> (
@@ -384,7 +381,8 @@ module FromServer = struct
     let obj = ap_inbox_no_context_of_yojson req.obj |> Result.get_ok in
     match obj.typ with
     | "Follow" ->
-        Internal.kick ~name:__FUNCTION__ @@ Db.delete_follow_by_uri obj.id
+        Internal.kick ~name:__FUNCTION__ @@ fun () ->
+        Db.delete_follow_by_uri obj.id
     | _ -> raise Bad_request
 
   (* Recv POST /users/:name/inbox *)
