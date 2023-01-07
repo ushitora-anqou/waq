@@ -159,8 +159,8 @@ module ToServer = struct
     | Ok (status, _body) when Httpaf.Status.is_successful status -> Ok res
     | _ -> Error res
 
-  (* Send Follow to POST /users/:name/inbox *)
-  let post_users_inbox_follow self_id id =
+  (* Send Follow to POST inbox *)
+  let post_follow_to_inbox self_id id =
     let%lwt self = Db.get_account ~id:self_id in
     let%lwt acc = Db.get_account ~id in
     let body =
@@ -319,7 +319,7 @@ module FromClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_accounts_follow self_id id =
-    let%lwt res = ToServer.post_users_inbox_follow self_id id in
+    let%lwt res = ToServer.post_follow_to_inbox self_id id in
     match res with
     | Ok _ ->
         make_post_api_v1_accounts_follow_res ~id:(string_of_int id)
