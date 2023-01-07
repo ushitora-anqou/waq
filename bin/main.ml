@@ -1,4 +1,5 @@
 open Waq
+open Util
 module C = Config
 
 let () =
@@ -12,7 +13,7 @@ let () =
      Log.info (fun m -> m "Listening on %s:%d" host port);
      (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
      Db.migrate ();%lwt
-     let now = Db.now () in
+     let now = Ptime.now () in
      let%lwt a =
        let username = "foobar" in
        let display_name = "Foobar's display name" in

@@ -63,8 +63,6 @@ let make_follow_request ~id ~created_at ~updated_at ~account_id
     ~target_account_id ~uri =
   { id; created_at; updated_at; account_id; target_account_id; uri }
 
-let now () = Unix.gettimeofday () |> Ptime.of_float_s |> Option.get
-
 module Internal : sig
   val initialize : unit -> unit
   val get_account : id:int -> account Lwt.t

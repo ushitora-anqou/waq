@@ -1,3 +1,4 @@
+open Util
 open Httpaf
 open Httpaf_lwt_unix
 
@@ -353,7 +354,7 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
         ("content-length", body |> String.length |> string_of_int)
         :: ("connection", "close")
         :: ("host", Uri.http_host url)
-        :: ("date", Time.(now () |> to_http_date))
+        :: ("date", Ptime.(now () |> to_http_date))
         :: headers
       in
       let headers =

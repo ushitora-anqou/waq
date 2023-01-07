@@ -145,7 +145,7 @@ module ToServer = struct
     let make_new_account (uri : string) =
       let%lwt r = get_uri uri in
       let domain = Uri.of_string uri |> Uri.host |> Option.get in
-      let now = Db.now () in
+      let now = Ptime.now () in
       Db.make_account ~username:r.preferredUsername ~domain
         ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
         ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
@@ -220,7 +220,7 @@ module ToServer = struct
     Internal.kick ~name:__FUNCTION__ @@ fun () ->
     (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
     (* Insert follow_request *)
-    let now = Db.now () in
+    let now = Ptime.now () in
     let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
     Db.make_follow_request ~id:0 ~created_at:now ~updated_at:now
       ~account_id:self.id ~target_account_id:acc.id ~uri
@@ -361,7 +361,7 @@ module FromServer = struct
           | Some f -> Lwt.return f
           | None ->
               (* Insert to table 'follows' *)
-              let now = Db.now () in
+              let now = Ptime.now () in
               Db.make_follow ~id:0 ~created_at:now ~updated_at:now
                 ~account_id:src.id ~target_account_id:dst.id ~uri:req.id
               |> Db.insert_follow
@@ -385,7 +385,7 @@ module FromServer = struct
     | None -> raise Bad_request
     | Some r ->
         Internal.kick_lwt ~name:__FUNCTION__ @@ fun () ->
-        let now = Db.now () in
+        let now = Ptime.now () in
         Db.delete_follow_request r.id |> ignore_lwt;%lwt
         Db.make_follow ~id:0 ~account_id:r.account_id
           ~target_account_id:r.target_account_id ~uri ~created_at:now
@@ -504,7 +504,7 @@ module FromClient = struct
   [@@deriving make, yojson { strict = false }]
 
   let post_api_v1_statuses self_id status =
-    let now = Db.now () in
+    let now = Ptime.now () in
     let%lwt self = Db.get_account ~id:self_id in
     (* Insert status *)
     let%lwt s =
