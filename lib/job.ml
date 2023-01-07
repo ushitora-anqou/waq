@@ -60,6 +60,14 @@ type ap_inbox = {
 }
 [@@deriving make, yojson { strict = false }]
 
+type ap_inbox_no_context = {
+  id : string;
+  typ : string; [@key "type"]
+  actor : Yojson.Safe.t;
+  obj : Yojson.Safe.t; [@key "object"]
+}
+[@@deriving make, yojson { strict = false }]
+
 (* Note *)
 type ap_note = {
   id : string;
@@ -351,12 +359,22 @@ module FromServer = struct
           ~updated_at:now
         |> Db.insert_follow |> ignore_lwt
 
+  (* Recv Undo in inbox *)
+  let kick_inbox_undo (req : ap_inbox) =
+    assert (req.typ = "Undo");
+    let obj = ap_inbox_no_context_of_yojson req.obj |> Result.get_ok in
+    match obj.typ with
+    | "Follow" ->
+        Internal.kick ~name:__FUNCTION__ @@ Db.delete_follow_by_uri obj.id
+    | _ -> raise Bad_request
+
   (* Recv POST /users/:name/inbox *)
   let kick_post_users_inbox body =
     match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
     | Error _ -> ()
     | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
     | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
+    | Ok ({ typ = "Undo"; _ } as r) -> kick_inbox_undo r
     | Ok _r -> ()
 end
 

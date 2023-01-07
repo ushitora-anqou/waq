@@ -78,6 +78,7 @@ module Internal : sig
   val update_status_uri : status -> status Lwt.t
   val insert_follow : follow -> follow Lwt.t
   val insert_follow_no_conflict : follow -> unit Lwt.t
+  val delete_follow_by_uri : string -> unit Lwt.t
   val get_follows_by_target_account_id : int -> follow list Lwt.t
 
   val get_follow_by_accounts :
@@ -449,6 +450,14 @@ ON CONFLICT (account_id, target_account_id) DO NOTHING
        ~created_at:f.created_at ~updated_at:f.updated_at
        ~account_id:f.account_id ~target_account_id:f.target_account_id
        ~uri:f.uri [@warning "-9"])
+    |> do_query
+
+  let delete_follow_by_uri (uri : string) =
+    [%rapper execute {|
+DELETE FROM follows
+WHERE uri = %string{uri}
+    |}]
+      ~uri
     |> do_query
 
   let insert_follow_request (f : follow_request) : follow_request Lwt.t =
