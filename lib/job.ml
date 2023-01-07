@@ -3,6 +3,7 @@ module C = Config
 
 exception Bad_request
 
+let context = `String "https://www.w3.org/ns/activitystreams"
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
 
 let url (l : string list) =
@@ -163,9 +164,8 @@ module ToServer = struct
     let%lwt self = Db.get_account ~id:self_id in
     let%lwt acc = Db.get_account ~id in
     let body =
-      make_ap_inbox ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id:(self.uri ^ "#follow/1") ~typ:"Follow" ~actor:(`String self.uri)
-        ~obj:(`String acc.uri)
+      make_ap_inbox ~context ~id:(self.uri ^ "#follow/1") ~typ:"Follow"
+        ~actor:(`String self.uri) ~obj:(`String acc.uri)
       |> ap_inbox_to_yojson
     in
     post_activity ~body ~src:self ~dst:acc
@@ -181,9 +181,8 @@ module ToServer = struct
         make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
           ~attributedTo:self.uri ~content:s.text ()
       in
-      make_ap_create ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id:(s.uri ^/ "activity") ~typ:"Create" ~actor:(`String self.uri)
-        ~published ~to_ ~cc ~obj:note ()
+      make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
+        ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
       |> ap_create_to_yojson
     in
     let%lwt dst = Db.get_account ~id in
@@ -194,8 +193,7 @@ module ToServer = struct
       ~(follower : Db.account) =
     let id = followee.uri ^ "#accepts/follows/1" in
     let body =
-      make_ap_inbox ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id ~typ:"Accept" ~actor:(`String followee.uri)
+      make_ap_inbox ~context ~id ~typ:"Accept" ~actor:(`String followee.uri)
         ~obj:(follow_req |> ap_inbox_to_yojson)
       |> ap_inbox_to_yojson
     in
@@ -259,12 +257,11 @@ module FromServer = struct
         make_ap_user_public_key ~id:(a.uri ^ "#main-key") ~owner:a.uri
           ~publicKeyPem:a.public_key
       in
-      make_ap_user ~context:(`String "https://www.w3.org/ns/activitystreams")
-        ~id:a.uri ~typ:"Person" ~following:(a.uri ^/ "following")
-        ~followers:a.followers_url ~inbox:a.inbox_url
-        ~outbox:(a.uri ^/ "outbox") ~preferredUsername:username
-        ~name:a.display_name ~summary:"Summary is here" ~url:a.uri ~tag:[]
-        ~publicKey ()
+      make_ap_user ~context ~id:a.uri ~typ:"Person"
+        ~following:(a.uri ^/ "following") ~followers:a.followers_url
+        ~inbox:a.inbox_url ~outbox:(a.uri ^/ "outbox")
+        ~preferredUsername:username ~name:a.display_name
+        ~summary:"Summary is here" ~url:a.uri ~tag:[] ~publicKey ()
       |> ap_user_to_yojson |> Yojson.Safe.to_string |> Result.ok |> Lwt.return
     with e ->
       Log.debug (fun m ->
