@@ -1,5 +1,5 @@
 (library
- (name waq)
+ (name controller)
  (preprocess
   (pps
    lwt_ppx
@@ -10,11 +10,11 @@
    ppx_deriving_yojson
    ppx_rapper))
  (libraries
+  common
+  service
   caqti
   caqti-driver-postgresql
   caqti-lwt
-  common
-  controller
   httpaf
   httpaf-lwt-unix
   jingoo

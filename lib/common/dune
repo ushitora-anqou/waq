@@ -1,5 +1,5 @@
 (library
- (name waq)
+ (name common)
  (preprocess
   (pps
    lwt_ppx
@@ -13,8 +13,6 @@
   caqti
   caqti-driver-postgresql
   caqti-lwt
-  common
-  controller
   httpaf
   httpaf-lwt-unix
   jingoo
