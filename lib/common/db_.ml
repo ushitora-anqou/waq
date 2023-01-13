@@ -4,8 +4,24 @@ module Pg = Postgresql
 exception Error of string
 
 type connection = { c : Pg.connection } [@@deriving make]
+type statement = { name : string } [@@deriving make]
+
+type value =
+  [ `Null
+  | `String of string
+  | `Int of int
+  | `Float of float
+  | `Timestamp of Ptime.t ]
 
 let failwithf f = Printf.ksprintf (fun s -> raise @@ Error s) f
+
+let raise_error msg = function
+  | `PgError (e : Pg.error) ->
+      failwithf "Pg %s failed: %s" msg (Pg.string_of_error e)
+  | `Result (r : Pg.result) ->
+      failwithf "Pg %s failed (%s): %s" msg
+        (Pg.Error_code.to_string r#error_code)
+        r#error
 
 let rec finish_conn socket_fd connect_poll = function
   | Pg.Polling_failed ->
@@ -31,17 +47,68 @@ let wait_for_result (c : Pg.connection) =
     Lwt.return c#consume_input
   done
 
-let fetch_result (c : Pg.connection) =
-  wait_for_result c;%lwt
-  Lwt.return c#get_result
+let fetch_result (c : connection) =
+  try%lwt
+    wait_for_result c.c;%lwt
+    Lwt.return c.c#get_result
+  with Pg.Error e -> raise_error "fetch_result" @@ `PgError e
 
-let fetch_single_result (c : Pg.connection) =
+let fetch_single_result (c : connection) =
   match%lwt fetch_result c with
   | None -> assert false
   | Some r ->
       let%lwt r' = fetch_result c in
       assert (r' = None);
       Lwt.return r
+
+let send_query (c : connection) (sql : string) : unit =
+  try c.c#send_query sql
+  with Pg.Error e -> raise_error "send_query" @@ `PgError e
+
+let send_prepare =
+  let index = ref 0 in
+  fun (c : connection) (sql : string) : statement ->
+    let name = "prepared_statement_" ^ string_of_int !index in
+    index := !index + 1;
+    try
+      c.c#send_prepare name sql;
+      make_statement ~name
+    with Pg.Error e -> raise_error "send_prepare" @@ `PgError e
+
+let send_query_prepared (c : connection) (stmt : statement)
+    (params : value list) =
+  let params =
+    params
+    |> List.map (function
+         | `Null -> Pg.null
+         | `String s -> s
+         | `Int i -> string_of_int i
+         | `Float f -> string_of_float f
+         | `Timestamp t -> Ptime.to_rfc3339 t)
+    |> Array.of_list
+  in
+  try c.c#send_query_prepared ~params stmt.name
+  with Pg.Error e -> raise_error "send_query_prepared" @@ `PgError e
+
+let expect_command_ok (name : string) (r : Pg.result Lwt.t) : unit Lwt.t =
+  let%lwt r = r in
+  match r#status with
+  | Command_ok -> Lwt.return_unit
+  | _ -> raise_error name @@ `Result r
+
+let execute (c : connection) (sql : string) : unit Lwt.t =
+  send_query c sql;
+  expect_command_ok "execute" @@ fetch_single_result c
+
+let prepare (c : connection) (sql : string) : statement Lwt.t =
+  let stmt = send_prepare c sql in
+  expect_command_ok "prepare" @@ fetch_single_result c;%lwt
+  Lwt.return stmt
+
+let execute_stmt (c : connection) (stmt : statement) (params : value list) :
+    unit Lwt.t =
+  send_query_prepared c stmt params;
+  expect_command_ok "execute_stmt" @@ fetch_single_result c
 
 let connect (uri : string) =
   let u = Uri.of_string uri in
@@ -56,8 +123,7 @@ let connect (uri : string) =
   match
     new Pg.connection ~host ~port ~dbname ~user ~password ~startonly:true ()
   with
-  | exception Pg.Error err ->
-      failwithf "Pg connection failed (1): %s" (Pg.string_of_error err)
+  | exception Pg.Error e -> raise_error "connection" @@ `PgError e
   | c ->
       finish_conn
         (c#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr)
@@ -67,14 +133,6 @@ let connect (uri : string) =
         failwithf "Pg connection failed (2): %s" c#error_message;
       assert (c#status = Ok);
       c#set_nonblocking true;
-      Lwt.return @@ make_connection ~c
-
-let execute (c : connection) (sql : string) : unit Lwt.t =
-  c.c#send_query sql;
-  let%lwt r = fetch_single_result c.c in
-  match r#status with
-  | Command_ok -> Lwt.return_unit
-  | _ ->
-      failwithf "Pg execution failed (%s): %s"
-        (Pg.Error_code.to_string r#error_code)
-        r#error
+      let c = make_connection ~c in
+      execute c "SET TimeZone TO 'UTC'";%lwt
+      Lwt.return c

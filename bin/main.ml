@@ -16,8 +16,14 @@ let () =
      let%lwt _ =
        let open Db_ in
        let%lwt c = connect (Config.db_url ()) in
-       execute c "CREATE TABLE foobar ( id SERIAL PRIMARY KEY )";%lwt
-       execute c "DROP TABLE foobar"
+       execute c
+         "CREATE TABLE IF NOT EXISTS foobar ( id SERIAL PRIMARY KEY, s TEXT, f \
+          FLOAT, t TIMESTAMP WITHOUT TIME ZONE )";%lwt
+       let%lwt stmt =
+         prepare c "INSERT INTO foobar (id, s, f, t) VALUES ($1, $2, $3, $4)"
+       in
+       execute_stmt c stmt
+         [ `Int 4; `Null; `Float 2.4; `Timestamp (Ptime.now ()) ]
      in
 
      (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
