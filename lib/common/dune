@@ -21,6 +21,7 @@
   lwt
   lwt.unix
   mirage-crypto-rng.lwt
+  postgresql
   ppx_deriving_yojson.runtime
   ppx_rapper_lwt
   re
