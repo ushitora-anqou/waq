@@ -13,7 +13,12 @@ let () =
      Log.info (fun m -> m "Listening on %s:%d" host port);
 
      Log.debug (fun m -> m "Connect to PostgreSQL");
-     let%lwt _ = Db_.connect (Config.db_url ()) in
+     let%lwt _ =
+       let open Db_ in
+       let%lwt c = connect (Config.db_url ()) in
+       execute c "CREATE TABLE foobar ( id SERIAL PRIMARY KEY )";%lwt
+       execute c "DROP TABLE foobar"
+     in
 
      (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
      Db.migrate ();%lwt
