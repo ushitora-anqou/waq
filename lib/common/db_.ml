@@ -4,6 +4,7 @@ module Pg = Postgresql
 exception Error of string
 
 type connection = { c : Pg.connection } [@@deriving make]
+type connection_pool = connection Lwt_pool.t
 
 type statement = {
   name : string;
@@ -148,7 +149,7 @@ let expect_command_ok (name : string) (r : Pg.result Lwt.t) : Pg.result Lwt.t =
   | Command_ok -> Lwt.return r
   | _ -> raise_error name @@ `Result r
 
-let execute (c : connection) (sql : string) : unit Lwt.t =
+let execute_direct (c : connection) (sql : string) : unit Lwt.t =
   send_query c sql;
   ignore_lwt @@ expect_command_ok __FUNCTION__ @@ fetch_single_result c
 
@@ -174,7 +175,7 @@ let execute_stmt (c : connection) (stmt : statement) (params : value list) :
   ignore_lwt @@ expect_command_ok __FUNCTION__ @@ fetch_single_result c
 
 let query_stmt (c : connection) (stmt : statement) (params : value list) :
-    (string * value) list list Lwt.t =
+    query_result Lwt.t =
   send_query_prepared c stmt params;
   let%lwt r = fetch_single_result c in
   if r#status <> Tuples_ok then raise_error __FUNCTION__ @@ `Result r;
@@ -187,6 +188,14 @@ let query_stmt (c : connection) (stmt : statement) (params : value list) :
                 let s = r#getvalue row col in
                 (name, value_of_string_for_pg ~ty s)))
   |> Lwt.return
+
+let execute ?params (c : connection) (sql : string) : unit Lwt.t =
+  let%lwt stmt = prepare c sql in
+  execute_stmt c stmt (params |> Option.value ~default:[])
+
+let query ?params (c : connection) (sql : string) : query_result Lwt.t =
+  let%lwt stmt = prepare c sql in
+  query_stmt c stmt (params |> Option.value ~default:[])
 
 let connect (uri : string) =
   let u = Uri.of_string uri in
@@ -212,5 +221,28 @@ let connect (uri : string) =
       assert (c#status = Ok);
       c#set_nonblocking true;
       let c = make_connection ~c in
-      execute c "SET TimeZone TO 'UTC'";%lwt
+      execute_direct c "SET TimeZone TO 'UTC'";%lwt
       Lwt.return c
+
+let disconnect (c : connection) : unit Lwt.t =
+  (try c.c#finish with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e);
+  Lwt.return_unit
+
+let validate (c : connection) : bool Lwt.t =
+  c.c#consume_input;
+  match c.c#status with
+  | (exception Pg.Error _) | Pg.Ok -> Lwt.return_false
+  | _ -> Lwt.return_true
+
+let check (c : connection) f =
+  f
+  @@
+  match c.c#status with
+  | exception Pg.Error _ -> false
+  | Pg.Ok -> true
+  | _ -> false
+
+let connect_pool n uri =
+  Lwt_pool.create n ~validate ~check ~dispose:disconnect (fun () -> connect uri)
+
+let use : connection_pool -> (connection -> 'a Lwt.t) -> 'a Lwt.t = Lwt_pool.use
