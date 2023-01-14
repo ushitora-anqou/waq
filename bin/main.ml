@@ -16,14 +16,25 @@ let () =
      let%lwt _ =
        let open Db_ in
        let%lwt c = connect (Config.db_url ()) in
+       (*execute c "DROP TABLE IF EXISTS foobar";%lwt*)
        execute c
          "CREATE TABLE IF NOT EXISTS foobar ( id SERIAL PRIMARY KEY, s TEXT, f \
           FLOAT, t TIMESTAMP WITHOUT TIME ZONE )";%lwt
        let%lwt stmt =
-         prepare c "INSERT INTO foobar (id, s, f, t) VALUES ($1, $2, $3, $4)"
+         prepare c
+           "INSERT INTO foobar (s, f, t) VALUES ($1, $2, $3) RETURNING *"
        in
-       execute_stmt c stmt
-         [ `Int 4; `Null; `Float 2.4; `Timestamp (Ptime.now ()) ]
+       let%lwt res =
+         query_stmt c stmt
+           [ `String "nay"; `Float 2.4; `Timestamp (Ptime.now ()) ]
+       in
+       print_endline "FOO";
+       Db_.show_query_result res |> print_endline;
+       print_endline "BAR";
+       let%lwt stmt = prepare c "SELECT * FROM foobar WHERE f = $1" in
+       let%lwt res = query_stmt c stmt [ `Float 2.4 ] in
+       Db_.show_query_result res |> print_endline;
+       Lwt.return_unit
      in
 
      (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt

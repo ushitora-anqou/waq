@@ -4,7 +4,13 @@ module Pg = Postgresql
 exception Error of string
 
 type connection = { c : Pg.connection } [@@deriving make]
-type statement = { name : string } [@@deriving make]
+
+type statement = {
+  name : string;
+  params : Pg.ftype list;
+  fields : (string * Pg.ftype) list;
+}
+[@@deriving make]
 
 type value =
   [ `Null
@@ -12,8 +18,55 @@ type value =
   | `Int of int
   | `Float of float
   | `Timestamp of Ptime.t ]
+[@@deriving show]
+
+type query_result = (string * value) list list [@@deriving show]
 
 let failwithf f = Printf.ksprintf (fun s -> raise @@ Error s) f
+
+let ftype_mapper (ty : Pg.ftype) f =
+  match ty with
+  | TEXT | VARCHAR -> f `String
+  | INT2 | INT4 | INT8 -> f `Int
+  | FLOAT4 | FLOAT8 -> f `Float
+  | TIMESTAMP | TIMESTAMPTZ -> f `Timestamp
+  | _ ->
+      failwithf "Not implemented ftype in ftype_mapper: %s"
+        (Pg.string_of_ftype ty)
+
+let value_to_string_for_pg ~(ty : Pg.ftype) (v : value) : string =
+  ftype_mapper ty @@ fun ty' ->
+  match (ty', v) with
+  | _, `Null -> Pg.null
+  | `String, `String s -> s
+  | `Int, `Int i -> string_of_int i
+  | `Float, `Float f -> string_of_float f
+  | `Timestamp, `Timestamp t -> Ptime.to_rfc3339 t
+  | _ ->
+      failwithf "Invalid pair of type and value: \"%s\" and \"%s\""
+        (Pg.string_of_ftype ty) (show_value v)
+
+let value_of_string_for_pg ~(ty : Pg.ftype) (s : string) : value =
+  ftype_mapper ty @@ function
+  | _ when s = Pg.null -> `Null
+  | `String -> `String s
+  | `Int -> `Int (int_of_string s)
+  | `Float -> `Float (float_of_string s)
+  | `Timestamp -> (
+      (* e.g., 2023-01-13 14:02:17
+               0123456789012345678 *)
+      let year = String.sub s 0 4 |> int_of_string in
+      let month = String.sub s 5 2 |> int_of_string in
+      let day = String.sub s 8 2 |> int_of_string in
+      let hour = String.sub s 11 2 |> int_of_string in
+      let minute = String.sub s 14 2 |> int_of_string in
+      let second = String.sub s 17 2 |> int_of_string in
+      match
+        ((year, month, day), ((hour, minute, second), 0)) |> Ptime.of_date_time
+      with
+      | Some t -> `Timestamp t
+      | None -> failwithf "Invalid format of timestamp: %s" s)
+  | _ -> failwithf "Not implemented pg datatype: %s" (Pg.string_of_ftype ty)
 
 let raise_error msg = function
   | `PgError (e : Pg.error) ->
@@ -51,7 +104,7 @@ let fetch_result (c : connection) =
   try%lwt
     wait_for_result c.c;%lwt
     Lwt.return c.c#get_result
-  with Pg.Error e -> raise_error "fetch_result" @@ `PgError e
+  with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
 
 let fetch_single_result (c : connection) =
   match%lwt fetch_result c with
@@ -63,52 +116,77 @@ let fetch_single_result (c : connection) =
 
 let send_query (c : connection) (sql : string) : unit =
   try c.c#send_query sql
-  with Pg.Error e -> raise_error "send_query" @@ `PgError e
+  with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
 
 let send_prepare =
   let index = ref 0 in
-  fun (c : connection) (sql : string) : statement ->
+  fun (c : connection) (sql : string) : string ->
     let name = "prepared_statement_" ^ string_of_int !index in
     index := !index + 1;
     try
       c.c#send_prepare name sql;
-      make_statement ~name
-    with Pg.Error e -> raise_error "send_prepare" @@ `PgError e
+      name
+    with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
 
 let send_query_prepared (c : connection) (stmt : statement)
     (params : value list) =
   let params =
-    params
-    |> List.map (function
-         | `Null -> Pg.null
-         | `String s -> s
-         | `Int i -> string_of_int i
-         | `Float f -> string_of_float f
-         | `Timestamp t -> Ptime.to_rfc3339 t)
+    List.combine stmt.params params
+    |> List.map (fun (ty, v) -> value_to_string_for_pg ~ty v)
     |> Array.of_list
   in
   try c.c#send_query_prepared ~params stmt.name
-  with Pg.Error e -> raise_error "send_query_prepared" @@ `PgError e
+  with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
 
-let expect_command_ok (name : string) (r : Pg.result Lwt.t) : unit Lwt.t =
+let send_describe_prepared (c : connection) (name : string) =
+  try c.c#send_describe_prepared name
+  with Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
+
+let expect_command_ok (name : string) (r : Pg.result Lwt.t) : Pg.result Lwt.t =
   let%lwt r = r in
   match r#status with
-  | Command_ok -> Lwt.return_unit
+  | Command_ok -> Lwt.return r
   | _ -> raise_error name @@ `Result r
 
 let execute (c : connection) (sql : string) : unit Lwt.t =
   send_query c sql;
-  expect_command_ok "execute" @@ fetch_single_result c
+  ignore_lwt @@ expect_command_ok __FUNCTION__ @@ fetch_single_result c
 
 let prepare (c : connection) (sql : string) : statement Lwt.t =
-  let stmt = send_prepare c sql in
-  expect_command_ok "prepare" @@ fetch_single_result c;%lwt
+  (* Prepare *)
+  let name = send_prepare c sql in
+  ignore_lwt @@ expect_command_ok __FUNCTION__ @@ fetch_single_result c;%lwt
+
+  (* Describe *)
+  send_describe_prepared c name;
+  let%lwt desc = expect_command_ok __FUNCTION__ @@ fetch_single_result c in
+  let params = desc#nparams |> iota |> List.map desc#paramtype in
+  let fields =
+    desc#nfields |> iota |> List.map (fun i -> (desc#fname i, desc#ftype i))
+  in
+
+  let stmt = make_statement ~name ~params ~fields () in
   Lwt.return stmt
 
 let execute_stmt (c : connection) (stmt : statement) (params : value list) :
     unit Lwt.t =
   send_query_prepared c stmt params;
-  expect_command_ok "execute_stmt" @@ fetch_single_result c
+  ignore_lwt @@ expect_command_ok __FUNCTION__ @@ fetch_single_result c
+
+let query_stmt (c : connection) (stmt : statement) (params : value list) :
+    (string * value) list list Lwt.t =
+  send_query_prepared c stmt params;
+  let%lwt r = fetch_single_result c in
+  if r#status <> Tuples_ok then raise_error __FUNCTION__ @@ `Result r;
+  assert (List.length stmt.fields = r#nfields);
+
+  r#ntuples |> iota
+  |> List.map (fun row ->
+         stmt.fields
+         |> List.mapi (fun col (name, ty) ->
+                let s = r#getvalue row col in
+                (name, value_of_string_for_pg ~ty s)))
+  |> Lwt.return
 
 let connect (uri : string) =
   let u = Uri.of_string uri in
@@ -123,7 +201,7 @@ let connect (uri : string) =
   match
     new Pg.connection ~host ~port ~dbname ~user ~password ~startonly:true ()
   with
-  | exception Pg.Error e -> raise_error "connection" @@ `PgError e
+  | exception Pg.Error e -> raise_error __FUNCTION__ @@ `PgError e
   | c ->
       finish_conn
         (c#socket |> Obj.magic |> Lwt_unix.of_unix_file_descr)
