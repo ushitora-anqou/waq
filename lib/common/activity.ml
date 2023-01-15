@@ -1,4 +1,5 @@
 open Util
+module Uri = Http.Uri
 
 exception Bad_request
 exception Internal_server_error
@@ -10,8 +11,7 @@ let url (l : string list) =
   "https:/" ^ (Config.server_name () :: l |> List.fold_left ( ^/ ) "")
 
 let is_my_domain (u : string) =
-  u |> Uri.of_string |> Uri.host
-  |> Option.fold ~none:false ~some:(fun h -> Config.is_my_domain h)
+  u |> Uri.of_string |> Uri.domain |> Config.is_my_domain
 
 (* .well-known/webfinger *)
 type webfinger_link = {
@@ -114,7 +114,7 @@ let get_webfinger ~scheme ~domain ~username =
 let fetch_account ?(scheme = "https") by =
   let make_new_account (uri : string) =
     let%lwt r = get_uri uri in
-    let domain = Uri.of_string uri |> Uri.host |> Option.get in
+    let domain = Uri.of_string uri |> Uri.domain in
     let now = Ptime.now () in
     Db.Account.make ~username:r.preferredUsername ~domain
       ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id

@@ -11,8 +11,9 @@ module Uri = struct
 
   let http_host (u : t) =
     let host = Uri.host u |> Option.get in
-    let port = Uri.port u |> Option.fold ~none:"" ~some:string_of_int in
-    host ^ ":" ^ port
+    match Uri.port u with
+    | None -> host
+    | Some port -> host ^ ":" ^ string_of_int port
 
   let path_query_fragment (u : t) =
     let res = Uri.path u in
@@ -23,6 +24,8 @@ module Uri = struct
       match Uri.fragment u with None -> res | Some f -> res ^ "#" ^ f
     in
     res
+
+  let domain (u : t) = http_host u
 end
 
 module Signature = struct

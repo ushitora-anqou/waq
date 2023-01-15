@@ -186,9 +186,16 @@ let test_url () =
   in
   assert (Uri.getaddrinfo_port url = "123");
   assert (Uri.http_host url = "www.example.com:123");
+  assert (Uri.domain url = "www.example.com:123");
   assert (
     Uri.path_query_fragment url
     = "/forum/questions/?tag=networking&order=newest#top");
+
+  let url = Uri.of_string "http://example.com" in
+  assert (Uri.getaddrinfo_port url = "http");
+  assert (Uri.http_host url = "example.com");
+  assert (Uri.domain url = "example.com");
+  assert (Uri.path_query_fragment url = "");
   ()
 
 let () =
