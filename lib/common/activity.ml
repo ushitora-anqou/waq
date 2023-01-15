@@ -120,14 +120,14 @@ let fetch_account ?(scheme = "https") by =
       ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
       ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
       ~updated_at:now ()
-    |> Db.upsert_account
+    |> Db.insert_account
   in
   match by with
   | `Webfinger (domain, username) -> (
-      match%lwt Db.get_account_by_username domain username with
-      | Some acc -> Lwt.return acc
-      | None when domain = "" (* Local *) -> raise Not_found
-      | None ->
+      match%lwt Db.get_account ~by:(`domain_username (domain, username)) with
+      | acc -> Lwt.return acc
+      | exception Sql.NoRowFound when domain = "" (* Local *) -> raise Not_found
+      | exception Sql.NoRowFound ->
           let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
           let href =
             webfinger.links
@@ -139,9 +139,9 @@ let fetch_account ?(scheme = "https") by =
           in
           make_new_account href)
   | `Uri uri -> (
-      match%lwt Db.get_account_by_uri uri with
-      | Some acc -> Lwt.return acc
-      | None -> make_new_account uri)
+      match%lwt Db.get_account ~by:(`uri uri) with
+      | acc -> Lwt.return acc
+      | exception Sql.NoRowFound -> make_new_account uri)
 
 (* Send activity+json to POST inbox *)
 let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.account)

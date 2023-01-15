@@ -21,12 +21,10 @@ type post_api_v1_accounts_follow_res = {
 (* Use post_api_v1_accounts_follow_res as a result *)
 let post self_id id =
   (* Check if accounts are valid *)
-  let%lwt self = Db.get_account ~id:self_id in
-  let%lwt acc = Db.get_account ~id in
+  let%lwt self = Db.get_account ~by:(`id self_id) in
+  let%lwt acc = Db.get_account ~by:(`id id) in
   (* Check if followed *)
-  let%lwt f =
-    Db.get_follow_by_accounts ~account_id:self_id ~target_account_id:id
-  in
+  let%lwt f = Db.(get_follow ~by:(`accounts (self_id, id)) |> maybe_no_row) in
   (* If valid, send Undo of Follow to the server *)
   if f <> None then Service.Unfollow.kick self acc (Option.get f);
   (* Return the result to the client *)

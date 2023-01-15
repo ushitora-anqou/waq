@@ -12,7 +12,7 @@ type post_api_v1_statuses_res = {
 
 let post self_id status =
   let now = Ptime.now () in
-  let%lwt self = Db.get_account ~id:self_id in
+  let%lwt self = Db.get_account ~by:(`id self_id) in
   (* Insert status *)
   let%lwt s =
     Db.make_status ~id:0 ~text:status ~uri:"" ~created_at:now ~updated_at:now
@@ -25,7 +25,7 @@ let post self_id status =
     |> Db.update_status_uri
   in
   (* Send followers the status *)
-  let%lwt followers = Db.get_follows_by_target_account_id self_id in
+  let%lwt followers = Db.get_follows ~by:(`target_account_id self_id) in
   followers
   |> List.iter (fun (f : Db.follow) -> Service.Create_note.kick f.account_id s);
   (* Return the result to the client *)

@@ -12,30 +12,6 @@ let () =
   |> Http.start_server ~host ~port @@ fun () ->
      Log.info (fun m -> m "Listening on %s:%d" host port);
 
-     Log.debug (fun m -> m "Connect to PostgreSQL");
-     let%lwt _ =
-       let open Db_ in
-       let p = connect_pool 1 (Config.db_url ()) in
-       use p (fun c ->
-           execute c
-             "CREATE TABLE IF NOT EXISTS foobar ( id SERIAL PRIMARY KEY, s \
-              TEXT, f FLOAT, t TIMESTAMP WITHOUT TIME ZONE )");%lwt
-       let%lwt res =
-         use p @@ fun c ->
-         query c "INSERT INTO foobar (s, f, t) VALUES ($1, $2, $3) RETURNING *"
-           ~params:[ `String "nay"; `Float 2.4; `Timestamp (Ptime.now ()) ]
-       in
-       print_endline "FOO";
-       Db_.show_query_result res |> print_endline;
-       print_endline "BAR";
-       let%lwt res =
-         use p @@ fun c ->
-         query c "SELECT * FROM foobar WHERE f = $1" ~params:[ `Float 2.4 ]
-       in
-       Db_.show_query_result res |> print_endline;
-       Lwt.return_unit
-     in
-
      (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
      Db.migrate ();%lwt
      let now = Ptime.now () in
@@ -51,7 +27,7 @@ let () =
        let followers_url = Activity.(uri ^/ "followers") in
        Db.make_account ~username ~public_key ~private_key ~display_name ~uri
          ~inbox_url ~followers_url ~created_at ~updated_at ()
-       |> Db.upsert_account
+       |> Db.insert_account
      in
      assert (a.id = 1);
      let%lwt _u =

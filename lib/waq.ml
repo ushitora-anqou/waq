@@ -7,4 +7,3 @@ module Job = Job
 module Log = Log
 module Router = Router
 module Util = Util
-module Db_ = Db_

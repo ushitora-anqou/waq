@@ -16,9 +16,8 @@ let get s =
       raise (failwith "Invalid request");
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
-    let%lwt _ = Db.get_user_by_username name in
-    let%lwt a = Db.get_account_by_username "" name in
-    let a = Option.get a in
+    let%lwt _ = Db.get_user ~by:(`username name) in
+    let%lwt a = Db.get_account ~by:(`domain_username ("", name)) in
     make_webfinger
       ~subject:("acct:" ^ name ^ "@" ^ dom)
       ~aliases:[ a.uri ]

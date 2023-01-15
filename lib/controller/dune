@@ -12,9 +12,6 @@
  (libraries
   common
   service
-  caqti
-  caqti-driver-postgresql
-  caqti-lwt
   httpaf
   httpaf-lwt-unix
   jingoo

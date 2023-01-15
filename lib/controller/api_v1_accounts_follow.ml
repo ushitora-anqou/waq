@@ -19,16 +19,18 @@ type post_api_v1_accounts_follow_res = {
 
 let post self_id id =
   (* Check if accounts are valid *)
-  let%lwt self = Db.get_account ~id:self_id in
-  let%lwt acc = Db.get_account ~id in
+  let%lwt self = Db.get_account ~by:(`id self_id) in
+  let%lwt acc = Db.get_account ~by:(`id id) in
   (* Check if already followed or follow-requested *)
-  let%lwt f =
-    Db.get_follow_by_accounts ~account_id:self_id ~target_account_id:id
-  in
+  let%lwt f = Db.(get_follow ~by:(`accounts (self_id, id)) |> maybe_no_row) in
   let%lwt frq =
-    Db.get_follow_request_by_accounts ~account_id:self_id ~target_account_id:id
+    Db.(get_follow_request ~by:(`accounts (self_id, id)) |> maybe_no_row)
   in
   (* If valid, send Follow to the server *)
+  Log.debug (fun m ->
+      m ">>>>>>>>>> %s %s"
+        (if f = None then "None" else "Some")
+        (if frq = None then "None" else "Some"));
   if f = None && frq = None then Service.Follow.kick self acc;
   (* Return the result to the client *)
   make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
