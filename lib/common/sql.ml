@@ -354,3 +354,5 @@ module PgDriver = struct
     | Pg.Ok -> true
     | _ -> false
 end
+
+include Make (PgDriver)

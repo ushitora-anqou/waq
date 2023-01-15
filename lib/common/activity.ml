@@ -116,15 +116,15 @@ let fetch_account ?(scheme = "https") by =
     let%lwt r = get_uri uri in
     let domain = Uri.of_string uri |> Uri.host |> Option.get in
     let now = Ptime.now () in
-    Db.make_account ~username:r.preferredUsername ~domain
+    Db.Account.make ~username:r.preferredUsername ~domain
       ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
       ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
       ~updated_at:now ()
-    |> Db.insert_account
+    |> Db.Account.insert
   in
   match by with
   | `Webfinger (domain, username) -> (
-      match%lwt Db.get_account ~by:(`domain_username (domain, username)) with
+      match%lwt Db.Account.get ~by:(`domain_username (domain, username)) with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound when domain = "" (* Local *) -> raise Not_found
       | exception Sql.NoRowFound ->
@@ -139,13 +139,13 @@ let fetch_account ?(scheme = "https") by =
           in
           make_new_account href)
   | `Uri uri -> (
-      match%lwt Db.get_account ~by:(`uri uri) with
+      match%lwt Db.Account.get ~by:(`uri uri) with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound -> make_new_account uri)
 
 (* Send activity+json to POST inbox *)
-let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.account)
-    ~(dst : Db.account) =
+let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
+    ~(dst : Db.Account.t) =
   let body = Yojson.Safe.to_string body in
   let sign =
     let priv_key =

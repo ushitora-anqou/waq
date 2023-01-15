@@ -70,6 +70,26 @@ let unpack_impl loc (fields : label_declaration list) =
   in
   [%stri let [%p ppat_var ~loc { loc; txt = funname }] = fun x -> [%e body]]
 
+let query_impl loc =
+  Ast_helper.with_default_loc loc @@ fun () ->
+  [%stri let query ~p c sql = List.map pack =|< Sql.query c sql ~p]
+
+let query_row_impl loc =
+  Ast_helper.with_default_loc loc @@ fun () ->
+  [%stri let query_row ~p c sql = pack =|< Sql.query_row c sql ~p]
+
+let named_query_impl loc =
+  Ast_helper.with_default_loc loc @@ fun () ->
+  [%stri
+    let named_query c sql x =
+      List.map pack =|< Sql.named_query c sql ~p:(unpack x)]
+
+let named_query_row_impl loc =
+  Ast_helper.with_default_loc loc @@ fun () ->
+  [%stri
+    let named_query_row c sql x =
+      pack =|< Sql.named_query_row c sql ~p:(unpack x)]
+
 let generate_impl ~ctxt (_rec_flag, type_declarations) =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
   type_declarations
@@ -86,7 +106,14 @@ let generate_impl ~ctxt (_rec_flag, type_declarations) =
              in
              [ Ast_builder.Default.pstr_extension ~loc ext [] ]
          | { ptype_loc; ptype_kind = Ptype_record fields; _ } ->
-             [ pack_impl ptype_loc fields; unpack_impl ptype_loc fields ])
+             [
+               pack_impl ptype_loc fields;
+               unpack_impl ptype_loc fields;
+               query_impl ptype_loc;
+               query_row_impl ptype_loc;
+               named_query_impl ptype_loc;
+               named_query_row_impl ptype_loc;
+             ])
   |> List.concat
 
 let impl_generator = Deriving.Generator.V2.make_noarg generate_impl

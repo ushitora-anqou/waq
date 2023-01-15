@@ -2,9 +2,9 @@ open Common
 open Activity
 
 (* Send Undo of Follow to POST inbox *)
-let kick (self : Db.account) (acc : Db.account) (f : Db.follow) =
+let kick (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  Db.delete_follow ~by:(`uri f.uri);%lwt
+  Db.Follow.delete ~by:(`uri f.uri);%lwt
   (* Post activity *)
   let obj =
     make_ap_inbox_no_context ~id:f.uri ~typ:"Follow" ~actor:(`String self.uri)

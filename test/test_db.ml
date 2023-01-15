@@ -14,9 +14,9 @@ let test_user _ _ =
   in
 
   let%lwt a =
-    make_account ~username:"anqou" ~public_key:"" ~display_name:"Ushitora Anqou"
+    Account.make ~username:"anqou" ~public_key:"" ~display_name:"Ushitora Anqou"
       ~uri:"" ~inbox_url:"" ~followers_url:"" ~created_at ~updated_at ()
-    |> insert_account
+    |> Account.insert
   in
   assert (a.id = 1);
   assert (a.username = "anqou");
@@ -26,7 +26,7 @@ let test_user _ _ =
   assert (a.created_at = created_at);
   assert (a.updated_at = updated_at);
 
-  let%lwt a = get_account ~by:(`id 1) in
+  let%lwt a = Account.get ~by:(`id 1) in
   assert (a.id = 1);
   assert (a.username = "anqou");
   assert (a.private_key = None);
@@ -36,9 +36,9 @@ let test_user _ _ =
   assert (a.updated_at = updated_at);
 
   let%lwt u =
-    make_user ~id:0 ~email:"ushitora@anqou.net" ~created_at ~updated_at
+    User.make ~id:0 ~email:"ushitora@anqou.net" ~created_at ~updated_at
       ~account_id:1
-    |> insert_user
+    |> User.insert
   in
   assert (u.id = 1);
   assert (u.email = "ushitora@anqou.net");
@@ -46,7 +46,7 @@ let test_user _ _ =
   assert (u.updated_at = updated_at);
   assert (u.account_id = 1);
 
-  let%lwt u = get_user ~by:(`username "anqou") in
+  let%lwt u = User.get ~by:(`username "anqou") in
   assert (u.id = 1);
   assert (u.email = "ushitora@anqou.net");
   assert (u.created_at = created_at);

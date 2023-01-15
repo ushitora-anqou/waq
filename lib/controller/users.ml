@@ -4,8 +4,8 @@ open Activity
 (* Recv GET /users/:name *)
 let get username =
   try%lwt
-    let%lwt u = Db.get_user ~by:(`username username) in
-    let%lwt a = Db.get_account ~by:(`id u.account_id) in
+    let%lwt u = Db.User.get ~by:(`username username) in
+    let%lwt a = Db.Account.get ~by:(`id u.account_id) in
     let publicKey =
       make_ap_user_public_key ~id:(a.uri ^ "#main-key") ~owner:a.uri
         ~publicKeyPem:a.public_key

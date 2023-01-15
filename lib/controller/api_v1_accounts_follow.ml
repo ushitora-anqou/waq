@@ -19,12 +19,12 @@ type post_api_v1_accounts_follow_res = {
 
 let post self_id id =
   (* Check if accounts are valid *)
-  let%lwt self = Db.get_account ~by:(`id self_id) in
-  let%lwt acc = Db.get_account ~by:(`id id) in
+  let%lwt self = Db.Account.get ~by:(`id self_id) in
+  let%lwt acc = Db.Account.get ~by:(`id id) in
   (* Check if already followed or follow-requested *)
-  let%lwt f = Db.(get_follow ~by:(`accounts (self_id, id)) |> maybe_no_row) in
+  let%lwt f = Db.(Follow.get ~by:(`accounts (self_id, id)) |> maybe_no_row) in
   let%lwt frq =
-    Db.(get_follow_request ~by:(`accounts (self_id, id)) |> maybe_no_row)
+    Db.(FollowRequest.get ~by:(`accounts (self_id, id)) |> maybe_no_row)
   in
   (* If valid, send Follow to the server *)
   Log.debug (fun m ->
