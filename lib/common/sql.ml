@@ -107,6 +107,35 @@ module Make (D : Driver) = struct
     | [ row ] -> Lwt.return row
     | [] -> raise NoRowFound
     | _ -> failwithf "Expected only one row but got many"
+
+  let resolve_named_sql =
+    let re = regex {|:([_a-zA-Z][_a-zA-Z0-9]*)|} in
+    fun p sql ->
+      let names = ref [] in
+      let sql =
+        Re.replace ~all:true re
+          ~f:(fun g ->
+            let name = Re.Group.get g 1 in
+            names := name :: !names;
+            "$" ^ string_of_int (List.length !names))
+          sql
+      in
+      let p = !names |> List.rev |> List.map (fun k -> List.assoc k p) in
+      (p, sql)
+
+  let named_execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
+    let p, sql = resolve_named_sql p sql in
+    execute ~p c sql
+
+  let named_query ?(p = []) (c : connection) (sql : string) : query_result Lwt.t
+      =
+    let p, sql = resolve_named_sql p sql in
+    query ~p c sql
+
+  let named_query_row ?(p = []) (c : connection) (sql : string) :
+      single_query_result Lwt.t =
+    let p, sql = resolve_named_sql p sql in
+    query_row ~p c sql
 end
 
 module PgDriver = struct

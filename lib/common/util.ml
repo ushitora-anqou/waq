@@ -1,6 +1,7 @@
 let ( |$> ) f g x = f x |> g
 let ignore_lwt (p : _ Lwt.t) = Lwt.bind p (fun _ -> Lwt.return_unit)
 let ( |=> ) = Lwt.Infix.( >|= ) (* More intuitive, isn't it? *)
+let regex ptn = Re.(Pcre.re ptn |> compile)
 
 let iota n =
   let rec f acc = function 0 -> acc | n -> f ((n - 1) :: acc) (n - 1) in
