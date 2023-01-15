@@ -1,4 +1,3 @@
-open Common
 open Activity
 
 (* Recv GET /.well-known/host-meta *)

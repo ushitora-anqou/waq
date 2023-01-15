@@ -1,4 +1,3 @@
-open Common
 open Util
 open Activity
 
@@ -26,7 +25,7 @@ let kick_inbox_follow (req : ap_inbox) =
             |> Db.Follow.insert
       in
       (* Send 'Accept' *)
-      Service.Accept.kick ~f ~followee:dst ~follower:src;
+      Service_accept.kick ~f ~followee:dst ~follower:src;
       Lwt.return_unit
 
 (* Recv Accept in inbox *)

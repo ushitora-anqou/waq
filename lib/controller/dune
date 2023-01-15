@@ -1,5 +1,0 @@
-(library
- (name controller)
- (preprocess
-  (pps lwt_ppx ppx_deriving.show ppx_deriving.make ppx_deriving_yojson))
- (libraries common service lwt ppx_deriving_yojson.runtime result yojson))

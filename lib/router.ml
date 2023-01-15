@@ -1,4 +1,3 @@
-open Common
 open Util [@@warning "-33"]
 
 let routes =
@@ -17,15 +16,15 @@ let routes =
     let dispatch = dispatch app_jrd_json in
     [
       get "/.well-known/host-meta" (fun _req ->
-          let%lwt body = Controller.Well_known_host_meta.get () in
+          let%lwt body = Controller_well_known_host_meta.get () in
           respond ~headers:[ ("Content-Type", app_xrd_xml) ] body);
       get "/.well-known/webfinger" (fun req ->
           match query_opt "resource" req with
-          | Some [ s ] -> dispatch @@ Controller.Well_known_webfinger.get s
+          | Some [ s ] -> dispatch @@ Controller_well_known_webfinger.get s
           | _ -> respond ~status:`Not_found "");
       get "/users/:name" (fun req ->
           let username = param ":name" req in
-          dispatch @@ Controller.Users.get username);
+          dispatch @@ Controller_users.get username);
       post "/users/:name/inbox" (fun req ->
           let%lwt body = body req in
           Log.debug (fun m ->
@@ -34,7 +33,7 @@ let routes =
                 |> List.map (fun (k, v) -> k ^ ": " ^ v)
                 |> String.concat "\n")
                 body);
-          Controller.Inbox.post body;%lwt
+          Controller_inbox.post body;%lwt
           respond ~status:`Accepted "");
     ]
   in
@@ -69,10 +68,10 @@ let routes =
     [
       post "/api/v1/accounts/:id/follow" (fun req ->
           let id = param ":id" req |> int_of_string in
-          dispatch @@ Controller.Api_v1_accounts_follow.post self_id id);
+          dispatch @@ Controller_api_v1_accounts_follow.post self_id id);
       post "/api/v1/accounts/:id/unfollow" (fun req ->
           let id = param ":id" req |> int_of_string in
-          dispatch @@ Controller.Api_v1_accounts_unfollow.post self_id id);
+          dispatch @@ Controller_api_v1_accounts_unfollow.post self_id id);
       get "/api/v1/accounts/search" (fun req ->
           let%lwt req = parse_req req in
           let q = req |> query "q" in
@@ -85,14 +84,14 @@ let routes =
           | Ok [ _; username; domain ] ->
               let domain = if domain = "" then None else Some domain in
               dispatch
-              @@ Controller.Api_v1_accounts_search.get resolve ~username ~domain
+              @@ Controller_api_v1_accounts_search.get resolve ~username ~domain
           | _ -> respond ~status:`Bad_request "");
       post "/api/v1/statuses" (fun req ->
           let%lwt req = parse_req req in
           match query_opt "status" req with
           | None -> respond ~status:`Bad_request ""
           | Some status ->
-              dispatch @@ Controller.Api_v1_statuses.post self_id status);
+              dispatch @@ Controller_api_v1_statuses.post self_id status);
     ]
   in
   router (routes_from_servers @ routes_from_clients)

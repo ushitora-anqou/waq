@@ -1,5 +1,0 @@
-(library
- (name service)
- (preprocess
-  (pps lwt_ppx ppx_deriving.show ppx_deriving.make))
- (libraries common jingoo lwt ptime uuidm))

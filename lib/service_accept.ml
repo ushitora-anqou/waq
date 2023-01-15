@@ -1,4 +1,3 @@
-open Common
 open Activity
 
 (* Send Accept to POST inbox *)

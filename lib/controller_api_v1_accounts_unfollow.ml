@@ -1,5 +1,3 @@
-open Common
-
 (* Recv POST /api/v1/accounts/:id/follow *)
 type post_api_v1_accounts_follow_res = {
   id : string;
@@ -26,7 +24,7 @@ let post self_id id =
   (* Check if followed *)
   let%lwt f = Db.(Follow.get ~by:(`accounts (self_id, id)) |> maybe_no_row) in
   (* If valid, send Undo of Follow to the server *)
-  if f <> None then Service.Unfollow.kick self acc (Option.get f);
+  if f <> None then Service_unfollow.kick self acc (Option.get f);
   (* Return the result to the client *)
   make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:false
     ~showing_reblogs:false ~notifying:false ~followed_by:false ~blocking:false

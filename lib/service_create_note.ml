@@ -1,4 +1,3 @@
-open Common
 open Activity
 
 (* Send Create/Note to POST /users/:name/inbox *)

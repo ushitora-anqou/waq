@@ -1,4 +1,3 @@
-open Common
 open Activity
 
 (* Send Undo of Follow to POST inbox *)
