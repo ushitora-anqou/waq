@@ -1,3 +1,5 @@
+open Util
+
 type level = Debug | Info | Warning | Error [@@deriving enum]
 
 let level_implies l1 l2 = level_to_enum l1 <= level_to_enum l2
@@ -28,7 +30,7 @@ let log (l : level) : 'a log =
        f @@ fun fmt ->
        Format.fprintf r.fmt
          ("[%s][%s] @[" ^^ fmt ^^ "@]@.")
-         Time.(now () |> to_string)
+         Ptime.(now () |> to_rfc3339 ~space:true ~tz_offset_s:0)
          (string_of_level l)
 
 let debug : 'a log = fun f -> log Debug f
