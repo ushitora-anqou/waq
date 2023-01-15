@@ -30,17 +30,19 @@ module User = struct
     | `id id -> query_row c "SELECT * FROM users WHERE id = $1" ~p:[ `Int id ]
     | `username n ->
         query_row c
-          {|SELECT * FROM users
-          INNER JOIN accounts ON users.account_id = accounts.id
-          WHERE accounts.username = $1|}
+          {|
+SELECT * FROM users
+INNER JOIN accounts ON users.account_id = accounts.id
+WHERE accounts.username = $1|}
           ~p:[ `String n ]
 
   let insert u =
     do_query @@ fun c ->
     named_query_row c
-      {|INSERT INTO users (email, created_at, updated_at, account_id)
-      VALUES (:email, :created_at, :updated_at, :account_id)
-      RETURNING *|}
+      {|
+INSERT INTO users (email, created_at, updated_at, account_id)
+VALUES (:email, :created_at, :updated_at, :account_id)
+RETURNING *|}
       u
 end
 
@@ -127,8 +129,9 @@ module Follow = struct
     match by with
     | `accounts (account_id, target_account_id) ->
         query_row c
-          "SELECT * FROM follows WHERE account_id = $1 AND target_account_id = \
-           $2"
+          {|
+SELECT * FROM follows
+WHERE account_id = $1 AND target_account_id = $2|}
           ~p:[ `Int account_id; `Int target_account_id ]
 
   let get_many ~by =
@@ -174,8 +177,9 @@ module FollowRequest = struct
     match by with
     | `accounts (account_id, target_account_id) ->
         query_row c
-          "SELECT * FROM follow_requests WHERE account_id = $1 AND \
-           target_account_id = $2"
+          {|
+SELECT * FROM follow_requests
+WHERE account_id = $1 AND target_account_id = $2|}
           ~p:[ `Int account_id; `Int target_account_id ]
     | `uri uri ->
         query_row c "SELECT * FROM follow_requests WHERE uri = $1"
