@@ -75,19 +75,21 @@ module Make (D : Driver) = struct
     let open String in
     let max_length = 30 in
     Log.debug (fun m ->
-        m "Sending \o033[1;34m\"%s\"\o033[0m [%s]"
+        m "\o033[1;34m%s\o033[0m [%s]"
           (sql |> trim |> Str.(global_replace (regexp "[ \n\r]+") " "))
           (params
           |> List.map (function
                | `Null -> "NULL"
-               | `String s -> "\"" ^ s ^ "\""
+               | `String s ->
+                   "\""
+                   ^ ((if length s > max_length then
+                       String.sub s 0 max_length ^ "..."
+                      else s)
+                     |> String.escaped)
+                   ^ "\""
                | `Int i -> string_of_int i
                | `Float f -> string_of_float f
                | `Timestamp t -> Ptime.to_rfc3339 t)
-          |> List.map (fun s ->
-                 if length s > max_length then
-                   String.sub s 0 max_length ^ "..." |> String.escaped
-                 else s)
           |> concat "; "))
 
   let execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
