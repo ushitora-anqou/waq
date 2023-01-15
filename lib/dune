@@ -15,8 +15,6 @@
   httpaf
   httpaf-lwt-unix
   jingoo
-  logs
-  logs.fmt
   lwt
   lwt.unix
   mirage-crypto-rng.lwt

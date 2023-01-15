@@ -3,7 +3,7 @@ open Util
 module C = Config
 
 let () =
-  Log.initialize Debug;
+  Log.(add_reporter (make_reporter ~l:Debug ()));
   C.load_file "config.yml";
   Http.Signature.initialize ();
   Db.initialize ();
