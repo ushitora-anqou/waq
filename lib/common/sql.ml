@@ -78,27 +78,26 @@ module Make (D : Driver) = struct
   let use : connection_pool -> (connection -> 'a Lwt.t) -> 'a Lwt.t =
     Lwt_pool.use
 
-  let log sql params : unit =
+  let log =
     let open String in
     let max_length = 30 in
     let re = regex {|[ \n\r]+|} in
-    Log.debug (fun m ->
-        m "\o033[1;34m%s\o033[0m [%s]"
-          (sql |> trim |> Re.replace_string ~all:true re ~by:" ")
-          (params
-          |> List.map (function
-               | `Null -> "NULL"
-               | `String s ->
-                   "\""
-                   ^ ((if length s > max_length then
-                       String.sub s 0 max_length ^ "..."
-                      else s)
-                     |> String.escaped)
-                   ^ "\""
-               | `Int i -> string_of_int i
-               | `Float f -> string_of_float f
-               | `Timestamp t -> Ptime.to_rfc3339 t)
-          |> concat "; "))
+    let conv = function
+      | `Null -> "NULL"
+      | `String s ->
+          "\""
+          ^ ((if length s > max_length then sub s 0 max_length ^ "..." else s)
+            |> escaped)
+          ^ "\""
+      | `Int i -> string_of_int i
+      | `Float f -> string_of_float f
+      | `Timestamp t -> Ptime.to_rfc3339 t
+    in
+    fun sql params ->
+      Log.debug (fun m ->
+          m "\o033[1;34m%s\o033[0m [%s]"
+            (sql |> trim |> Re.replace_string ~all:true re ~by:" ")
+            (params |> List.map conv |> concat "; "))
 
   let execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
     let p = p |> List.map Value.normalize in
