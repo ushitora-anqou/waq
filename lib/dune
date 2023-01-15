@@ -1,31 +1,5 @@
 (library
  (name waq)
  (preprocess
-  (pps
-   lwt_ppx
-   ppx_deriving.enum
-   ppx_deriving.make
-   ppx_deriving.show
-   ppx_deriving_yaml
-   ppx_deriving_yojson
-   ppx_rapper))
- (libraries
-  common
-  controller
-  httpaf
-  httpaf-lwt-unix
-  jingoo
-  lwt
-  lwt.unix
-  mirage-crypto-rng.lwt
-  ppx_deriving_yojson.runtime
-  ppx_rapper_lwt
-  re
-  re.pcre
-  sha
-  uri
-  uuidm
-  yaml
-  yaml.unix
-  yojson
-  x509))
+  (pps lwt_ppx ppx_deriving.make ppx_deriving.show ppx_deriving_yojson))
+ (libraries common controller lwt service yojson))

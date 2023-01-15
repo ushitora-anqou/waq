@@ -8,24 +8,27 @@
    ppx_deriving.show
    ppx_deriving_sql
    ppx_deriving_yaml
-   ppx_deriving_yojson
-   ppx_rapper))
+   ppx_deriving_yojson))
  (libraries
+  base64
+  bigstringaf
+  cstruct
+  fpath
   httpaf
   httpaf-lwt-unix
-  jingoo
   lwt
   lwt.unix
   mirage-crypto-rng.lwt
   postgresql
   ppx_deriving_yojson.runtime
-  ppx_rapper_lwt
+  ptime
   re
   re.pcre
+  result
   sha
+  unix
   uri
-  uuidm
+  x509
   yaml
   yaml.unix
-  yojson
-  x509))
+  yojson))
