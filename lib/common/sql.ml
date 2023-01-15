@@ -81,9 +81,10 @@ module Make (D : Driver) = struct
   let log sql params : unit =
     let open String in
     let max_length = 30 in
+    let re = regex {|[ \n\r]+|} in
     Log.debug (fun m ->
         m "\o033[1;34m%s\o033[0m [%s]"
-          (sql |> trim |> Str.(global_replace (regexp "[ \n\r]+") " "))
+          (sql |> trim |> Re.replace_string ~all:true re ~by:" ")
           (params
           |> List.map (function
                | `Null -> "NULL"
