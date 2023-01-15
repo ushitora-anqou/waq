@@ -15,27 +15,34 @@ module Value = struct
     | `Timestamp of Ptime.t ]
   [@@deriving show]
 
+  type null_t = [ t | `NullString of string option ]
+
+  let normalize : null_t -> t = function
+    | `NullString None -> `Null
+    | `NullString (Some s) -> `String s
+    | #t as v -> v
+
   let to_string = show
 
-  let expect_int = function
+  let expect_int : t -> int = function
     | `Int i -> i
     | v -> failwithf "Expect int, got: %s" (to_string v)
 
-  let expect_int_opt = function
+  let expect_int_opt : t -> int option = function
     | `Null -> None
     | `Int i -> Some i
     | v -> failwithf "Expect int or null, got: %s" (to_string v)
 
-  let expect_string = function
+  let expect_string : t -> string = function
     | `String s -> s
     | v -> failwithf "Expect string, got: %s" (to_string v)
 
-  let expect_string_opt = function
+  let expect_string_opt : t -> string option = function
     | `Null -> None
     | `String s -> Some s
     | v -> failwithf "Expect string or null, got: %s" (to_string v)
 
-  let expect_timestamp = function
+  let expect_timestamp : t -> Ptime.t = function
     | `Timestamp t -> t
     | v -> failwithf "Expect string, got: %s" (to_string v)
 end
@@ -93,11 +100,13 @@ module Make (D : Driver) = struct
           |> concat "; "))
 
   let execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
+    let p = p |> List.map Value.normalize in
     log sql p;
     let%lwt stmt = D.prepare c sql in
     D.execute_stmt c stmt p
 
   let query ?(p = []) c sql =
+    let p = p |> List.map Value.normalize in
     log sql p;
     let%lwt stmt = D.prepare c sql in
     D.query_stmt c stmt p

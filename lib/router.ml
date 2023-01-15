@@ -83,6 +83,7 @@ let routes =
           let re = Regex.compile {|^@?([^@]+)(?:@([^@]+))?$|} in
           match Regex.match_group re q with
           | Ok [ _; username; domain ] ->
+              let domain = if domain = "" then None else Some domain in
               dispatch
               @@ Controller.Api_v1_accounts_search.get resolve ~username ~domain
           | _ -> respond ~status:`Bad_request "");

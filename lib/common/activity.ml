@@ -126,8 +126,10 @@ let fetch_account ?(scheme = "https") by =
   | `Webfinger (domain, username) -> (
       match%lwt Db.Account.get ~by:(`domain_username (domain, username)) with
       | acc -> Lwt.return acc
-      | exception Sql.NoRowFound when domain = "" (* Local *) -> raise Not_found
+      | exception Sql.NoRowFound when domain = None (* Local *) ->
+          raise Not_found
       | exception Sql.NoRowFound ->
+          let domain = Option.get domain in
           let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
           let href =
             webfinger.links

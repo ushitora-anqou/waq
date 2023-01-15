@@ -70,8 +70,8 @@ module Account = struct
         query_row c "SELECT * FROM accounts WHERE id = $1" ~p:[ `Int id ]
     | `domain_username (domain, username) ->
         query_row c
-          {|SELECT * FROM accounts WHERE COALESCE(domain, '') = $1 AND username = $2|}
-          ~p:[ `String domain; `String username ]
+          {|SELECT * FROM accounts WHERE domain IS NOT DISTINCT FROM $1 AND username = $2|}
+          ~p:[ `NullString domain; `String username ]
     | `uri u ->
         query_row c "SELECT * FROM accounts WHERE uri = $1" ~p:[ `String u ]
 

@@ -17,7 +17,7 @@ let get s =
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
     let%lwt _ = Db.User.get ~by:(`username name) in
-    let%lwt a = Db.Account.get ~by:(`domain_username ("", name)) in
+    let%lwt a = Db.Account.get ~by:(`domain_username (None, name)) in
     make_webfinger
       ~subject:("acct:" ^ name ^ "@" ^ dom)
       ~aliases:[ a.uri ]

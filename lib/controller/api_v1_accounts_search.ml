@@ -16,7 +16,7 @@ let get _resolve ~username ~domain =
     let acct =
       match acc.domain with
       | None -> username
-      | Some _ -> username ^ "@" ^ domain
+      | Some domain -> username ^ "@" ^ domain
     in
     make_get_api_v1_accounts_search_res ~id:(string_of_int acc.id) ~username
       ~acct ~display_name:acc.display_name
