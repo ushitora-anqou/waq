@@ -204,6 +204,24 @@ RETURNING *|}
           ~p:[ `String u ]
 end
 
+let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =
+  do_query @@ fun c ->
+  Status.query c
+    {|
+SELECT * FROM statuses
+WHERE
+  ( account_id = $1 OR
+    account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) ) AND
+  ( $3 = 0 OR id >= $3 ) AND ( $4 = 0 OR id <= $4 )
+ORDER BY created_at DESC LIMIT $2|}
+    ~p:
+      [
+        `Int id;
+        `Int limit;
+        `Int (Option.value ~default:0 since_id);
+        `Int (Option.value ~default:0 max_id);
+      ]
+
 module Migration = struct
   module type S = sig
     val up : Sql.connection -> unit Lwt.t

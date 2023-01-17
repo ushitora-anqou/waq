@@ -92,6 +92,19 @@ let routes =
           | None -> respond ~status:`Bad_request ""
           | Some status ->
               dispatch @@ Controller_api_v1_statuses.post self_id status);
+      get "/api/v1/timelines/home" (fun req ->
+          let%lwt req = parse_req req in
+          let limit =
+            req |> query_opt "limit" |> Option.map int_of_string
+            |> Option.fold ~none:20 ~some:(fun v -> if v > 40 then 40 else v)
+          in
+          let max_id = req |> query_opt "max_id" |> Option.map int_of_string in
+          let since_id =
+            req |> query_opt "since_id" |> Option.map int_of_string
+          in
+          dispatch
+          @@ Controller_api_v1_timelines_home.get ~self_id ~max_id ~since_id
+               ~limit);
     ]
   in
   router (routes_from_servers @ routes_from_clients)
