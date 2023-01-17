@@ -25,10 +25,6 @@ let post self_id id =
     Db.(FollowRequest.get ~by:(`accounts (self_id, id)) |> maybe_no_row)
   in
   (* If valid, send Follow to the server *)
-  Log.debug (fun m ->
-      m ">>>>>>>>>> %s %s"
-        (if f = None then "None" else "Some")
-        (if frq = None then "None" else "Some"));
   if f = None && frq = None then Service_follow.kick self acc;
   (* Return the result to the client *)
   make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
