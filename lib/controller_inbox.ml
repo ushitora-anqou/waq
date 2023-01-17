@@ -60,10 +60,29 @@ let kick_inbox_undo (req : ap_inbox) =
       Db.Follow.delete ~by:(`uri obj.id)
   | _ -> raise Bad_request
 
+(* Recv Create in inbox *)
+let kick_inbox_create (req : ap_create) =
+  let note = req.obj in
+  let published =
+    match Ptime.of_rfc3339 note.published with
+    | Error _ -> raise Bad_request
+    | Ok (t, _, _) -> t
+  in
+  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  let%lwt attributedTo = fetch_account (`Uri note.attributedTo) in
+  Db.Status.make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
+    ~updated_at:published ~account_id:attributedTo.id
+  |> Db.Status.insert |> ignore_lwt
+
 (* Recv POST /users/:name/inbox *)
 let post body =
-  match Yojson.Safe.from_string body |> ap_inbox_of_yojson with
+  let j = Yojson.Safe.from_string body in
+  match ap_inbox_of_yojson j with
   | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
   | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
   | Ok ({ typ = "Undo"; _ } as r) -> kick_inbox_undo r
+  | Ok { typ = "Create"; _ } -> (
+      match ap_create_of_yojson j with
+      | Ok req -> kick_inbox_create req
+      | _ -> Lwt.return_unit)
   | _ -> Lwt.return_unit
