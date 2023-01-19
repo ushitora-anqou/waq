@@ -3,8 +3,8 @@ open Db
 
 let test_user _ _ =
   initialize ();
-  (try%lwt rollback () with _ -> Lwt.return_unit);%lwt
-  migrate ();%lwt
+  (try%lwt Migration.rollback () with _ -> Lwt.return_unit);%lwt
+  Migration.migrate ();%lwt
 
   let created_at, _, _ =
     Ptime.of_rfc3339 "2022-12-31T21:03:07.4242+09:00" |> Result.get_ok
