@@ -11,8 +11,8 @@ let server () =
 
 let db_reset () =
   let f =
-    (try%lwt Db.rollback () with _ -> Lwt.return_unit);%lwt
-    Db.migrate ();%lwt
+    (try%lwt Migration.rollback () with _ -> Lwt.return_unit);%lwt
+    Migration.migrate ();%lwt
     let now = Ptime.now () in
     let%lwt a =
       let username = "foobar" in
