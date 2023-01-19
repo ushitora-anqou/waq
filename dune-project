@@ -5,22 +5,48 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github ushitora-anqou/waq))
 
-(authors "Author Name")
+(authors "Ushitora Anqou")
 
-(maintainers "Maintainer Name")
+(maintainers "Ushitora Anqou")
 
-(license LICENSE)
+(license MIT)
 
-(documentation https://url/to/documentation)
+(documentation https://github.com/ushitora-anqou/waq)
 
 (package
  (name waq)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune)
+ (synopsis "Yet another ActivityPub server")
+ (description "Yet another ActivityPub server")
+ (depends
+  (alcotest :with-test)
+  (alcotest-lwt :with-test)
+  (merlin :with-dev-setup)
+  (ocamlformat :with-dev-setup)
+  base64
+  bigstringaf
+  cstruct
+  dune
+  fpath
+  httpaf
+  httpaf-lwt-unix
+  jingoo
+  lwt
+  lwt_ppx
+  mirage-crypto-rng
+  ocaml
+  postgresql
+  ppx_deriving_yaml
+  ppx_deriving_yojson
+  ptime
+  re
+  result
+  sha
+  uri
+  uuidm
+  x509
+  yaml
+  yojson)
  (tags
-  (topics "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
+  (activitypub fediverse)))
