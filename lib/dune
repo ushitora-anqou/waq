@@ -35,4 +35,4 @@
   yaml.unix
   yojson))
 
-(include_subdirs unqualified)
+(include_subdirs qualified)

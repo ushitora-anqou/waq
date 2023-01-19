@@ -5,11 +5,11 @@ end
 
 let all : (int * (module S)) list =
   [
-    (20221230220000, (module M20221230_220000_create_accounts));
-    (20221230220001, (module M20221230_220001_create_users));
-    (20221230220002, (module M20221230_220002_create_statuses));
-    (20221230220003, (module M20221230_220003_create_follows));
-    (20221230220004, (module M20221230_220004_create_follow_requests));
+    (20221230220000, (module Migrate.M20221230_220000_create_accounts));
+    (20221230220001, (module Migrate.M20221230_220001_create_users));
+    (20221230220002, (module Migrate.M20221230_220002_create_statuses));
+    (20221230220003, (module Migrate.M20221230_220003_create_follows));
+    (20221230220004, (module Migrate.M20221230_220004_create_follow_requests));
   ]
 
 let migrate () =
