@@ -15,19 +15,20 @@ type post_api_v1_accounts_follow_res = {
 }
 [@@deriving make, yojson { strict = false }]
 
-(* Recv POST /api/v1/accounts/:id/unfollow *)
-(* Use post_api_v1_accounts_follow_res as a result *)
 let post self_id id =
   (* Check if accounts are valid *)
   let%lwt self = Db.Account.get ~by:(`id self_id) in
   let%lwt acc = Db.Account.get ~by:(`id id) in
-  (* Check if followed *)
+  (* Check if already followed or follow-requested *)
   let%lwt f = Db.(Follow.get ~by:(`accounts (self_id, id)) |> maybe_no_row) in
-  (* If valid, send Undo of Follow to the server *)
-  if f <> None then Service_unfollow.kick self acc (Option.get f);
+  let%lwt frq =
+    Db.(FollowRequest.get ~by:(`accounts (self_id, id)) |> maybe_no_row)
+  in
+  (* If valid, send Follow to the server *)
+  if f = None && frq = None then Service.Follow.kick self acc;
   (* Return the result to the client *)
-  make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:false
-    ~showing_reblogs:false ~notifying:false ~followed_by:false ~blocking:false
+  make_post_api_v1_accounts_follow_res ~id:(string_of_int id) ~following:true
+    ~showing_reblogs:true ~notifying:false ~followed_by:false ~blocking:false
     ~blocked_by:false ~muting:false ~muting_notifications:false ~requested:false
     ~domain_blocking:false ~endorsed:false
   |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string

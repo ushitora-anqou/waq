@@ -27,7 +27,7 @@ let post self_id status =
   let%lwt followers = Db.Follow.get_many ~by:(`target_account_id self_id) in
   followers
   |> List.iter (fun (f : Db.Follow.t) ->
-         Service_create_note.kick f.account_id s);
+         Service.Create_note.kick f.account_id s);
   (* Return the result to the client *)
   make_post_api_v1_statuses_res ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 now) ~content:s.text
