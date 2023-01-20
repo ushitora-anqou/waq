@@ -161,6 +161,20 @@ let scenario1 token =
       ()
   | _ -> assert false);
 
+  (* Unfollow @admin@localhost:3000 *)
+  fetch_exn ~meth:`POST (waq "/api/v1/accounts/2/unfollow") |> ignore_lwt;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get my home timeline and check again *)
+  let%lwt r = fetch_exn (waq "/api/v1/timelines/home") in
+  (match Yojson.Safe.from_string r with
+  | `List [ `Assoc l2 ] ->
+      (* Check if the timeline is correct *)
+      assert (uri2 = List.assoc "uri" l2);
+      assert (content2 = List.assoc "content" l2);
+      ()
+  | _ -> assert false);
+
   Lwt.return_unit
 
 (*
@@ -239,6 +253,24 @@ let scenario2 token =
       assert (content2 = List.assoc "content" l2);
       ()
   | _ -> assert false);
+
+  (* Unfollow me from @admin@localhost:3000 *)
+  let%lwt _ =
+    fetch_exn ~meth:`POST ~headers
+      (mstdn ("/api/v1/accounts/" ^ aid ^ "/unfollow"))
+  in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get home timeline of @admin@localhost:3000 and check again *)
+  let%lwt r = fetch_exn ~headers (mstdn "/api/v1/timelines/home") in
+  (match Yojson.Safe.from_string r with
+  | `List [ `Assoc l ] ->
+      (* Check if the timeline is correct *)
+      assert (uri = List.assoc "uri" l);
+      assert (content = List.assoc "content" l);
+      ()
+  | _ -> assert false);
+
   Lwt.return_unit
 
 let () =
