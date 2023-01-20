@@ -1,0 +1,5 @@
+(executable
+ (name main)
+ (preprocess
+  (pps lwt_ppx))
+ (libraries cohttp cohttp-lwt-unix waq lwt lwt.unix yojson))

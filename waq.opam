@@ -16,6 +16,7 @@ depends: [
   "ocamlformat" {with-dev-setup}
   "base64"
   "bigstringaf"
+  "cohttp-lwt-unix"
   "cstruct"
   "dune" {>= "3.7"}
   "fpath"

@@ -26,6 +26,7 @@
   (ocamlformat :with-dev-setup)
   base64
   bigstringaf
+  cohttp-lwt-unix
   cstruct
   dune
   fpath
