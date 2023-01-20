@@ -6,6 +6,7 @@ type post_api_v1_statuses_res = {
   id : string;
   created_at : string;
   content : string;
+  uri : string;
 }
 [@@deriving make, yojson { strict = false }]
 
@@ -30,6 +31,6 @@ let post self_id status =
          Service.Create_note.kick f.account_id s);
   (* Return the result to the client *)
   make_post_api_v1_statuses_res ~id:(string_of_int s.id)
-    ~created_at:(Ptime.to_rfc3339 now) ~content:s.text
+    ~created_at:(Ptime.to_rfc3339 now) ~content:s.text ~uri:s.uri
   |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string |> Result.ok
   |> Lwt.return
