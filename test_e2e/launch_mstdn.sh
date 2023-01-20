@@ -29,7 +29,7 @@ foreman start >/dev/null 2>/dev/null &
 mstdn_pid=$!
 
 cleanup() {
-  killtree $mstdn_pid INT
+  killtree $mstdn_pid KILL
 }
 for sig in INT QUIT HUP TERM; do
   trap "

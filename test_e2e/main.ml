@@ -64,12 +64,17 @@ let new_mastodon_session f =
   Fun.protect
     (fun () -> f token)
     ~finally:(fun () ->
+      Log.debug (fun m -> m "Killing mastodon processes");
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
 
-let waq url =
-  let server_name = Sys.getenv "WAQ_SERVER_NAME" in
-  server_name ^ url
+let expect_string = function
+  | `String s -> s
+  | _ -> failwith "Expected string, got something different"
+
+let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
+let waq_server_domain = Uri.(of_string waq_server_name |> domain)
+let waq url = waq_server_name ^ url
 
 let mstdn url =
   let server_name = "http://localhost:3000" in
@@ -79,6 +84,9 @@ let pp_json (s : string) =
   Log.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
+(*
+ ========= Scenario 1 =========
+*)
 let scenario1 token =
   (* Lookup @admin@localhost:3000 *)
   let%lwt r =
@@ -155,10 +163,92 @@ let scenario1 token =
 
   Lwt.return_unit
 
+(*
+ ========= Scenario 2 =========
+*)
+let scenario2 token =
+  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+
+  (* Lookup me from localhost:3000 *)
+  let%lwt r =
+    fetch_exn ~headers
+      (mstdn "/api/v1/accounts/search?q=@foobar@"
+      ^ waq_server_domain ^ "&resolve=true")
+  in
+  let aid =
+    match Yojson.Safe.from_string r with
+    | `List [ `Assoc l ] -> l |> List.assoc "id" |> expect_string
+    | _ -> assert false
+  in
+
+  (* Follow me from @admin@localhost:3000 *)
+  let%lwt _ =
+    fetch_exn ~meth:`POST ~headers
+      (mstdn ("/api/v1/accounts/" ^ aid ^ "/follow"))
+  in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by @admin@localhost:3000 *)
+  let content = "こんにちは、世界！" in
+  let%lwt r =
+    let body =
+      `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
+    in
+    fetch_exn
+      ~headers:
+        [
+          ("Authorization", "Bearer " ^ token);
+          ("Accept", "application/json");
+          ("Content-Type", "application/json");
+        ]
+      ~meth:`POST ~body (mstdn "/api/v1/statuses")
+  in
+  let uri, content =
+    match Yojson.Safe.from_string r with
+    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
+    | _ -> assert false
+  in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by me *)
+  let content2 = "こんにちは、世界！２" in
+  let%lwt r =
+    let body =
+      `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
+    in
+    fetch_exn
+      ~headers:
+        [ ("Accept", "application/json"); ("Content-Type", "application/json") ]
+      ~meth:`POST ~body (waq "/api/v1/statuses")
+  in
+  let uri2, content2 =
+    match Yojson.Safe.from_string r with
+    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
+    | _ -> assert false
+  in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get home timeline of @admin@localhost:3000 and check *)
+  let%lwt r = fetch_exn ~headers (mstdn "/api/v1/timelines/home") in
+  (match Yojson.Safe.from_string r with
+  | `List [ `Assoc l2; `Assoc l ] ->
+      (* Check if the timeline is correct *)
+      assert (uri = List.assoc "uri" l);
+      assert (content = List.assoc "content" l);
+      assert (uri2 = List.assoc "uri" l2);
+      assert (content2 = List.assoc "content" l2);
+      ()
+  | _ -> assert false);
+  Lwt.return_unit
+
 let () =
+  print_newline ();
   Log.(add_reporter (make_reporter ~l:Debug ()));
-  new_session @@ fun () ->
-  new_mastodon_session @@ fun token ->
-  Log.debug (fun m -> m "Access token for Mastodon: %s" token);
-  Unix.sleep 10;
-  Lwt_main.run (scenario1 token)
+  [ (1, scenario1); (2, scenario2) ]
+  |> List.iter @@ fun (i, scenario) ->
+     Log.debug (fun m -> m "===== Scenario %d =====" i);
+     new_session @@ fun () ->
+     new_mastodon_session @@ fun token ->
+     Log.debug (fun m -> m "Access token for Mastodon: %s" token);
+     Unix.sleep 10;
+     Lwt_main.run @@ scenario token
