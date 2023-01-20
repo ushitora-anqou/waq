@@ -49,8 +49,11 @@ let new_session f =
     Sys.getenv_opt "WAQ_BIN" |> Option.value ~default:"test_e2e/launch_waq.sh"
   in
   let open Unix in
-  let pid = create_process path [| path |] stdin stdout stderr in
-  Fun.protect f ~finally:(fun () -> kill pid Sys.sigint)
+  let ic = open_process_args_in path [| path |] in
+  let pid = process_in_pid ic in
+  Fun.protect f ~finally:(fun () ->
+      kill pid Sys.sigint;
+      close_process_in ic |> ignore)
 
 let new_mastodon_session f =
   let path =
