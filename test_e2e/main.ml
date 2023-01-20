@@ -98,12 +98,12 @@ let scenario1 token =
     equal (from_string r)
       (from_string
          {|
-{
+[{
   "id": "2",
   "username": "admin",
   "acct": "admin@localhost:3000",
   "display_name": ""
-}|}));
+}]|}));
 
   (* Follow @admin@localhost:3000 *)
   fetch_exn ~meth:`POST (waq "/api/v1/accounts/2/follow") |> ignore_lwt;%lwt
