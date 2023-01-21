@@ -11,7 +11,7 @@ let server () =
 
 let db_reset () =
   let f =
-    (try%lwt Migration.rollback () with _ -> Lwt.return_unit);%lwt
+    Db.debug_drop_all_tables_in_db ();%lwt
     Migration.migrate ();%lwt
     let now = Ptime.now () in
     let%lwt a =
