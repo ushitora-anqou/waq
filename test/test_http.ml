@@ -200,7 +200,7 @@ let test_url () =
 
 let () =
   let open Alcotest in
-  Http.Signature.initialize ();
+  Crypto.initialize ();
   run "http"
     [
       ("parse_path", [ test_case "case1" `Quick test_parse_path ]);

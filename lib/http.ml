@@ -63,8 +63,6 @@ module Signature = struct
     |> List.map (fun (k, v) -> k ^ "=\"" ^ v ^ "\"" (* FIXME: escape? *))
     |> String.concat ","
 
-  let initialize () = Mirage_crypto_rng_lwt.initialize ()
-
   let generate_keypair () : keypair =
     let priv = X509.Private_key.generate ~bits:2048 `RSA in
     let pub = X509.Private_key.public priv in

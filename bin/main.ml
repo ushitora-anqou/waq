@@ -14,6 +14,7 @@ let db_reset () =
     Db.debug_drop_all_tables_in_db ();%lwt
     Migration.migrate ();%lwt
     let now = Ptime.now () in
+    (* Generate a new user named "foobar" *)
     let%lwt a =
       let username = "foobar" in
       let display_name = "Foobar's display name" in
@@ -39,12 +40,32 @@ let db_reset () =
   in
   Lwt_main.run f
 
+let oauth_generate_access_token ?(user_id = 1) () =
+  let f =
+    (* Generate a new OAuth application named "Web" *)
+    let%lwt web =
+      Oauth.generate_application ~name:"Web"
+        ~redirect_uri:"urn:ietf:wg:oauth:2.0:oob"
+        ~scopes:"read write follow push"
+    in
+    let%lwt access_token =
+      Oauth.generate_access_token ~scopes:"read write follow push"
+        ~resource_owner_id:user_id ~app:web
+    in
+    Lwt_io.printf "%s\n%!" access_token.token;%lwt
+    Lwt.return_unit
+  in
+  Lwt_main.run f
+
 let () =
   Log.(add_reporter (make_reporter ~l:Debug ()));
   C.load_file "config.yml";
-  Http.Signature.initialize ();
+  Crypto.initialize ();
   Db.initialize ();
   let subcommand =
     if Array.length Sys.argv < 2 then "server" else Sys.argv.(1)
   in
-  match subcommand with "db:reset" -> db_reset () | _ -> server ()
+  match subcommand with
+  | "db:reset" -> db_reset ()
+  | "oauth:generate_access_token" -> oauth_generate_access_token ()
+  | _ -> server ()

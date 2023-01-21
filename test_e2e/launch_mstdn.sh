@@ -1,6 +1,6 @@
 #!/usr/bin/bash -e
 
-MSTDN_PATH="/home/anqou/ano/mastodon"
+[ -z "${MSTDN_PATH}" ] && exit 1
 
 # Thanks to: https://stackoverflow.com/a/3211182
 # It is necessary to kill child processes recursively because node makes another process group.

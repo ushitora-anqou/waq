@@ -44,7 +44,12 @@ module Value = struct
 
   let expect_timestamp : t -> Ptime.t = function
     | `Timestamp t -> t
-    | v -> failwithf "Expect string, got: %s" (to_string v)
+    | v -> failwithf "Expect timestamp, got: %s" (to_string v)
+
+  let expect_timestamp_opt : t -> Ptime.t option = function
+    | `Null -> None
+    | `Timestamp t -> Some t
+    | v -> failwithf "Expect timestamp or null, got: %s" (to_string v)
 end
 
 type value = Value.t

@@ -31,6 +31,9 @@ let pack_impl loc (fields : label_declaration list) =
                    List.assoc [%e e_fname] l |> Sql.Value.expect_string_opt]
              | [%type: Ptime.t] ->
                  [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_timestamp]
+             | [%type: Ptime.t option] ->
+                 [%expr
+                   List.assoc [%e e_fname] l |> Sql.Value.expect_timestamp_opt]
              | _ -> assert false ))
   in
   [%stri
@@ -62,6 +65,11 @@ let unpack_impl loc (fields : label_declaration list) =
                  [%expr
                    match [%e value] with None -> `Null | Some v -> `String v]
              | [%type: Ptime.t] -> [%expr `Timestamp [%e value]]
+             | [%type: Ptime.t option] ->
+                 [%expr
+                   match [%e value] with
+                   | None -> `Null
+                   | Some v -> `Timestamp v]
              | _ -> assert false
            in
            (* e.g., ("id", `Int x.id) *)

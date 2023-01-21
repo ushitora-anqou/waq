@@ -40,7 +40,6 @@ let routes =
   let routes_from_clients =
     (* From clients *)
     let dispatch = dispatch app_json in
-    let self_id = 1 (* FIXME *) in
     let parse_req req =
       let%lwt body = body req in
       let hs =
@@ -65,11 +64,22 @@ let routes =
           query name req |> List.hd
     in
     let query_opt name req = try Some (query name req) with _ -> None in
+    let authenticate_user req =
+      try
+        let header = Http.headers req |> List.assoc "Authorization" in
+        assert (String.starts_with ~prefix:"Bearer " header);
+        let bearer_token = String.sub header 7 (String.length header - 7) in
+        let%lwt token = Oauth.authenticate_access_token bearer_token in
+        token.resource_owner_id |> Option.get |> Lwt.return
+      with _ -> failwith "Forbidden"
+    in
     [
       post "/api/v1/accounts/:id/follow" (fun req ->
+          let%lwt self_id = authenticate_user req in
           let id = param ":id" req |> int_of_string in
           dispatch @@ Controller.Api_v1_accounts_follow.post self_id id);
       post "/api/v1/accounts/:id/unfollow" (fun req ->
+          let%lwt self_id = authenticate_user req in
           let id = param ":id" req |> int_of_string in
           dispatch @@ Controller.Api_v1_accounts_unfollow.post self_id id);
       get "/api/v1/accounts/search" (fun req ->
@@ -87,12 +97,14 @@ let routes =
               @@ Controller.Api_v1_accounts_search.get resolve ~username ~domain
           | _ -> respond ~status:`Bad_request "");
       post "/api/v1/statuses" (fun req ->
+          let%lwt self_id = authenticate_user req in
           let%lwt req = parse_req req in
           match query_opt "status" req with
           | None -> respond ~status:`Bad_request ""
           | Some status ->
               dispatch @@ Controller.Api_v1_statuses.post self_id status);
       get "/api/v1/timelines/home" (fun req ->
+          let%lwt self_id = authenticate_user req in
           let%lwt req = parse_req req in
           let limit =
             req |> query_opt "limit" |> Option.map int_of_string

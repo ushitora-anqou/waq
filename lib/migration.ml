@@ -10,6 +10,9 @@ let all : (int * (module S)) list =
     (20221230220002, (module Migrate.M20221230_220002_create_statuses));
     (20221230220003, (module Migrate.M20221230_220003_create_follows));
     (20221230220004, (module Migrate.M20221230_220004_create_follow_requests));
+    (20230121195200, (module Migrate.M20230121_195200_create_oauth_applications));
+    ( 20230121195201,
+      (module Migrate.M20230121_195201_create_oauth_access_tokens) );
   ]
 
 let migrate () =

@@ -50,8 +50,11 @@ let new_session f =
   in
   let open Unix in
   let ic = open_process_args_in path [| path |] in
+  let token = In_channel.input_line ic |> Option.value ~default:"" in
   let pid = process_in_pid ic in
-  Fun.protect f ~finally:(fun () ->
+  Fun.protect
+    (fun () -> f token)
+    ~finally:(fun () ->
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
 
@@ -90,7 +93,10 @@ let pp_json (s : string) =
 (*
  ========= Scenario 1 =========
 *)
-let scenario1 token =
+let scenario1 waq_token mstdn_token =
+  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
+  let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
+
   (* Lookup @admin@localhost:3000 *)
   let%lwt r =
     fetch_exn
@@ -109,7 +115,8 @@ let scenario1 token =
 }]|}));
 
   (* Follow @admin@localhost:3000 *)
-  fetch_exn ~meth:`POST (waq "/api/v1/accounts/2/follow") |> ignore_lwt;%lwt
+  fetch_exn ~meth:`POST ~headers:[ waq_auth ] (waq "/api/v1/accounts/2/follow")
+  |> ignore_lwt;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @admin@localhost:3000 *)
@@ -121,7 +128,7 @@ let scenario1 token =
     fetch_exn
       ~headers:
         [
-          ("Authorization", "Bearer " ^ token);
+          mstdn_auth;
           ("Accept", "application/json");
           ("Content-Type", "application/json");
         ]
@@ -142,7 +149,11 @@ let scenario1 token =
     in
     fetch_exn
       ~headers:
-        [ ("Accept", "application/json"); ("Content-Type", "application/json") ]
+        [
+          waq_auth;
+          ("Accept", "application/json");
+          ("Content-Type", "application/json");
+        ]
       ~meth:`POST ~body (waq "/api/v1/statuses")
   in
   let uri2, content2 =
@@ -153,7 +164,7 @@ let scenario1 token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get my home timeline and check *)
-  let%lwt r = fetch_exn (waq "/api/v1/timelines/home") in
+  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
   (match Yojson.Safe.from_string r with
   | `List [ `Assoc l2; `Assoc l ] ->
       (* Check if the timeline is correct *)
@@ -165,11 +176,13 @@ let scenario1 token =
   | _ -> assert false);
 
   (* Unfollow @admin@localhost:3000 *)
-  fetch_exn ~meth:`POST (waq "/api/v1/accounts/2/unfollow") |> ignore_lwt;%lwt
+  fetch_exn ~meth:`POST ~headers:[ waq_auth ]
+    (waq "/api/v1/accounts/2/unfollow")
+  |> ignore_lwt;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get my home timeline and check again *)
-  let%lwt r = fetch_exn (waq "/api/v1/timelines/home") in
+  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
   (match Yojson.Safe.from_string r with
   | `List [ `Assoc l2 ] ->
       (* Check if the timeline is correct *)
@@ -183,12 +196,13 @@ let scenario1 token =
 (*
  ========= Scenario 2 =========
 *)
-let scenario2 token =
-  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+let scenario2 waq_token mstdn_token =
+  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
+  let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
 
   (* Lookup me from localhost:3000 *)
   let%lwt r =
-    fetch_exn ~headers
+    fetch_exn ~headers:[ mstdn_auth ]
       (mstdn "/api/v1/accounts/search?q=@foobar@"
       ^ waq_server_domain ^ "&resolve=true")
   in
@@ -200,7 +214,7 @@ let scenario2 token =
 
   (* Follow me from @admin@localhost:3000 *)
   let%lwt _ =
-    fetch_exn ~meth:`POST ~headers
+    fetch_exn ~meth:`POST ~headers:[ mstdn_auth ]
       (mstdn ("/api/v1/accounts/" ^ aid ^ "/follow"))
   in
   Lwt_unix.sleep 1.0;%lwt
@@ -214,7 +228,7 @@ let scenario2 token =
     fetch_exn
       ~headers:
         [
-          ("Authorization", "Bearer " ^ token);
+          mstdn_auth;
           ("Accept", "application/json");
           ("Content-Type", "application/json");
         ]
@@ -235,7 +249,11 @@ let scenario2 token =
     in
     fetch_exn
       ~headers:
-        [ ("Accept", "application/json"); ("Content-Type", "application/json") ]
+        [
+          waq_auth;
+          ("Accept", "application/json");
+          ("Content-Type", "application/json");
+        ]
       ~meth:`POST ~body (waq "/api/v1/statuses")
   in
   let uri2, content2 =
@@ -246,7 +264,9 @@ let scenario2 token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get home timeline of @admin@localhost:3000 and check *)
-  let%lwt r = fetch_exn ~headers (mstdn "/api/v1/timelines/home") in
+  let%lwt r =
+    fetch_exn ~headers:[ mstdn_auth ] (mstdn "/api/v1/timelines/home")
+  in
   (match Yojson.Safe.from_string r with
   | `List [ `Assoc l2; `Assoc l ] ->
       (* Check if the timeline is correct *)
@@ -259,13 +279,15 @@ let scenario2 token =
 
   (* Unfollow me from @admin@localhost:3000 *)
   let%lwt _ =
-    fetch_exn ~meth:`POST ~headers
+    fetch_exn ~meth:`POST ~headers:[ mstdn_auth ]
       (mstdn ("/api/v1/accounts/" ^ aid ^ "/unfollow"))
   in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get home timeline of @admin@localhost:3000 and check again *)
-  let%lwt r = fetch_exn ~headers (mstdn "/api/v1/timelines/home") in
+  let%lwt r =
+    fetch_exn ~headers:[ mstdn_auth ] (mstdn "/api/v1/timelines/home")
+  in
   (match Yojson.Safe.from_string r with
   | `List [ `Assoc l ] ->
       (* Check if the timeline is correct *)
@@ -282,8 +304,9 @@ let () =
   [ (1, scenario1); (2, scenario2) ]
   |> List.iter @@ fun (i, scenario) ->
      Log.debug (fun m -> m "===== Scenario %d =====" i);
-     new_session @@ fun () ->
-     new_mastodon_session @@ fun token ->
-     Log.debug (fun m -> m "Access token for Mastodon: %s" token);
+     new_session @@ fun waq_token ->
+     Log.debug (fun m -> m "Access token for Waq: %s" waq_token);
+     new_mastodon_session @@ fun mstdn_token ->
+     Log.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
      Unix.sleep 10;
-     Lwt_main.run @@ scenario token
+     Lwt_main.run @@ scenario waq_token mstdn_token
