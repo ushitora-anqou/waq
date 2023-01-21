@@ -81,7 +81,6 @@ module Make (D : Driver) = struct
   let log =
     let open String in
     let max_length = 30 in
-    let re = regex {|[ \n\r]+|} in
     let conv = function
       | `Null -> "NULL"
       | `String s ->
@@ -96,7 +95,10 @@ module Make (D : Driver) = struct
     fun sql params ->
       Log.debug (fun m ->
           m "\o033[1;34m%s\o033[0m [%s]"
-            (sql |> trim |> Re.replace_string ~all:true re ~by:" ")
+            (sql |> split_on_char '\n' |> List.map trim
+            |> List.filter (( <> ) "")
+            |> List.filter (starts_with ~prefix:"--" |$> not)
+            |> concat " " |> trim)
             (params |> List.map conv |> concat "; "))
 
   let execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
