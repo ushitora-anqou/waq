@@ -1,8 +1,9 @@
 open Activity
 
 (* Recv GET /.well-known/webfinger *)
-let get s =
+let get req =
   try%lwt
+    let s = req |> Httpx.query "resource" in
     let s =
       (* Remove 'acct:' prefix if exists *)
       if String.starts_with ~prefix:"acct:" s then
@@ -12,7 +13,7 @@ let get s =
     (* Get account name and domain and check if they are correct *)
     let s = String.split_on_char '@' s in
     if not (List.length s = 2 && Config.is_my_domain (List.nth s 1)) then
-      raise (failwith "Invalid request");
+      failwith "Invalid request";
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
     let%lwt _ = Db.User.get ~by:(`username name) in
@@ -27,10 +28,11 @@ let get s =
           |> webfinger_link_to_yojson;
         ]
       ()
-    |> webfinger_to_yojson |> Yojson.Safe.to_string |> Result.ok |> Lwt.return
+    |> webfinger_to_yojson |> Yojson.Safe.to_string
+    |> Http.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Log.debug (fun m ->
         m "[well_known_webfinger] Can't find user: %s\n%s"
           (Printexc.to_string e)
           (Printexc.get_backtrace ()));
-    Lwt.return (Error `Not_found)
+    Http.raise_error_response `Not_found

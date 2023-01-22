@@ -1,7 +1,7 @@
 open Activity
 
 (* Recv GET /.well-known/host-meta *)
-let get () =
+let get _req =
   let url = url [ ".well-known"; "webfinger" ] in
   Jingoo.Jg_template.from_string
     ~models:[ ("url", Tstr url) ]
@@ -9,4 +9,4 @@ let get () =
 <XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
   <Link rel="lrdd" template="{{ url }}?resource={uri}"/>
 </XRD>|}
-  |> Lwt.return
+  |> Http.respond ~headers:[ Helper.content_type_app_xrd_xml ]

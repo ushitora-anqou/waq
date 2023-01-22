@@ -20,7 +20,18 @@ type status = {
 let acct (username : string) (domain : string option) : string =
   match domain with None -> username | Some domain -> username ^ "@" ^ domain
 
-let get ~self_id ~max_id ~since_id ~limit =
+let parse_req req =
+  let open Httpx in
+  let%lwt self_id = authenticate_user req in
+  let limit = req |> query ~default:"20" "limit" |> int_of_string in
+  let limit = min limit 40 in
+  let max_id = req |> query_opt "max_id" |> Option.map int_of_string in
+  let since_id = req |> query_opt "since_id" |> Option.map int_of_string in
+  Lwt.return (self_id, max_id, since_id, limit)
+
+let get req =
+  let%lwt self_id, max_id, since_id, limit = parse_req req in
+
   let conv (s : Db.Status.t) =
     let%lwt a = Db.Account.get ~by:(`id s.account_id) in
     let account =
@@ -35,4 +46,5 @@ let get ~self_id ~max_id ~since_id ~limit =
   in
   let%lwt statuses = Db.home_timeline ~id:self_id ~limit ~max_id ~since_id in
   let%lwt statuses = Lwt_list.map_p conv statuses in
-  `List statuses |> Yojson.Safe.to_string |> Result.ok |> Lwt.return
+  `List statuses |> Yojson.Safe.to_string
+  |> Http.respond ~headers:[ Helper.content_type_app_json ]

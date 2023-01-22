@@ -1,9 +1,6 @@
 open Util
 module Uri = Http.Uri
 
-exception Bad_request
-exception Internal_server_error
-
 let context = `String "https://www.w3.org/ns/activitystreams"
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
 
@@ -127,7 +124,7 @@ let fetch_account ?(scheme = "https") by =
       match%lwt Db.Account.get ~by:(`domain_username (domain, username)) with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound when domain = None (* Local *) ->
-          raise Not_found
+          failwith "Couldn't fetch the account"
       | exception Sql.NoRowFound ->
           let domain = Option.get domain in
           let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
@@ -166,4 +163,4 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
   @@
   match res with
   | Ok (status, _body) when Httpaf.Status.is_successful status -> ()
-  | _ -> raise Internal_server_error
+  | _ -> failwith "Failed to post activity to inbox"

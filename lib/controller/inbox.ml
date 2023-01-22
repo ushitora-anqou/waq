@@ -7,11 +7,11 @@ let kick_inbox_follow (req : ap_inbox) =
   let src, dst =
     match (req.actor, req.obj) with
     | `String s, `String d when is_my_domain d -> (s, d)
-    | _ -> raise Bad_request
+    | _ -> Http.raise_error_response `Bad_request
   in
   let%lwt src = fetch_account (`Uri src) in
   match%lwt Db.Account.get ~by:(`uri dst) with
-  | exception Sql.NoRowFound -> raise Bad_request
+  | exception Sql.NoRowFound -> Http.raise_error_response `Bad_request
   | dst ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
       let%lwt f =
@@ -36,11 +36,11 @@ let kick_inbox_accept (req : ap_inbox) =
     | `Assoc l -> (
         match l |> List.assoc_opt "id" with
         | Some (`String uri) -> uri
-        | _ -> raise Bad_request)
-    | _ -> raise Bad_request
+        | _ -> Http.raise_error_response `Bad_request)
+    | _ -> Http.raise_error_response `Bad_request
   in
   match%lwt Db.FollowRequest.get ~by:(`uri uri) with
-  | exception Sql.NoRowFound -> raise Bad_request
+  | exception Sql.NoRowFound -> Http.raise_error_response `Bad_request
   | r ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
       let now = Ptime.now () in
@@ -58,14 +58,14 @@ let kick_inbox_undo (req : ap_inbox) =
   | "Follow" ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
       Db.Follow.delete ~by:(`uri obj.id)
-  | _ -> raise Bad_request
+  | _ -> Http.raise_error_response `Bad_request
 
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =
   let note = req.obj in
   let published =
     match Ptime.of_rfc3339 note.published with
-    | Error _ -> raise Bad_request
+    | Error _ -> Http.raise_error_response `Bad_request
     | Ok (t, _, _) -> t
   in
   Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
@@ -75,14 +75,18 @@ let kick_inbox_create (req : ap_create) =
   |> Db.Status.insert |> ignore_lwt
 
 (* Recv POST /users/:name/inbox *)
-let post body =
+let post req =
+  let body = Httpx.body req in
   let j = Yojson.Safe.from_string body in
-  match ap_inbox_of_yojson j with
-  | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
-  | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
-  | Ok ({ typ = "Undo"; _ } as r) -> kick_inbox_undo r
-  | Ok { typ = "Create"; _ } -> (
-      match ap_create_of_yojson j with
-      | Ok req -> kick_inbox_create req
-      | _ -> Lwt.return_unit)
-  | _ -> Lwt.return_unit
+  let%lwt () =
+    match ap_inbox_of_yojson j with
+    | Ok ({ typ = "Accept"; _ } as r) -> kick_inbox_accept r
+    | Ok ({ typ = "Follow"; _ } as r) -> kick_inbox_follow r
+    | Ok ({ typ = "Undo"; _ } as r) -> kick_inbox_undo r
+    | Ok { typ = "Create"; _ } -> (
+        match ap_create_of_yojson j with
+        | Ok req -> kick_inbox_create req
+        | _ -> Lwt.return_unit)
+    | _ -> Lwt.return_unit
+  in
+  Http.respond ~status:`Accepted ""

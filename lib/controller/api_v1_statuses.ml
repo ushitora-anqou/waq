@@ -10,7 +10,10 @@ type post_api_v1_statuses_res = {
 }
 [@@deriving make, yojson { strict = false }]
 
-let post self_id status =
+let post req =
+  let%lwt self_id = Httpx.authenticate_user req in
+  let status = req |> Httpx.query "status" in
+
   let now = Ptime.now () in
   let%lwt self = Db.Account.get ~by:(`id self_id) in
   (* Insert status *)
@@ -32,5 +35,5 @@ let post self_id status =
   (* Return the result to the client *)
   make_post_api_v1_statuses_res ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 now) ~content:s.text ~uri:s.uri
-  |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string |> Result.ok
-  |> Lwt.return
+  |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string
+  |> Http.respond ~headers:[ Helper.content_type_app_json ]
