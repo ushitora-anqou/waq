@@ -44,4 +44,6 @@ module Ptime = struct
     let day_name = weekday v |> string_of_week in
     Printf.sprintf "%s, %02d %s %d %02d:%02d:%02d GMT" day_name day_of_month
       month year hour minute second
+
+  let to_int : t -> int = to_span |$> Span.to_int_s |$> Option.get
 end

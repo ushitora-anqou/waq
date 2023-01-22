@@ -248,6 +248,9 @@ RETURNING *
   let get ~by =
     do_query @@ fun c ->
     match by with
+    | `id id ->
+        query_row c {|SELECT * FROM oauth_applications WHERE id = $1|}
+          ~p:[ `Int id ]
     | `uid uid ->
         query_row c {|SELECT * FROM oauth_applications WHERE uid = $1|}
           ~p:[ `String uid ]
