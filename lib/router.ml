@@ -19,6 +19,7 @@ let routes_from_clients =
     get "/api/v1/accounts/search" Controller.Api_v1_accounts_search.get;
     post "/api/v1/statuses" Controller.Api_v1_statuses.post;
     get "/api/v1/timelines/home" Controller.Api_v1_timelines_home.get;
+    post "/api/v1/apps" Controller.Api_v1_apps.post;
   ]
 
 let routes = Http.router (routes_from_servers @ routes_from_clients)
