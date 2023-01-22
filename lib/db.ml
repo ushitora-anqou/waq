@@ -244,6 +244,47 @@ VALUES (
 RETURNING *
 |}
       o
+
+  let get ~by =
+    do_query @@ fun c ->
+    match by with
+    | `uid uid ->
+        query_row c {|SELECT * FROM oauth_applications WHERE uid = $1|}
+          ~p:[ `String uid ]
+end
+
+module OAuthAccessGrant = struct
+  type t = {
+    id : int;
+    token : string;
+    expires_in : int;
+    redirect_uri : string;
+    created_at : Ptime.t;
+    scopes : string option;
+    application_id : int option;
+    resource_owner_id : int option;
+  }
+  [@@deriving make, sql]
+
+  let get ~by =
+    do_query @@ fun c ->
+    match by with
+    | `token token ->
+        query_row c {|
+SELECT * FROM oauth_access_grants
+WHERE token = $1|}
+          ~p:[ `String token ]
+
+  let insert o =
+    do_query @@ fun c ->
+    named_query_row c
+      {|
+INSERT INTO oauth_access_grants (
+  token, expires_in, redirect_uri, created_at, scopes, application_id, resource_owner_id )
+VALUES (
+  :token, :expires_in, :redirect_uri, :created_at, :scopes, :application_id, :resource_owner_id )
+RETURNING *|}
+      o
 end
 
 module OAuthAccessToken = struct
@@ -276,13 +317,6 @@ VALUES (
   :token, :created_at, :scopes, :application_id, :resource_owner_id )
 RETURNING *|}
       o
-
-  let generate_new ~scopes ~resource_owner_id ~(app : OAuthApplication.t) =
-    let now = Ptime.now () in
-    let token = Crypto.SecureRandom.unique_token () in
-    make ~id:0 ~token ~created_at:now ~scopes ~application_id:app.id
-      ~resource_owner_id ()
-    |> insert
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =

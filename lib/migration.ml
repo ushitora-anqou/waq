@@ -13,6 +13,8 @@ let all : (int * (module S)) list =
     (20230121195200, (module Migrate.M20230121_195200_create_oauth_applications));
     ( 20230121195201,
       (module Migrate.M20230121_195201_create_oauth_access_tokens) );
+    ( 20230122_183000,
+      (module Migrate.M20230122_183000_create_oauth_access_grants) );
   ]
 
 let migrate () =
