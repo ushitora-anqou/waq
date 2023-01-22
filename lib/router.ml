@@ -71,7 +71,7 @@ let routes =
         let bearer_token = String.sub header 7 (String.length header - 7) in
         let%lwt token = Oauth.authenticate_access_token bearer_token in
         token.resource_owner_id |> Option.get |> Lwt.return
-      with _ -> failwith "Forbidden"
+      with _ -> Http.raise_error_response `Forbidden
     in
     [
       post "/api/v1/accounts/:id/follow" (fun req ->

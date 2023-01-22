@@ -181,6 +181,11 @@ type path = [ `L of string | `P of string ] list
 type method_ = Method.t
 type route = method_ * path * handler
 
+exception ErrorResponse of Status.t * string
+
+let raise_error_response ?(body = "") status =
+  raise (ErrorResponse (status, body))
+
 let read_body_async (body : [ `read ] Body.t) : string Lwt.t =
   let promise, resolver = Lwt.wait () in
   let length = ref 0 in
@@ -248,13 +253,15 @@ let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
   try%lwt
     (* Invoke the handler *)
     let%lwt res =
-      try%lwt handler (make_request ~query ~param ~body ~headers ())
-      with e ->
-        Log.err (fun m ->
-            m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
-              (Printexc.to_string e)
-              (Printexc.get_backtrace ()));
-        Lwt.return @@ make_response ~status:`Internal_server_error ()
+      try%lwt handler (make_request ~query ~param ~body ~headers ()) with
+      | ErrorResponse (status, body) ->
+          Lwt.return @@ make_response ~status ~body ()
+      | e ->
+          Log.err (fun m ->
+              m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
+                (Printexc.to_string e)
+                (Printexc.get_backtrace ()));
+          Lwt.return @@ make_response ~status:`Internal_server_error ()
     in
     (* Construct headers *)
     let headers =
