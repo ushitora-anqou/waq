@@ -30,9 +30,12 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url =
     let status = Response.status resp in
     Log.debug (fun m ->
         m "[fetch] %s %s --> %s" meth_s url (Code.string_of_status status));
-    let _headers = Response.headers resp in
+    let headers =
+      Response.headers resp |> Header.to_list
+      |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
+    in
     let%lwt body = Cohttp_lwt.Body.to_string body in
-    Lwt.return_ok (status, body)
+    Lwt.return_ok (status, headers, body)
   with e ->
     let backtrace = Printexc.get_backtrace () in
     Log.err (fun m ->
@@ -41,7 +44,7 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url =
 
 let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") url =
   match%lwt fetch ~meth ~headers ~body url with
-  | Ok (`OK, body) -> Lwt.return body
+  | Ok (`OK, _, body) -> Lwt.return body
   | _ -> failwith "fetch_exn failed"
 
 let new_session f =
@@ -298,15 +301,92 @@ let scenario2 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let () =
-  print_newline ();
-  Log.(add_reporter (make_reporter ~l:Debug ()));
+let scenario3 _waq_token =
+  let%lwt r =
+    fetch_exn ~meth:`POST
+      ~headers:[ ("Content-Type", "application/json") ]
+      ~body:{|{"client_name":"foo","redirect_uris":"http://example.com"}|}
+      (waq "/api/v1/apps")
+  in
+  let client_id, client_secret =
+    match Yojson.Safe.from_string r with
+    | `Assoc l ->
+        ( List.assoc "client_id" l |> expect_string,
+          List.assoc "client_secret" l |> expect_string )
+    | _ -> assert false
+  in
+
+  let%lwt r =
+    fetch
+      (waq "/oauth/authorize?response_type=code&client_id="
+      ^ client_id ^ "&redirect_uri=http://example.com")
+  in
+  let auth_code =
+    match r with
+    | Ok (`Found, headers, _body) ->
+        (* 0123456789012345678901234
+           http://example.com?code=... *)
+        let loc = headers |> List.assoc "location" in
+        String.sub loc 24 (String.length loc - 24)
+    | _ -> assert false
+  in
+
+  let%lwt r =
+    fetch_exn ~meth:`POST
+      ~headers:[ ("Content-Type", "application/json") ]
+      ~body:
+        (`Assoc
+           [
+             ("grant_type", `String "authorization_code");
+             ("code", `String auth_code);
+             ("client_id", `String client_id);
+             ("client_secret", `String client_secret);
+             ("redirect_uri", `String "http://example.com");
+           ]
+        |> Yojson.Safe.to_string)
+      (waq "/oauth/token")
+  in
+  let access_token =
+    match Yojson.Safe.from_string r with
+    | `Assoc l -> l |> List.assoc "access_token" |> expect_string
+    | _ -> assert false
+  in
+
+  let%lwt r =
+    fetch_exn
+      ~headers:[ ("Authorization", "Bearer " ^ access_token) ]
+      (waq "/api/v1/apps/verify_credentials")
+  in
+  assert (
+    match Yojson.Safe.from_string r with
+    | `Assoc l -> l |> List.assoc "name" |> expect_string = "foo"
+    | _ -> false);
+
+  Lwt.return_unit
+
+let scenarios_with_waq_and_mstdn () =
   [ (1, scenario1); (2, scenario2) ]
   |> List.iter @@ fun (i, scenario) ->
-     Log.debug (fun m -> m "===== Scenario %d =====" i);
+     Log.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
      new_session @@ fun waq_token ->
      Log.debug (fun m -> m "Access token for Waq: %s" waq_token);
      new_mastodon_session @@ fun mstdn_token ->
      Log.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
      Unix.sleep 10;
      Lwt_main.run @@ scenario waq_token mstdn_token
+
+let scenarios_with_waq () =
+  [ (1, scenario3) ]
+  |> List.iter @@ fun (i, scenario) ->
+     Log.debug (fun m -> m "===== Scenario waq-%d =====" i);
+     new_session @@ fun waq_token ->
+     Log.debug (fun m -> m "Access token for Waq: %s" waq_token);
+     Unix.sleep 1;
+     Lwt_main.run @@ scenario waq_token
+
+let () =
+  print_newline ();
+  Log.(add_reporter (make_reporter ~l:Debug ()));
+  scenarios_with_waq ();
+  scenarios_with_waq_and_mstdn ();
+  ()
