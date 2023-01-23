@@ -56,11 +56,16 @@ let call ~meth target f =
 let get = call ~meth:`GET
 let post = call ~meth:`POST
 
-let authenticate_user (r : request) =
+let authenticate_bearer (r : request) =
   try
     let header = r.headers |> List.assoc "authorization" in
     assert (String.starts_with ~prefix:"Bearer " header);
     let bearer_token = String.sub header 7 (String.length header - 7) in
-    let%lwt token = Oauth.authenticate_access_token bearer_token in
+    Oauth.authenticate_access_token bearer_token
+  with _ -> Http.raise_error_response `Unauthorized
+
+let authenticate_user (r : request) =
+  try
+    let%lwt token = authenticate_bearer r in
     token.resource_owner_id |> Option.get |> Lwt.return
-  with _ -> Http.raise_error_response `Forbidden
+  with _ -> Http.raise_error_response `Unauthorized

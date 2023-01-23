@@ -1,0 +1,9 @@
+type res = { name : string } [@@deriving make, yojson]
+
+let get req =
+  let%lwt token = Httpx.authenticate_bearer req in
+  let%lwt app =
+    Db.OAuthApplication.get ~by:(`id (Option.get token.application_id))
+  in
+  make_res ~name:app.name |> res_to_yojson |> Yojson.Safe.to_string
+  |> Http.respond

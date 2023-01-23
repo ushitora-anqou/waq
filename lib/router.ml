@@ -22,6 +22,8 @@ let routes_from_clients =
     post "/api/v1/apps" Controller.Api_v1_apps.post;
     get "/oauth/authorize" Controller.Oauth_authorize.get;
     post "/oauth/token" Controller.Oauth_token.post;
+    get "/api/v1/apps/verify_credentials"
+      Controller.Api_v1_apps_verify_credentials.get;
   ]
 
 let routes = Http.router (routes_from_servers @ routes_from_clients)
