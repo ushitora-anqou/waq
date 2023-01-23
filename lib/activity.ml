@@ -162,5 +162,7 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
   Lwt.return
   @@
   match res with
-  | Ok (status, _body) when Httpaf.Status.is_successful status -> ()
+  | Ok (status, _, _body)
+    when Cohttp.Code.(status |> code_of_status |> is_success) ->
+      ()
   | _ -> failwith "Failed to post activity to inbox"

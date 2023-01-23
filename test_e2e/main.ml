@@ -3,49 +3,8 @@ module Uri = Waq.Http.Uri
 module Ptime = Waq.Util.Ptime
 
 let ignore_lwt = Waq.Util.ignore_lwt
-
-let fetch ?(headers = []) ?(meth = `GET) ?(body = "") url =
-  let open Cohttp in
-  let open Cohttp_lwt_unix in
-  let uri = Uri.of_string url in
-  let meth_s = match meth with `GET -> "GET" | `POST -> "POST" in
-  let headers =
-    let headers =
-      ("content-length", body |> String.length |> string_of_int)
-      :: ("connection", "close")
-      :: ("host", Uri.http_host uri)
-      :: ("date", Ptime.(now () |> to_http_date))
-      :: headers
-    in
-    Header.of_list headers
-  in
-  try%lwt
-    let%lwt resp, body =
-      match meth with
-      | `GET -> Client.get ~headers uri
-      | `POST ->
-          let body = Cohttp_lwt.Body.of_string body in
-          Client.post ~headers ~body uri
-    in
-    let status = Response.status resp in
-    Log.debug (fun m ->
-        m "[fetch] %s %s --> %s" meth_s url (Code.string_of_status status));
-    let headers =
-      Response.headers resp |> Header.to_list
-      |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
-    in
-    let%lwt body = Cohttp_lwt.Body.to_string body in
-    Lwt.return_ok (status, headers, body)
-  with e ->
-    let backtrace = Printexc.get_backtrace () in
-    Log.err (fun m ->
-        m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
-    Lwt.return_error ()
-
-let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") url =
-  match%lwt fetch ~meth ~headers ~body url with
-  | Ok (`OK, _, body) -> Lwt.return body
-  | _ -> failwith "fetch_exn failed"
+let fetch = Waq.Http.fetch
+let fetch_exn = Waq.Http.fetch_exn
 
 let new_session f =
   let path =

@@ -12,6 +12,8 @@
  (libraries
   base64
   bigstringaf
+  cohttp
+  cohttp-lwt-unix
   cstruct
   fpath
   httpaf

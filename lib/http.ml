@@ -344,78 +344,66 @@ let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = r.body
 let headers (r : request) : (string * string) list = r.headers
 
-let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
-    (url : string) : (Status.t * string, unit) result Lwt.t =
-  try%lwt
-    let url = Uri.of_string url in
-    let path = Uri.path_query_fragment url in
-    let%lwt addr =
-      let host = Uri.host url |> Option.get in
-      let port = Uri.getaddrinfo_port url in
-      Lwt_unix.getaddrinfo host port [ Unix.(AI_FAMILY PF_INET) ]
-    in
-    let socket = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    let%lwt () = Lwt_unix.connect socket (List.hd addr).Unix.ai_addr in
-    let promise, resolver = Lwt.wait () in
+let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
+  let open Cohttp in
+  let open Cohttp_lwt_unix in
+  let uri = Uri.of_string url in
+
+  (* NOTE: Ad-hoc scheme rewriting (https -> http) for localhost
+     for better dev experience *)
+  let uri =
+    match Uri.scheme uri with
+    | Some "https"
+      when [ Some "localhost"; Some "127.0.0.1" ] |> List.mem (Uri.host uri) ->
+        Uri.with_scheme uri (Some "http")
+    | _ -> uri
+  in
+
+  let meth_s = Method.to_string meth in
+  let headers =
     let headers =
-      let headers =
-        ("content-length", body |> String.length |> string_of_int)
-        :: ("connection", "close")
-        :: ("host", Uri.http_host url)
-        :: ("date", Ptime.(now () |> to_http_date))
-        :: headers
-      in
-      let headers =
-        match sign with
-        | None -> headers
-        | Some (priv_key, key_id, signed_headers) ->
-            Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth
-              ~path ~body:(Some body)
-      in
-      Headers.of_list headers
+      ("content-length", body |> String.length |> string_of_int)
+      :: ("connection", "close")
+      :: ("host", Uri.http_host uri)
+      :: ("date", Ptime.(now () |> to_http_date))
+      :: headers
     in
-    let response_handler response response_body =
-      match response with
-      | { Response.status; _ } ->
-          Lwt.async @@ fun () ->
-          let%lwt body = read_body_async response_body in
-          Lwt.wakeup_later resolver (status, body);
-          Lwt.return_unit
+    let headers =
+      match sign with
+      | None -> headers
+      | Some (priv_key, key_id, signed_headers) ->
+          Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth
+            ~path:(Uri.path_query_fragment uri)
+            ~body:(Some body)
     in
-    let error_handler error =
-      let error =
-        match error with
-        | `Malformed_response err -> Format.sprintf "Malformed response: %s" err
-        | `Invalid_response_body_length _ -> "Invalid body length"
-        | `Exn exn -> Format.sprintf "Exn raised: %s" (Printexc.to_string exn)
-      in
-      Log.err (fun m -> m "[fetch] Error handling response: %s" error);
-      Lwt.wakeup_later_exn resolver (Failure "Error handling response")
+    Header.of_list headers
+  in
+  try%lwt
+    let%lwt resp, body =
+      match meth with
+      | `GET -> Client.get ~headers uri
+      | `POST ->
+          let body = Cohttp_lwt.Body.of_string body in
+          Client.post ~headers ~body uri
+      | _ -> failwith "Not implemented method"
     in
+    let status = Response.status resp in
     Log.debug (fun m ->
-        m "[fetch] %s %s\n%s\n%s" (Method.to_string meth) (Uri.to_string url)
-          (Headers.to_string headers)
-          body);
-    let request_body =
-      Client.request ~response_handler ~error_handler socket
-        (Request.create ~headers meth path)
+        m "[fetch] %s %s --> %s" meth_s url (Code.string_of_status status));
+    let headers =
+      Response.headers resp |> Header.to_list
+      |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
     in
-    Body.write_string request_body body;
-    Body.close_writer request_body;
-    let%lwt status, body = promise in
-    Log.debug (fun m ->
-        m "[fetch] %s %s --> %s \"%s\"" (Method.to_string meth)
-          (Uri.to_string url) (Status.to_string status) body);
-    Lwt.return (Ok (status, body))
+    let%lwt body = Cohttp_lwt.Body.to_string body in
+    Lwt.return_ok (status, headers, body)
   with e ->
     let backtrace = Printexc.get_backtrace () in
     Log.err (fun m ->
-        m "[fetch] %s %s: %s\n%s" (Method.to_string meth) url
-          (Printexc.to_string e) backtrace);
-    Lwt.return (Error ())
+        m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
+    Lwt.return_error ()
 
 let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     (url : string) : string Lwt.t =
   match%lwt fetch ~headers ~meth ~body ~sign url with
-  | Ok (`OK, body) -> Lwt.return body
+  | Ok (`OK, _, body) -> Lwt.return body
   | _ -> failwith "fetch_exn failed"
