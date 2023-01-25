@@ -130,11 +130,30 @@ let save_one_impl loc (fields : label_declaration list) (td : type_declaration)
        let [%p ppat_var ~loc { loc; txt = funname }] =
         fun x -> do_query @@ fun c -> named_query_row c [%e estring ~loc sql] x]
 
-let get_one_impl loc (fields : label_declaration list) (td : type_declaration) =
+let general_where_impl kind loc (fields : label_declaration list)
+    (td : type_declaration) =
   Attribute.get Attrs.table_name td
   |> Option.map @@ fun table_name ->
      Ast_helper.with_default_loc loc @@ fun () ->
-     let funname = "get_one" in
+     let funname =
+       match kind with
+       | `GetOne -> "get_one"
+       | `GetMany -> "get_many"
+       | `Delete -> "delete"
+     in
+     let execute_func_ast, sql_prefix =
+       match kind with
+       | `GetOne ->
+           ( [%expr Lwt.map pack (Sql.named_query_row c sql ~p:params)],
+             "SELECT * FROM " ^ table_name ^ " WHERE " )
+       | `GetMany ->
+           ( [%expr Lwt.map (List.map pack) (Sql.named_query c sql ~p:params)],
+             "SELECT * FROM " ^ table_name ^ " WHERE " )
+       | `Delete ->
+           ( [%expr Sql.named_execute c sql ~p:params],
+             "DELETE FROM " ^ table_name ^ " WHERE " )
+     in
+
      let columns = fields |> List.map (fun f -> f.pld_name.txt) in
      let varnames =
        "where" :: "p" :: columns
@@ -204,15 +223,12 @@ let get_one_impl loc (fields : label_declaration list) (td : type_declaration) =
                                   x :: query)
                          in
                          let sql =
-                           [%e
-                             estring ~loc
-                               ("SELECT * FROM " ^ table_name ^ " WHERE ")]
+                           [%e estring ~loc sql_prefix]
                            ^ (query
                              |> List.map (fun x -> "(" ^ x ^ ")")
                              |> String.concat " AND ")
                          in
-                         do_query @@ fun c ->
-                         Lwt.map pack (Sql.named_query_row c sql ~p:params)]]]
+                         do_query @@ fun c -> [%e execute_func_ast]]]]
      in
      [%stri let [%p ppat_var ~loc { loc; txt = funname }] = [%e body]]
 
@@ -242,7 +258,9 @@ let generate_impl ~ctxt (_rec_flag, type_declarations) =
              ]
              @ ([
                   save_one_impl ptype_loc fields td;
-                  get_one_impl ptype_loc fields td;
+                  general_where_impl `GetOne ptype_loc fields td;
+                  general_where_impl `GetMany ptype_loc fields td;
+                  general_where_impl `Delete ptype_loc fields td;
                 ]
                |> List.filter_map Fun.id))
   |> List.concat

@@ -73,16 +73,14 @@ module Account = struct
   [@@sql.table_name "accounts"] [@@deriving make, sql]
 
   let get ~by =
-    do_query @@ fun c ->
     match by with
-    | `id id ->
-        query_row c "SELECT * FROM accounts WHERE id = $1" ~p:[ `Int id ]
+    | `id id -> get_one ~id ()
     | `domain_username (domain, username) ->
-        query_row c
-          {|SELECT * FROM accounts WHERE domain IS NOT DISTINCT FROM $1 AND username = $2|}
-          ~p:[ `NullString domain; `String username ]
-    | `uri u ->
-        query_row c "SELECT * FROM accounts WHERE uri = $1" ~p:[ `String u ]
+        get_one
+          ~where:"domain IS NOT DISTINCT FROM :domain AND username = :username"
+          ~p:[ ("domain", `NullString domain); ("username", `String username) ]
+          ()
+    | `uri uri -> get_one ~uri ()
 
   let insert = save_one
 end
@@ -120,28 +118,17 @@ module Follow = struct
   let get ~by =
     match by with
     | `accounts (account_id, target_account_id) ->
-        get_one ~where:"account_id = :id1 AND target_account_id = :id2"
-          ~p:[ ("id1", `Int account_id); ("id2", `Int target_account_id) ]
-          ()
+        get_one ~account_id ~target_account_id ()
 
   let get_many ~by =
-    do_query @@ fun c ->
-    match by with
-    | `target_account_id id ->
-        query c "SELECT * FROM follows WHERE target_account_id = $1"
-          ~p:[ `Int id ]
+    match by with `target_account_id id -> get_many ~target_account_id:id ()
 
   let insert = save_one
 
   let delete ~by =
-    do_query @@ fun c ->
     match by with
-    | `uri u ->
-        Sql.execute c "DELETE FROM follows WHERE uri = $1" ~p:[ `String u ]
-    | `accounts (id1, id2) ->
-        Sql.execute c
-          "DELETE FROM follows WHERE account_id = $1 AND target_account_id = $2"
-          ~p:[ `Int id1; `Int id2 ]
+    | `uri uri -> delete ~uri ()
+    | `accounts (id1, id2) -> delete ~account_id:id1 ~target_account_id:id2 ()
 end
 
 module FollowRequest = struct
@@ -158,21 +145,13 @@ module FollowRequest = struct
   let get ~by =
     match by with
     | `accounts (account_id, target_account_id) ->
-        get_one ~where:"account_id = :id1 AND target_account_id = :id2"
-          ~p:[ ("id1", `Int account_id); ("id2", `Int target_account_id) ]
-          ()
+        get_one ~account_id ~target_account_id ()
     | `uri uri -> get_one ~uri ()
 
   let insert = save_one
 
   let delete ~by =
-    do_query @@ fun c ->
-    match by with
-    | `id i ->
-        Sql.execute c "DELETE FROM follow_requests WHERE id = $1" ~p:[ `Int i ]
-    | `uri u ->
-        Sql.execute c "DELETE FROM follow_requests WHERE uri = $1"
-          ~p:[ `String u ]
+    match by with `id id -> delete ~id () | `uri uri -> delete ~uri ()
 end
 
 module OAuthApplication = struct
