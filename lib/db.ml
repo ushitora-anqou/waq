@@ -32,19 +32,38 @@ END $$|}
 
 module User = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     email : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
     account_id : int;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "users"] [@@deriving make, sql]
+
+  let get_one ?id ?email ?where ?p () =
+    let query, params = ([], Option.value ~default:[] p) in
+    let query, params =
+      id
+      |> Option.fold ~none:(query, params) ~some:(fun x ->
+             ("id = :id" :: query, ("id", `Int x) :: params))
+    in
+    let query, params =
+      email
+      |> Option.fold ~none:(query, params) ~some:(fun x ->
+             ("email = :email" :: query, ("email", `String x) :: params))
+    in
+    let query = where |> Option.fold ~none:query ~some:(fun x -> x :: query) in
+    let sql =
+      "SELECT * FROM users WHERE"
+      ^ (query |> List.map (fun x -> "(" ^ x ^ ")") |> String.concat " AND ")
+    in
+    do_query @@ fun c -> Lwt.map pack (Sql.named_query_row c sql ~p:params)
 
   let get ~by =
-    do_query @@ fun c ->
     match by with
-    | `id id -> query_row c "SELECT * FROM users WHERE id = $1" ~p:[ `Int id ]
+    | `id id -> get_one ~id ()
     | `username n ->
+        do_query @@ fun c ->
         query_row c
           {|
 SELECT * FROM users
@@ -52,19 +71,12 @@ INNER JOIN accounts ON users.account_id = accounts.id
 WHERE accounts.username = $1|}
           ~p:[ `String n ]
 
-  let insert u =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO users (email, created_at, updated_at, account_id)
-VALUES (:email, :created_at, :updated_at, :account_id)
-RETURNING *|}
-      u
+  let insert = save_one
 end
 
 module Account = struct
   type t = {
-    id : int; [@default 0]
+    id : int; [@default 0] [@sql.auto_increment]
     username : string;
     domain : string option;
     private_key : string option;
@@ -77,7 +89,7 @@ module Account = struct
     created_at : Ptime.t;
     updated_at : Ptime.t;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "accounts"] [@@deriving make, sql]
 
   let get ~by =
     do_query @@ fun c ->
@@ -91,37 +103,21 @@ module Account = struct
     | `uri u ->
         query_row c "SELECT * FROM accounts WHERE uri = $1" ~p:[ `String u ]
 
-  let insert a =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO accounts (
-  username, domain, private_key, public_key, display_name, uri, url, inbox_url, followers_url, created_at, updated_at)
-VALUES (
-  :username, :domain, :private_key, :public_key, :display_name, :uri, :url, :inbox_url, :followers_url, :created_at, :updated_at)
-RETURNING *|}
-      a
+  let insert = save_one
 end
 
 module Status = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     uri : string;
     text : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
     account_id : int;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "statuses"] [@@deriving make, sql]
 
-  let insert s =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO statuses (uri, text, created_at, updated_at, account_id)
-VALUES (:uri, :text, :created_at, :updated_at, :account_id)
-RETURNING *|}
-      s
+  let insert = save_one
 
   let update_uri s =
     do_query @@ fun c ->
@@ -131,14 +127,14 @@ end
 
 module Follow = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     created_at : Ptime.t;
     updated_at : Ptime.t;
     account_id : int;
     target_account_id : int;
     uri : string;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "follows"] [@@deriving make, sql]
 
   let get ~by =
     do_query @@ fun c ->
@@ -157,14 +153,7 @@ WHERE account_id = $1 AND target_account_id = $2|}
         query c "SELECT * FROM follows WHERE target_account_id = $1"
           ~p:[ `Int id ]
 
-  let insert f =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO follows (created_at, updated_at, account_id, target_account_id, uri)
-VALUES (:created_at, :updated_at, :account_id, :target_account_id, :uri)
-RETURNING *|}
-      f
+  let insert = save_one
 
   let delete ~by =
     do_query @@ fun c ->
@@ -179,14 +168,14 @@ end
 
 module FollowRequest = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     created_at : Ptime.t;
     updated_at : Ptime.t;
     account_id : int;
     target_account_id : int;
     uri : string;
   }
-  [@@deriving make, sql]
+  [@@table_name "follow_requests"] [@@deriving make, sql]
 
   let get ~by =
     do_query @@ fun c ->
@@ -201,14 +190,7 @@ WHERE account_id = $1 AND target_account_id = $2|}
         query_row c "SELECT * FROM follow_requests WHERE uri = $1"
           ~p:[ `String uri ]
 
-  let insert f =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO follow_requests (created_at, updated_at, account_id, target_account_id, uri)
-VALUES (:created_at, :updated_at, :account_id, :target_account_id, :uri)
-RETURNING *|}
-      f
+  let insert = save_one
 
   let delete ~by =
     do_query @@ fun c ->
@@ -222,7 +204,7 @@ end
 
 module OAuthApplication = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     name : string;
     uid : string;
     secret : string;
@@ -231,19 +213,9 @@ module OAuthApplication = struct
     created_at : Ptime.t option;
     updated_at : Ptime.t option;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "oauth_applications"] [@@deriving make, sql]
 
-  let insert o =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO oauth_applications (
-  name, uid, secret, redirect_uri, scopes, created_at, updated_at )
-VALUES (
-  :name, :uid, :secret, :redirect_uri, :scopes, :created_at, :updated_at )
-RETURNING *
-|}
-      o
+  let insert = save_one
 
   let get ~by =
     do_query @@ fun c ->
@@ -258,7 +230,7 @@ end
 
 module OAuthAccessGrant = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     token : string;
     expires_in : int;
     redirect_uri : string;
@@ -267,7 +239,7 @@ module OAuthAccessGrant = struct
     application_id : int option;
     resource_owner_id : int option;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "oauth_access_grants"] [@@deriving make, sql]
 
   let get ~by =
     do_query @@ fun c ->
@@ -278,28 +250,19 @@ SELECT * FROM oauth_access_grants
 WHERE token = $1|}
           ~p:[ `String token ]
 
-  let insert o =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO oauth_access_grants (
-  token, expires_in, redirect_uri, created_at, scopes, application_id, resource_owner_id )
-VALUES (
-  :token, :expires_in, :redirect_uri, :created_at, :scopes, :application_id, :resource_owner_id )
-RETURNING *|}
-      o
+  let insert = save_one
 end
 
 module OAuthAccessToken = struct
   type t = {
-    id : int;
+    id : int; [@sql.auto_increment]
     token : string;
     created_at : Ptime.t;
     scopes : string option;
     application_id : int option;
     resource_owner_id : int option;
   }
-  [@@deriving make, sql]
+  [@@sql.table_name "oauth_access_tokens"] [@@deriving make, sql]
 
   let get ~by =
     do_query @@ fun c ->
@@ -310,16 +273,7 @@ SELECT * FROM oauth_access_tokens
 WHERE token = $1|}
           ~p:[ `String token ]
 
-  let insert o =
-    do_query @@ fun c ->
-    named_query_row c
-      {|
-INSERT INTO oauth_access_tokens (
-  token, created_at, scopes, application_id, resource_owner_id )
-VALUES (
-  :token, :created_at, :scopes, :application_id, :resource_owner_id )
-RETURNING *|}
-      o
+  let insert = save_one
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =

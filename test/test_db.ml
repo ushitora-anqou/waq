@@ -53,6 +53,10 @@ let test_user _ _ =
   assert (u.updated_at = updated_at);
   assert (u.account_id = 1);
 
+  let%lwt u = User.get ~by:(`id 1) in
+  assert (u.id = 1);
+  assert (u.email = "ushitora@anqou.net");
+
   Lwt.return_unit
 
 let () =
