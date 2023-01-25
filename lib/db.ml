@@ -40,25 +40,6 @@ module User = struct
   }
   [@@sql.table_name "users"] [@@deriving make, sql]
 
-  let get_one ?id ?email ?where ?p () =
-    let query, params = ([], Option.value ~default:[] p) in
-    let query, params =
-      id
-      |> Option.fold ~none:(query, params) ~some:(fun x ->
-             ("id = :id" :: query, ("id", `Int x) :: params))
-    in
-    let query, params =
-      email
-      |> Option.fold ~none:(query, params) ~some:(fun x ->
-             ("email = :email" :: query, ("email", `String x) :: params))
-    in
-    let query = where |> Option.fold ~none:query ~some:(fun x -> x :: query) in
-    let sql =
-      "SELECT * FROM users WHERE"
-      ^ (query |> List.map (fun x -> "(" ^ x ^ ")") |> String.concat " AND ")
-    in
-    do_query @@ fun c -> Lwt.map pack (Sql.named_query_row c sql ~p:params)
-
   let get ~by =
     match by with
     | `id id -> get_one ~id ()
@@ -137,14 +118,11 @@ module Follow = struct
   [@@sql.table_name "follows"] [@@deriving make, sql]
 
   let get ~by =
-    do_query @@ fun c ->
     match by with
     | `accounts (account_id, target_account_id) ->
-        query_row c
-          {|
-SELECT * FROM follows
-WHERE account_id = $1 AND target_account_id = $2|}
-          ~p:[ `Int account_id; `Int target_account_id ]
+        get_one ~where:"account_id = :id1 AND target_account_id = :id2"
+          ~p:[ ("id1", `Int account_id); ("id2", `Int target_account_id) ]
+          ()
 
   let get_many ~by =
     do_query @@ fun c ->
@@ -178,17 +156,12 @@ module FollowRequest = struct
   [@@table_name "follow_requests"] [@@deriving make, sql]
 
   let get ~by =
-    do_query @@ fun c ->
     match by with
     | `accounts (account_id, target_account_id) ->
-        query_row c
-          {|
-SELECT * FROM follow_requests
-WHERE account_id = $1 AND target_account_id = $2|}
-          ~p:[ `Int account_id; `Int target_account_id ]
-    | `uri uri ->
-        query_row c "SELECT * FROM follow_requests WHERE uri = $1"
-          ~p:[ `String uri ]
+        get_one ~where:"account_id = :id1 AND target_account_id = :id2"
+          ~p:[ ("id1", `Int account_id); ("id2", `Int target_account_id) ]
+          ()
+    | `uri uri -> get_one ~uri ()
 
   let insert = save_one
 
@@ -218,14 +191,7 @@ module OAuthApplication = struct
   let insert = save_one
 
   let get ~by =
-    do_query @@ fun c ->
-    match by with
-    | `id id ->
-        query_row c {|SELECT * FROM oauth_applications WHERE id = $1|}
-          ~p:[ `Int id ]
-    | `uid uid ->
-        query_row c {|SELECT * FROM oauth_applications WHERE uid = $1|}
-          ~p:[ `String uid ]
+    match by with `id id -> get_one ~id () | `uid uid -> get_one ~uid ()
 end
 
 module OAuthAccessGrant = struct
@@ -241,15 +207,7 @@ module OAuthAccessGrant = struct
   }
   [@@sql.table_name "oauth_access_grants"] [@@deriving make, sql]
 
-  let get ~by =
-    do_query @@ fun c ->
-    match by with
-    | `token token ->
-        query_row c {|
-SELECT * FROM oauth_access_grants
-WHERE token = $1|}
-          ~p:[ `String token ]
-
+  let get ~by = match by with `token token -> get_one ~token ()
   let insert = save_one
 end
 
@@ -264,15 +222,7 @@ module OAuthAccessToken = struct
   }
   [@@sql.table_name "oauth_access_tokens"] [@@deriving make, sql]
 
-  let get ~by =
-    do_query @@ fun c ->
-    match by with
-    | `token token ->
-        query_row c {|
-SELECT * FROM oauth_access_tokens
-WHERE token = $1|}
-          ~p:[ `String token ]
-
+  let get ~by = match by with `token token -> get_one ~token ()
   let insert = save_one
 end
 

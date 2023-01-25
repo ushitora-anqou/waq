@@ -53,6 +53,19 @@ let pack_impl loc (fields : label_declaration list) =
      fun (l : Sql.single_query_result) ->
       [%e pexp_record ~loc record_fields None]]
 
+let wrap_value_with_type loc pld_type value =
+  match pld_type with
+  | [%type: int] -> [%expr `Int [%e value]]
+  | [%type: int option] ->
+      [%expr match [%e value] with None -> `Null | Some v -> `Int v]
+  | [%type: string] -> [%expr `String [%e value]]
+  | [%type: string option] ->
+      [%expr match [%e value] with None -> `Null | Some v -> `String v]
+  | [%type: Ptime.t] -> [%expr `Timestamp [%e value]]
+  | [%type: Ptime.t option] ->
+      [%expr match [%e value] with None -> `Null | Some v -> `Timestamp v]
+  | _ -> assert false
+
 let unpack_impl loc (fields : label_declaration list) =
   Ast_helper.with_default_loc loc @@ fun () ->
   let funname = "unpack" in
@@ -65,25 +78,8 @@ let unpack_impl loc (fields : label_declaration list) =
              (* e.g., x.id *)
              pexp_field ~loc [%expr x] { loc; txt = lident field_name }
            in
-           let value =
-             (* e.g., `Int x.id *)
-             match f.pld_type with
-             | [%type: int] -> [%expr `Int [%e value]]
-             | [%type: int option] ->
-                 [%expr
-                   match [%e value] with None -> `Null | Some v -> `Int v]
-             | [%type: string] -> [%expr `String [%e value]]
-             | [%type: string option] ->
-                 [%expr
-                   match [%e value] with None -> `Null | Some v -> `String v]
-             | [%type: Ptime.t] -> [%expr `Timestamp [%e value]]
-             | [%type: Ptime.t option] ->
-                 [%expr
-                   match [%e value] with
-                   | None -> `Null
-                   | Some v -> `Timestamp v]
-             | _ -> assert false
-           in
+           (* e.g., `Int x.id *)
+           let value = wrap_value_with_type loc f.pld_type value in
            (* e.g., ("id", `Int x.id) *)
            [%expr [%e key], [%e value]])
     |> elist ~loc
@@ -134,6 +130,92 @@ let save_one_impl loc (fields : label_declaration list) (td : type_declaration)
        let [%p ppat_var ~loc { loc; txt = funname }] =
         fun x -> do_query @@ fun c -> named_query_row c [%e estring ~loc sql] x]
 
+let get_one_impl loc (fields : label_declaration list) (td : type_declaration) =
+  Attribute.get Attrs.table_name td
+  |> Option.map @@ fun table_name ->
+     Ast_helper.with_default_loc loc @@ fun () ->
+     let funname = "get_one" in
+     let columns = fields |> List.map (fun f -> f.pld_name.txt) in
+     let varnames =
+       "where" :: "p" :: columns
+       |> List.map (fun name -> (name, gen_symbol ~prefix:name ()))
+     in
+
+     let parts =
+       fields
+       |> List.map @@ fun f ->
+          let name = f.pld_name.txt in
+          let varname = varnames |> List.assoc name in
+          [%expr
+            (* e.g.,
+               Option.fold ~none:(query, params) ~some:(fun x ->
+                 ("id = :id" :: query, ("id", `Int x) :: params))
+                 id
+            *)
+            Option.fold ~none:(query, params)
+              ~some:(fun x ->
+                ( [%e estring ~loc (name ^ " = :" ^ name)] :: query,
+                  ( [%e estring ~loc name],
+                    [%e wrap_value_with_type loc f.pld_type [%expr x]] )
+                  :: params ))
+              [%e pexp_ident ~loc { loc; txt = Lident varname }]]
+     in
+
+     let body =
+       (* e.g.,
+          fun ?id -> fun ?email -> fun ?where ?p () ->
+            let query, params = ([], Option.value ~default:[] p) in
+            let query, params = {{ 0th of parts }} in
+            ...
+            let query, params = {{ nth of parts }} in
+            let query = where |> Option.fold ~none:query ~some:(fun x -> x :: query) in
+            let sql =
+              "SELECT * FROM {{ table_name }} WHERE"
+              ^ (query |> List.map (fun x -> "(" ^ x ^ ")") |> String.concat " AND ")
+            in
+            do_query @@ fun c -> Lwt.map pack (Sql.named_query_row c sql ~p:params)
+       *)
+       let var_p =
+         pexp_ident ~loc { loc; txt = Lident (varnames |> List.assoc "p") }
+       in
+       let var_where =
+         pexp_ident ~loc { loc; txt = Lident (varnames |> List.assoc "where") }
+       in
+       varnames
+       |> List.fold_left
+            (fun body (name, varname) ->
+              pexp_fun ~loc (Optional name) None
+                (ppat_var ~loc { loc; txt = varname })
+                body)
+            [%expr
+              fun () ->
+                let query, params = ([], Option.value ~default:[] [%e var_p]) in
+                [%e
+                  parts
+                  |> List.fold_left
+                       (fun a e ->
+                         [%expr
+                           let query, params = [%e e] in
+                           [%e a]])
+                       [%expr
+                         let query =
+                           [%e var_where]
+                           |> Option.fold ~none:query ~some:(fun x ->
+                                  x :: query)
+                         in
+                         let sql =
+                           [%e
+                             estring ~loc
+                               ("SELECT * FROM " ^ table_name ^ " WHERE ")]
+                           ^ (query
+                             |> List.map (fun x -> "(" ^ x ^ ")")
+                             |> String.concat " AND ")
+                         in
+                         do_query @@ fun c ->
+                         Lwt.map pack (Sql.named_query_row c sql ~p:params)]]]
+     in
+     [%stri let [%p ppat_var ~loc { loc; txt = funname }] = [%e body]]
+
 let generate_impl ~ctxt (_rec_flag, type_declarations) =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
   type_declarations
@@ -149,20 +231,20 @@ let generate_impl ~ctxt (_rec_flag, type_declarations) =
                  "Cannot derive accessors for non record types"
              in
              [ Ast_builder.Default.pstr_extension ~loc ext [] ]
-         | { ptype_loc; ptype_kind = Ptype_record fields; _ } -> (
-             let l =
-               [
-                 pack_impl ptype_loc fields;
-                 unpack_impl ptype_loc fields;
-                 query_impl ptype_loc;
-                 query_row_impl ptype_loc;
-                 named_query_impl ptype_loc;
-                 named_query_row_impl ptype_loc;
-               ]
-             in
-             match save_one_impl ptype_loc fields td with
-             | None -> l
-             | Some node -> l @ [ node ]))
+         | { ptype_loc; ptype_kind = Ptype_record fields; _ } ->
+             [
+               pack_impl ptype_loc fields;
+               unpack_impl ptype_loc fields;
+               query_impl ptype_loc;
+               query_row_impl ptype_loc;
+               named_query_impl ptype_loc;
+               named_query_row_impl ptype_loc;
+             ]
+             @ ([
+                  save_one_impl ptype_loc fields td;
+                  get_one_impl ptype_loc fields td;
+                ]
+               |> List.filter_map Fun.id))
   |> List.concat
 
 let impl_generator =
