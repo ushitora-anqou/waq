@@ -1,6 +1,4 @@
 open Util
-open Httpaf
-open Httpaf_lwt_unix
 
 module Uri = struct
   include Uri
@@ -26,6 +24,18 @@ module Uri = struct
     res
 
   let domain (u : t) = http_host u
+end
+
+module Method = struct
+  type t = Cohttp.Code.meth
+
+  let to_string = Cohttp.Code.string_of_method
+end
+
+module Status = struct
+  type t = Cohttp.Code.status_code
+
+  let to_string = Cohttp.Code.string_of_status
 end
 
 module Signature = struct
@@ -164,18 +174,12 @@ end
 type request = {
   query : (string * string list) list;
   param : (string * string) list;
-  body : string Lwt.t;
+  body : Cohttp_lwt.Body.t;
   headers : (string * string) list;
 }
 [@@deriving make]
 
-type response = {
-  status : Status.t;
-  headers : (string * string) list;
-  body : string; [@default ""]
-}
-[@@deriving make]
-
+type response = Cohttp.Response.t * Cohttp_lwt__.Body.t
 type handler = request -> response Lwt.t
 type path = [ `L of string | `P of string ] list
 type method_ = Method.t
@@ -186,136 +190,64 @@ exception ErrorResponse of Status.t * string
 let raise_error_response ?(body = "") status =
   raise (ErrorResponse (status, body))
 
-let read_body_async (body : [ `read ] Body.t) : string Lwt.t =
-  let promise, resolver = Lwt.wait () in
-  let length = ref 0 in
-  let buffer = ref (Bigstringaf.create 4096) in
-  (* Callbacks *)
-  let rec on_read chunk ~off ~len =
-    let new_length = !length + len in
-    if new_length > Bigstringaf.length !buffer then (
-      (* Resize buffer *)
-      let new_buffer = Bigstringaf.create (new_length * 2) in
-      Bigstringaf.blit !buffer ~src_off:0 new_buffer ~dst_off:0 ~len:!length;
-      buffer := new_buffer);
-    (* Copy the chunk to the buffer *)
-    Bigstringaf.blit chunk ~src_off:off !buffer ~dst_off:!length ~len;
-    length := new_length;
-    Body.schedule_read body ~on_eof ~on_read
-  and on_eof () =
-    Bigstringaf.sub !buffer ~off:0 ~len:!length
-    |> Bigstringaf.to_string |> Lwt.wakeup_later resolver
-  in
-  Body.schedule_read body ~on_eof ~on_read;
-  promise
+let start_server ?(port = 8080) f (routes : route list) =
+  let open Cohttp in
+  let open Cohttp_lwt_unix in
+  let callback _conn req body =
+    let uri = Request.uri req in
+    let meth = Request.meth req in
+    let headers = Request.headers req |> Header.to_list in
 
-let request_handler (routes : route list) (_ : Unix.sockaddr) (reqd : Reqd.t) :
-    unit =
-  let { Request.meth; target; headers; _ } = Reqd.request reqd in
-  let headers = headers |> Headers.to_list in
-  Log.debug (fun m -> m "%s %s" (Method.to_string meth) target);
-
-  (* Parse target *)
-  let path, query =
-    let u = Uri.of_string target in
-    (Uri.path u |> String.split_on_char '/' |> List.tl, Uri.query u)
-  in
-
-  (* Choose correct handler via router *)
-  let param, handler =
-    let default_handler =
-      Fun.const @@ Lwt.return
-      @@ make_response
-           ~status:
-             (match meth with `GET -> `Not_found | _ -> `Method_not_allowed)
-           ()
+    (* Parse target *)
+    let path, query =
+      (Uri.path uri |> String.split_on_char '/' |> List.tl, Uri.query uri)
     in
-    let rec match_path param = function
-      | [], [] -> Some param
-      | x :: xs, `L y :: ys when x = y -> match_path param (xs, ys)
-      | x :: xs, `P y :: ys -> match_path ((y, x) :: param) (xs, ys)
-      | _ -> None
-    in
-    routes
-    |> List.find_map (fun (meth', ptn, handler) ->
-           if meth <> meth' then None
-           else
-             match_path [] (path, ptn)
-             |> Option.map (fun param -> (param, handler)))
-    |> Option.value ~default:([], default_handler)
-  in
 
-  (* Start a thread to read the body *)
-  let body = read_body_async (Reqd.request_body reqd) in
-
-  (* Return the response asynchronously *)
-  Lwt.async @@ fun () ->
-  try%lwt
-    (* Invoke the handler *)
-    let%lwt res =
-      try%lwt handler (make_request ~query ~param ~body ~headers ()) with
-      | ErrorResponse (status, body) ->
-          Lwt.return @@ make_response ~status ~body ()
-      | e ->
-          Log.err (fun m ->
-              m "Exception: %s %s: %s\n%s" (Method.to_string meth) target
-                (Printexc.to_string e)
-                (Printexc.get_backtrace ()));
-          Lwt.return @@ make_response ~status:`Internal_server_error ()
-    in
-    (* Construct headers *)
-    let headers =
-      let src =
-        ("Content-length", res.body |> String.length |> string_of_int)
-        (* :: ("Connection", "close") *)
-        :: res.headers
+    (* Choose correct handler via router *)
+    let param, handler =
+      let default_handler =
+        Fun.const
+        @@ Server.respond_string ~body:""
+             ~status:
+               (match meth with `GET -> `Not_found | _ -> `Method_not_allowed)
+             ()
       in
-      let t = Hashtbl.create (List.length src) in
-      src |> List.iter (fun (k, v) -> Hashtbl.replace t k v);
-      t |> Hashtbl.to_seq |> List.of_seq |> Headers.of_list
+      let rec match_path param = function
+        | [], [] -> Some param
+        | x :: xs, `L y :: ys when x = y -> match_path param (xs, ys)
+        | x :: xs, `P y :: ys -> match_path ((y, x) :: param) (xs, ys)
+        | _ -> None
+      in
+      routes
+      |> List.find_map (fun (meth', ptn, handler) ->
+             if meth <> meth' then None
+             else
+               match_path [] (path, ptn)
+               |> Option.map (fun param -> (param, handler)))
+      |> Option.value ~default:([], default_handler)
     in
-    (* Format the response *)
-    Reqd.respond_with_string reqd (Response.create ~headers res.status) res.body;
-    Log.info (fun m ->
-        m "%s %s %s"
-          (Status.to_string res.status)
-          (Method.to_string meth) target);
-    Lwt.return_unit
-  with e ->
-    Log.err (fun m ->
-        m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth) target
-          (Printexc.to_string e)
-          (Printexc.get_backtrace ()));
-    Lwt.return_unit
 
-(* FIXME: What is this function for? *)
-let error_handler (_ : Unix.sockaddr) ?request:_
-    (error : Server_connection.error) start_response =
-  let response_body = start_response Headers.empty in
-  (match error with
-  | `Exn exn ->
-      Body.write_string response_body (Printexc.to_string exn);
-      Body.write_string response_body "\n"
-  | (`Bad_request | `Bad_gateway | `Internal_server_error) as error ->
-      Body.write_string response_body (Status.default_reason_phrase error));
-  Body.close_writer response_body
-
-let start_server ?(host = "127.0.0.1") ?(port = 8080) f routes =
-  let host =
-    let open Unix in
-    try inet_addr_of_string host
-    with Failure _ -> (gethostbyname host).h_addr_list.(0)
+    (* Invoke the handler *)
+    try%lwt
+      let%lwt res = handler (make_request ~query ~param ~body ~headers ()) in
+      Log.info (fun m ->
+          m "%s %s %s"
+            (Status.to_string (fst res).status)
+            (Method.to_string meth) (Uri.to_string uri));
+      Lwt.return res
+    with
+    | ErrorResponse (status, body) -> Server.respond_string ~status ~body ()
+    | e ->
+        Log.err (fun m ->
+            m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth)
+              (Uri.to_string uri) (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        Server.respond_string ~status:`Internal_server_error ~body:"" ()
   in
-  let addr = Unix.(ADDR_INET (host, port)) in
-  let handler =
-    Server.create_connection_handler ~error_handler
-      ~request_handler:(request_handler routes)
+  let server =
+    Server.make ~callback () |> Server.create ~mode:(`TCP (`Port port))
   in
-  Lwt.async (fun () ->
-      let%lwt _ = Lwt_io.establish_server_with_client_socket addr handler in
-      f ());
-  let forever, _ = Lwt.wait () in
-  Lwt_main.run forever
+  Lwt.join [ server; f () ] |> Lwt_main.run
 
 let router (routes : route list) = routes
 
@@ -333,15 +265,16 @@ let post (path : string) (handler : handler) =
   let path = parse_path path in
   (`POST, path, handler)
 
-let respond ?(status = `OK) ?(headers = []) (body : string) : response Lwt.t =
-  Lwt.return @@ make_response ~status ~headers ~body ()
+let respond ?(status = `OK) ?(headers = []) (body : string) =
+  let headers = headers |> Cohttp.Header.of_list in
+  Cohttp_lwt_unix.Server.respond_string ~status ~headers ~body ()
 
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
 
 let query (k : string) (r : request) : string list = query_opt k r |> Option.get
 let param (k : string) (r : request) : string = List.assoc k r.param
-let body (r : request) : string Lwt.t = r.body
+let body (r : request) : string Lwt.t = Cohttp_lwt.Body.to_string r.body
 let headers (r : request) : (string * string) list = r.headers
 
 let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =

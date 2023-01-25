@@ -25,13 +25,11 @@
   (merlin :with-dev-setup)
   (ocamlformat :with-dev-setup)
   base64
-  bigstringaf
+  cohttp
   cohttp-lwt-unix
   cstruct
   dune
   fpath
-  httpaf
-  httpaf-lwt-unix
   jingoo
   lwt
   lwt_ppx

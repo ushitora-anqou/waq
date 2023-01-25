@@ -3,10 +3,10 @@ open Util [@@warning "-33"]
 module C = Config
 
 let server () =
-  let host, port = (C.listen_host (), C.listen_port ()) in
+  let _host, port = (C.listen_host (), C.listen_port ()) in
   Router.routes
-  |> Http.start_server ~host ~port @@ fun () ->
-     Log.info (fun m -> m "Listening on %s:%d" host port);
+  |> Http.start_server ~port @@ fun () ->
+     Log.info (fun m -> m "Listening on 127.0.0.1:%d" port);
      Lwt.return_unit
 
 let db_reset () =
