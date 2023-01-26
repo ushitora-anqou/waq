@@ -33,7 +33,7 @@ let get req =
   let%lwt self_id, max_id, since_id, limit = parse_req req in
 
   let conv (s : Db.Status.t) =
-    let%lwt a = Db.Account.get ~by:(`id s.account_id) in
+    let%lwt a = Db.Account.get_one ~id:s.account_id () in
     let account =
       make_account ~id:(string_of_int a.id) ~username:a.username
         ~acct:(acct a.username a.domain) ~display_name:a.display_name

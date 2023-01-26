@@ -39,19 +39,6 @@ module User = struct
     account_id : int;
   }
   [@@sql.table_name "users"] [@@deriving make, sql]
-
-  let get ~by =
-    match by with
-    | `id id -> get_one ~id ()
-    | `username n ->
-        query_row
-          {|
-SELECT * FROM users
-INNER JOIN accounts ON users.account_id = accounts.id
-WHERE accounts.username = $1|}
-          ~p:[ `String n ]
-
-  let insert = save_one
 end
 
 module Account = struct
@@ -71,17 +58,11 @@ module Account = struct
   }
   [@@sql.table_name "accounts"] [@@deriving make, sql]
 
-  let get ~by =
-    match by with
-    | `id id -> get_one ~id ()
-    | `domain_username (domain, username) ->
-        get_one
-          ~where:"domain IS NOT DISTINCT FROM :domain AND username = :username"
-          ~p:[ ("domain", `NullString domain); ("username", `String username) ]
-          ()
-    | `uri uri -> get_one ~uri ()
-
-  let insert = save_one
+  let get_one_by_domain_and_username ~domain ~username =
+    get_one
+      ~where:"domain IS NOT DISTINCT FROM :domain AND username = :username"
+      ~p:[ ("domain", `NullString domain); ("username", `String username) ]
+      ()
 end
 
 module Status = struct
@@ -94,8 +75,6 @@ module Status = struct
     account_id : int;
   }
   [@@sql.table_name "statuses"] [@@deriving make, sql]
-
-  let insert = save_one
 
   let update_uri s =
     named_query_row "UPDATE statuses SET uri = :uri WHERE id = :id RETURNING *"
@@ -112,21 +91,6 @@ module Follow = struct
     uri : string;
   }
   [@@sql.table_name "follows"] [@@deriving make, sql]
-
-  let get ~by =
-    match by with
-    | `accounts (account_id, target_account_id) ->
-        get_one ~account_id ~target_account_id ()
-
-  let get_many ~by =
-    match by with `target_account_id id -> get_many ~target_account_id:id ()
-
-  let insert = save_one
-
-  let delete ~by =
-    match by with
-    | `uri uri -> delete ~uri ()
-    | `accounts (id1, id2) -> delete ~account_id:id1 ~target_account_id:id2 ()
 end
 
 module FollowRequest = struct
@@ -139,17 +103,6 @@ module FollowRequest = struct
     uri : string;
   }
   [@@table_name "follow_requests"] [@@deriving make, sql]
-
-  let get ~by =
-    match by with
-    | `accounts (account_id, target_account_id) ->
-        get_one ~account_id ~target_account_id ()
-    | `uri uri -> get_one ~uri ()
-
-  let insert = save_one
-
-  let delete ~by =
-    match by with `id id -> delete ~id () | `uri uri -> delete ~uri ()
 end
 
 module OAuthApplication = struct
@@ -164,11 +117,6 @@ module OAuthApplication = struct
     updated_at : Ptime.t option;
   }
   [@@sql.table_name "oauth_applications"] [@@deriving make, sql]
-
-  let insert = save_one
-
-  let get ~by =
-    match by with `id id -> get_one ~id () | `uid uid -> get_one ~uid ()
 end
 
 module OAuthAccessGrant = struct
@@ -183,9 +131,6 @@ module OAuthAccessGrant = struct
     resource_owner_id : int option;
   }
   [@@sql.table_name "oauth_access_grants"] [@@deriving make, sql]
-
-  let get ~by = match by with `token token -> get_one ~token ()
-  let insert = save_one
 end
 
 module OAuthAccessToken = struct
@@ -198,9 +143,6 @@ module OAuthAccessToken = struct
     resource_owner_id : int option;
   }
   [@@sql.table_name "oauth_access_tokens"] [@@deriving make, sql]
-
-  let get ~by = match by with `token token -> get_one ~token ()
-  let insert = save_one
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =

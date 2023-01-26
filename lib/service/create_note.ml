@@ -3,7 +3,7 @@ open Activity
 (* Send Create/Note to POST /users/:name/inbox *)
 let kick id (s : Db.Status.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt self = Db.Account.get ~by:(`id s.account_id) in
+  let%lwt self = Db.Account.get_one ~id:s.account_id () in
   let body =
     let published = s.created_at |> Ptime.to_rfc3339 in
     let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
@@ -16,5 +16,5 @@ let kick id (s : Db.Status.t) =
       ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
     |> ap_create_to_yojson
   in
-  let%lwt dst = Db.Account.get ~by:(`id id) in
+  let%lwt dst = Db.Account.get_one ~id () in
   post_activity_to_inbox ~body ~src:self ~dst

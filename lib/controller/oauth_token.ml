@@ -22,7 +22,7 @@ let post req =
   let%lwt grant = Oauth.authenticate_access_grant code in
   (* FIXME: Check if scope is correct *)
   let%lwt app =
-    Db.OAuthApplication.get ~by:(`id (Option.get grant.application_id))
+    Db.OAuthApplication.get_one ~id:(Option.get grant.application_id) ()
   in
   if app.redirect_uri <> redirect_uri then
     Http.raise_error_response `Bad_request;

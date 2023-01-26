@@ -25,16 +25,17 @@ let db_reset () =
       let uri = Activity.url [ "users"; username ] in
       let inbox_url = Activity.(uri ^/ "inbox") in
       let followers_url = Activity.(uri ^/ "followers") in
-      Db.Account.make ~username ~public_key ~private_key ~display_name ~uri
-        ~inbox_url ~followers_url ~created_at ~updated_at ()
-      |> Db.Account.insert
+      Db.Account.(
+        make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
+          ~followers_url ~created_at ~updated_at ()
+        |> save_one)
     in
     assert (a.id = 1);
     let%lwt _u =
       let email = "foobar@example.com" in
       let created_at, updated_at = (now, now) in
-      Db.User.make ~id:0 ~email ~created_at ~updated_at ~account_id:a.id
-      |> Db.User.insert
+      Db.User.(
+        make ~id:0 ~email ~created_at ~updated_at ~account_id:a.id |> save_one)
     in
     Lwt.return_unit
   in

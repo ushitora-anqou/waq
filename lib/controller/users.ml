@@ -4,8 +4,10 @@ open Activity
 let get req =
   let username = req |> Httpx.param ":name" in
   try%lwt
-    let%lwt u = Db.User.get ~by:(`username username) in
-    let%lwt a = Db.Account.get ~by:(`id u.account_id) in
+    let%lwt a =
+      Db.Account.get_one_by_domain_and_username ~domain:None ~username
+    in
+    let%lwt _ = Db.User.get_one ~account_id:a.id () in
     let publicKey =
       make_ap_user_public_key ~id:(a.uri ^ "#main-key") ~owner:a.uri
         ~publicKeyPem:a.public_key

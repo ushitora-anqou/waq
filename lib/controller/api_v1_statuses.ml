@@ -15,12 +15,13 @@ let post req =
   let status = req |> Httpx.query "status" in
 
   let now = Ptime.now () in
-  let%lwt self = Db.Account.get ~by:(`id self_id) in
+  let%lwt self = Db.Account.get_one ~id:self_id () in
   (* Insert status *)
   let%lwt s =
-    Db.Status.make ~id:0 ~text:status ~uri:"" ~created_at:now ~updated_at:now
-      ~account_id:self_id
-    |> Db.Status.insert
+    Db.Status.(
+      make ~id:0 ~text:status ~uri:"" ~created_at:now ~updated_at:now
+        ~account_id:self_id
+      |> save_one)
   in
   (* Update status URI using its ID *)
   let%lwt s =
@@ -28,7 +29,7 @@ let post req =
     |> Db.Status.update_uri
   in
   (* Send followers the status *)
-  let%lwt followers = Db.Follow.get_many ~by:(`target_account_id self_id) in
+  let%lwt followers = Db.Follow.get_many ~target_account_id:self_id () in
   followers
   |> List.iter (fun (f : Db.Follow.t) ->
          Service.Create_note.kick f.account_id s);

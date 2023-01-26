@@ -10,7 +10,7 @@ let kick (self : Db.Account.t) (acc : Db.Account.t) =
   let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
   Db.FollowRequest.make ~id:0 ~created_at:now ~updated_at:now
     ~account_id:self.id ~target_account_id:acc.id ~uri
-  |> Db.FollowRequest.insert |> ignore_lwt;%lwt
+  |> Db.FollowRequest.save_one |> ignore_lwt;%lwt
   (* Post activity *)
   let body =
     make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)

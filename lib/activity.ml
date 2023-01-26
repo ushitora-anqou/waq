@@ -117,11 +117,11 @@ let fetch_account ?(scheme = "https") by =
       ~public_key:r.publicKey.publicKeyPem ~display_name:r.name ~uri:r.id
       ~url:r.url ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
       ~updated_at:now ()
-    |> Db.Account.insert
+    |> Db.Account.save_one
   in
   match by with
   | `Webfinger (domain, username) -> (
-      match%lwt Db.Account.get ~by:(`domain_username (domain, username)) with
+      match%lwt Db.Account.get_one_by_domain_and_username ~domain ~username with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound when domain = None (* Local *) ->
           failwith "Couldn't fetch the account"
@@ -138,7 +138,7 @@ let fetch_account ?(scheme = "https") by =
           in
           make_new_account href)
   | `Uri uri -> (
-      match%lwt Db.Account.get ~by:(`uri uri) with
+      match%lwt Db.Account.get_one ~uri () with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound -> make_new_account uri)
 

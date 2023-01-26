@@ -10,19 +10,22 @@ let kick_inbox_follow (req : ap_inbox) =
     | _ -> Http.raise_error_response `Bad_request
   in
   let%lwt src = fetch_account (`Uri src) in
-  match%lwt Db.Account.get ~by:(`uri dst) with
+  match%lwt Db.Account.get_one ~uri:dst () with
   | exception Sql.NoRowFound -> Http.raise_error_response `Bad_request
   | dst ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
       let%lwt f =
-        match%lwt Db.Follow.get ~by:(`accounts (src.id, dst.id)) with
+        match%lwt
+          Db.Follow.get_one ~account_id:src.id ~target_account_id:dst.id ()
+        with
         | f -> Lwt.return f
         | exception Sql.NoRowFound ->
             (* Insert to table 'follows' *)
             let now = Ptime.now () in
-            Db.Follow.make ~id:0 ~created_at:now ~updated_at:now
-              ~account_id:src.id ~target_account_id:dst.id ~uri:req.id
-            |> Db.Follow.insert
+            Db.Follow.(
+              make ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
+                ~target_account_id:dst.id ~uri:req.id
+              |> save_one)
       in
       (* Send 'Accept' *)
       Service.Accept.kick ~f ~followee:dst ~follower:src;
@@ -39,16 +42,18 @@ let kick_inbox_accept (req : ap_inbox) =
         | _ -> Http.raise_error_response `Bad_request)
     | _ -> Http.raise_error_response `Bad_request
   in
-  match%lwt Db.FollowRequest.get ~by:(`uri uri) with
+  match%lwt Db.FollowRequest.get_one ~uri () with
   | exception Sql.NoRowFound -> Http.raise_error_response `Bad_request
   | r ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
       let now = Ptime.now () in
-      Db.FollowRequest.delete ~by:(`id r.id) |> ignore_lwt;%lwt
-      Db.Follow.make ~id:0 ~account_id:r.account_id
-        ~target_account_id:r.target_account_id ~uri ~created_at:now
-        ~updated_at:now
-      |> Db.Follow.insert |> ignore_lwt
+      Db.FollowRequest.delete ~id:r.id () |> ignore_lwt;%lwt
+      Db.Follow.(
+        make ~id:0 ~account_id:r.account_id
+          ~target_account_id:r.target_account_id ~uri ~created_at:now
+          ~updated_at:now
+        |> save_one)
+      |> ignore_lwt
 
 (* Recv Undo in inbox *)
 let kick_inbox_undo (req : ap_inbox) =
@@ -57,7 +62,7 @@ let kick_inbox_undo (req : ap_inbox) =
   match obj.typ with
   | "Follow" ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
-      Db.Follow.delete ~by:(`uri obj.id)
+      Db.Follow.delete ~uri:obj.id ()
   | _ -> Http.raise_error_response `Bad_request
 
 (* Recv Create in inbox *)
@@ -70,9 +75,11 @@ let kick_inbox_create (req : ap_create) =
   in
   Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
   let%lwt attributedTo = fetch_account (`Uri note.attributedTo) in
-  Db.Status.make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
-    ~updated_at:published ~account_id:attributedTo.id
-  |> Db.Status.insert |> ignore_lwt
+  Db.Status.(
+    make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
+      ~updated_at:published ~account_id:attributedTo.id
+    |> save_one)
+  |> ignore_lwt
 
 (* Recv POST /users/:name/inbox *)
 let post req =
