@@ -29,6 +29,9 @@
   unix
   uri
   uuidm
+  websocket
+  websocket-lwt-unix
+  websocket-lwt-unix.cohttp
   x509
   yaml
   yaml.unix

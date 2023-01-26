@@ -69,3 +69,5 @@ let authenticate_user (r : request) =
     let%lwt token = authenticate_bearer r in
     token.resource_owner_id |> Option.get |> Lwt.return
   with _ -> Http.raise_error_response `Unauthorized
+
+let websocket (r : request) = Http.websocket r.http_request

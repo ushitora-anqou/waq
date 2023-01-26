@@ -172,6 +172,7 @@ module Signature = struct
 end
 
 type request = {
+  req : Cohttp_lwt.Request.t;
   query : (string * string list) list;
   param : (string * string) list;
   body : Cohttp_lwt.Body.t;
@@ -179,7 +180,7 @@ type request = {
 }
 [@@deriving make]
 
-type response = Cohttp.Response.t * Cohttp_lwt__.Body.t
+type response = Cohttp_lwt_unix.Server.response_action
 type handler = request -> response Lwt.t
 type path = [ `L of string | `P of string ] list
 type method_ = Method.t
@@ -189,6 +190,12 @@ exception ErrorResponse of Status.t * string
 
 let raise_error_response ?(body = "") status =
   raise (ErrorResponse (status, body))
+
+let respond ?(status = `OK) ?(headers = []) (body : string) =
+  let open Lwt.Infix in
+  let headers = headers |> Cohttp.Header.of_list in
+  Cohttp_lwt_unix.Server.respond_string ~status ~headers ~body () >|= fun x ->
+  `Response x
 
 let start_server ?(port = 8080) f (routes : route list) =
   let open Cohttp in
@@ -207,10 +214,10 @@ let start_server ?(port = 8080) f (routes : route list) =
     let param, handler =
       let default_handler =
         Fun.const
-        @@ Server.respond_string ~body:""
+        @@ respond
              ~status:
                (match meth with `GET -> `Not_found | _ -> `Method_not_allowed)
-             ()
+             ""
       in
       let rec match_path param = function
         | [], [] -> Some param
@@ -229,23 +236,31 @@ let start_server ?(port = 8080) f (routes : route list) =
 
     (* Invoke the handler *)
     try%lwt
-      let%lwt res = handler (make_request ~query ~param ~body ~headers ()) in
-      Log.info (fun m ->
-          m "%s %s %s"
-            (Status.to_string (fst res).status)
-            (Method.to_string meth) (Uri.to_string uri));
+      let%lwt res =
+        handler (make_request ~req ~query ~param ~body ~headers ())
+      in
+      (match res with
+      | `Response res ->
+          Log.info (fun m ->
+              m "%s %s %s"
+                (Status.to_string (fst res).status)
+                (Method.to_string meth) (Uri.to_string uri))
+      | `Expert _ ->
+          Log.info (fun m ->
+              m "Expert %s %s" (Method.to_string meth) (Uri.to_string uri)));
       Lwt.return res
     with
-    | ErrorResponse (status, body) -> Server.respond_string ~status ~body ()
+    | ErrorResponse (status, body) -> respond ~status body
     | e ->
         Log.err (fun m ->
             m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth)
               (Uri.to_string uri) (Printexc.to_string e)
               (Printexc.get_backtrace ()));
-        Server.respond_string ~status:`Internal_server_error ~body:"" ()
+        respond ~status:`Internal_server_error ""
   in
   let server =
-    Server.make ~callback () |> Server.create ~mode:(`TCP (`Port port))
+    Server.make_response_action ~callback ()
+    |> Server.create ~mode:(`TCP (`Port port))
   in
   Lwt.join [ server; f () ] |> Lwt_main.run
 
@@ -265,10 +280,6 @@ let post (path : string) (handler : handler) =
   let path = parse_path path in
   (`POST, path, handler)
 
-let respond ?(status = `OK) ?(headers = []) (body : string) =
-  let headers = headers |> Cohttp.Header.of_list in
-  Cohttp_lwt_unix.Server.respond_string ~status ~headers ~body ()
-
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
 
@@ -276,6 +287,39 @@ let query (k : string) (r : request) : string list = query_opt k r |> Option.get
 let param (k : string) (r : request) : string = List.assoc k r.param
 let body (r : request) : string Lwt.t = Cohttp_lwt.Body.to_string r.body
 let headers (r : request) : (string * string) list = r.headers
+
+type ws_conn = {
+  mutable frames_out_fn : (Websocket.Frame.t option -> unit) option;
+  mutable closed : bool; [@default false]
+  recv_stream : string Lwt_stream.t;
+}
+[@@deriving make]
+
+let ws_send (c : ws_conn) content =
+  if not c.closed then
+    Websocket.Frame.create ~content ()
+    |> Option.some |> Option.get c.frames_out_fn
+
+let ws_recv (c : ws_conn) = Lwt_stream.get c.recv_stream
+
+let websocket (r : request) f =
+  Cohttp_lwt.Body.drain_body r.body;%lwt
+  let recv_stream, recv_stream_push = Lwt_stream.create () in
+  let conn = make_ws_conn ~recv_stream () in
+  let%lwt resp, frames_out_fn =
+    Websocket_cohttp_lwt.upgrade_connection r.req (fun { opcode; content; _ } ->
+        match opcode with
+        | Close ->
+            Log.debug (fun m -> m "Websocket: recv Close");
+            conn.closed <- true;
+            recv_stream_push None
+        | _ ->
+            Log.debug (fun m -> m "Websocket: recv: %s" content);
+            recv_stream_push (Some content))
+  in
+  conn.frames_out_fn <- Some frames_out_fn;
+  Lwt.async (fun () -> f conn);
+  Lwt.return resp
 
 let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
   let open Cohttp in

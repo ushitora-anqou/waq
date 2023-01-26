@@ -44,6 +44,8 @@
   sha
   uri
   uuidm
+  websocket
+  websocket-lwt-unix
   x509
   yaml
   yojson)
