@@ -44,8 +44,7 @@ module User = struct
     match by with
     | `id id -> get_one ~id ()
     | `username n ->
-        do_query @@ fun c ->
-        query_row c
+        query_row
           {|
 SELECT * FROM users
 INNER JOIN accounts ON users.account_id = accounts.id
@@ -99,9 +98,8 @@ module Status = struct
   let insert = save_one
 
   let update_uri s =
-    do_query @@ fun c ->
-    named_query_row c
-      "UPDATE statuses SET uri = :uri WHERE id = :id RETURNING *" s
+    named_query_row "UPDATE statuses SET uri = :uri WHERE id = :id RETURNING *"
+      s
 end
 
 module Follow = struct
@@ -206,8 +204,7 @@ module OAuthAccessToken = struct
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =
-  do_query @@ fun c ->
-  Status.query c
+  Status.query
     {|
 SELECT * FROM statuses
 WHERE

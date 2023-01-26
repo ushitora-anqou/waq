@@ -88,23 +88,25 @@ let unpack_impl loc (fields : label_declaration list) =
 
 let query_impl loc =
   Ast_helper.with_default_loc loc @@ fun () ->
-  [%stri let query ~p c sql = List.map pack =|< Sql.query c sql ~p]
+  [%stri
+    let query ~p sql = do_query @@ fun c -> List.map pack =|< Sql.query c sql ~p]
 
 let query_row_impl loc =
   Ast_helper.with_default_loc loc @@ fun () ->
-  [%stri let query_row ~p c sql = pack =|< Sql.query_row c sql ~p]
+  [%stri
+    let query_row ~p sql = do_query @@ fun c -> pack =|< Sql.query_row c sql ~p]
 
 let named_query_impl loc =
   Ast_helper.with_default_loc loc @@ fun () ->
   [%stri
-    let named_query c sql x =
-      List.map pack =|< Sql.named_query c sql ~p:(unpack x)]
+    let named_query sql x =
+      do_query @@ fun c -> List.map pack =|< Sql.named_query c sql ~p:(unpack x)]
 
 let named_query_row_impl loc =
   Ast_helper.with_default_loc loc @@ fun () ->
   [%stri
-    let named_query_row c sql x =
-      pack =|< Sql.named_query_row c sql ~p:(unpack x)]
+    let named_query_row sql x =
+      do_query @@ fun c -> pack =|< Sql.named_query_row c sql ~p:(unpack x)]
 
 let save_one_impl loc (fields : label_declaration list) (td : type_declaration)
     =
@@ -128,7 +130,7 @@ let save_one_impl loc (fields : label_declaration list) (td : type_declaration)
      in
      [%stri
        let [%p ppat_var ~loc { loc; txt = funname }] =
-        fun x -> do_query @@ fun c -> named_query_row c [%e estring ~loc sql] x]
+        fun x -> named_query_row [%e estring ~loc sql] x]
 
 let general_where_impl kind loc (fields : label_declaration list)
     (td : type_declaration) =
