@@ -171,7 +171,9 @@ let scenario2 waq_token mstdn_token =
   let aid =
     match Yojson.Safe.from_string r with
     | `List [ `Assoc l ] -> l |> List.assoc "id" |> expect_string
-    | _ -> assert false
+    | _ ->
+        pp_json r;
+        assert false
   in
 
   (* Follow me from @admin@localhost:3000 *)
@@ -323,6 +325,49 @@ let scenario3 _waq_token =
 
   Lwt.return_unit
 
+let websocket uri handler f =
+  let open Websocket_lwt_unix in
+  let uri = Uri.of_string uri in
+  let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
+  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
+  let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
+  let%lwt conn = connect ~ctx client uri in
+  let close_sent = ref false in
+  let pushf msg =
+    match msg with
+    | Some content -> write conn (Websocket.Frame.create ~content ())
+    | None ->
+        write conn (Websocket.Frame.create ~opcode:Close ());%lwt
+        Lwt.return (close_sent := true)
+  in
+  let rec react () =
+    match%lwt read conn with
+    | { Websocket.Frame.opcode = Ping; _ } ->
+        write conn (Websocket.Frame.create ~opcode:Pong ());%lwt
+        react ()
+    | { opcode = Pong; _ } -> react ()
+    | { opcode = Text; content; _ } | { opcode = Binary; content; _ } ->
+        handler content pushf;%lwt
+        react ()
+    | { opcode = Close; content; _ } ->
+        if !close_sent then Lwt.return_unit
+        else if String.length content >= 2 then
+          write conn
+            (Websocket.Frame.create ~opcode:Close
+               ~content:(String.sub content 0 2) ())
+        else write conn (Websocket.Frame.close 1000);%lwt
+        close_transport conn
+    | _ -> close_transport conn
+  in
+  Lwt.join [ f pushf; react () ]
+
+let waq_scenario_2 waq_token =
+  let target =
+    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
+  in
+  let handler _content _pushf = Lwt.return_unit in
+  websocket (waq target) handler @@ fun pushf -> pushf None
+
 let scenarios_with_waq_and_mstdn () =
   [ (1, scenario1); (2, scenario2) ]
   |> List.iter @@ fun (i, scenario) ->
@@ -335,7 +380,7 @@ let scenarios_with_waq_and_mstdn () =
      Lwt_main.run @@ scenario waq_token mstdn_token
 
 let scenarios_with_waq () =
-  [ (1, scenario3) ]
+  [ (1, scenario3); (2, waq_scenario_2) ]
   |> List.iter @@ fun (i, scenario) ->
      Log.debug (fun m -> m "===== Scenario waq-%d =====" i);
      new_session @@ fun waq_token ->

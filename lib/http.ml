@@ -295,9 +295,9 @@ type ws_conn = {
 }
 [@@deriving make]
 
-let ws_send (c : ws_conn) content =
+let ws_send ?(opcode = Websocket.Frame.Opcode.Text) (c : ws_conn) content =
   if not c.closed then
-    Websocket.Frame.create ~content ()
+    Websocket.Frame.create ~opcode ~content ()
     |> Option.some |> Option.get c.frames_out_fn
 
 let ws_recv (c : ws_conn) = Lwt_stream.get c.recv_stream
@@ -311,14 +311,27 @@ let websocket (r : request) f =
         match opcode with
         | Close ->
             Log.debug (fun m -> m "Websocket: recv Close");
+            ws_send ~opcode:Close conn "";
             conn.closed <- true;
             recv_stream_push None
-        | _ ->
+        | Text | Binary ->
             Log.debug (fun m -> m "Websocket: recv: %s" content);
-            recv_stream_push (Some content))
+            recv_stream_push (Some content)
+        | Ping -> ws_send ~opcode:Pong conn content
+        | Pong -> () (* Just ignore *)
+        | _ ->
+            Websocket.Frame.close 1002
+            |> Option.(some |$> get conn.frames_out_fn))
   in
   conn.frames_out_fn <- Some frames_out_fn;
-  Lwt.async (fun () -> f conn);
+  Lwt.async (fun () ->
+      try
+        Log.debug (fun m -> m "Websocket: start thread");
+        f conn
+      with e ->
+        Log.err (fun m ->
+            m "Websocket: thread error: %s" (Printexc.to_string e));
+        Lwt.return_unit);
   Lwt.return resp
 
 let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
