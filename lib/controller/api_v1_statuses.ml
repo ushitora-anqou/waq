@@ -28,11 +28,23 @@ let post req =
     { s with uri = self.uri ^/ "statuses" ^/ string_of_int s.id }
     |> Db.Status.update_uri
   in
+  (* Send the status to self *)
+  Service.Insert_to_feed.kick ~status_id:s.id ~user_id:self_id ~stream:`User;
   (* Send followers the status *)
   let%lwt followers = Db.Follow.get_many ~target_account_id:self_id () in
   followers
-  |> List.iter (fun (f : Db.Follow.t) ->
-         Service.Create_note.kick f.account_id s);
+  |> Lwt_list.iter_p (fun (f : Db.Follow.t) ->
+         let open Lwt.Infix in
+         let%lwt a = Db.Account.get_one ~id:f.account_id () in
+         match a.domain with
+         | None ->
+             (* local *)
+             Db.User.get_one ~account_id:a.id () >|= fun u ->
+             Service.Insert_to_feed.kick ~status_id:s.id ~user_id:u.id
+               ~stream:`User
+         | Some _ ->
+             (* Remote *)
+             Service.Create_note.kick f.account_id s |> Lwt.return);%lwt
   (* Return the result to the client *)
   make_post_api_v1_statuses_res ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 now) ~content:s.text ~uri:s.uri

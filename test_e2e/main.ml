@@ -40,6 +40,10 @@ let expect_string = function
   | `String s -> s
   | _ -> failwith "Expected string, got something different"
 
+let expect_assoc = function
+  | `Assoc l -> l
+  | _ -> failwith "Expected assoc, got something different"
+
 let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
 let waq url = waq_server_name ^ url
@@ -362,11 +366,46 @@ let websocket uri handler f =
   Lwt.join [ f pushf; react () ]
 
 let waq_scenario_2 waq_token =
+  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
+
+  let got_uri = ref None in
   let target =
     Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
   in
-  let handler _content _pushf = Lwt.return_unit in
-  websocket (waq target) handler @@ fun pushf -> pushf None
+  let handler content _pushf =
+    let l = Yojson.Safe.from_string content |> expect_assoc in
+    assert (List.assoc "stream" l = `List [ `String "user" ]);
+    assert (List.assoc "event" l |> expect_string = "update");
+    let payload = List.assoc "payload" l |> expect_string in
+    let uri =
+      let l = Yojson.Safe.from_string payload |> expect_assoc in
+      List.assoc "uri" l |> expect_string
+    in
+    got_uri := Some uri;
+    Lwt.return_unit
+  in
+  let expected_uri = ref None in
+  websocket (waq target) handler (fun pushf ->
+      let content = "こんにちは、世界！" in
+      let%lwt r =
+        let body =
+          `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
+        in
+        fetch_exn
+          ~headers:
+            [
+              waq_auth;
+              ("Accept", "application/json");
+              ("Content-Type", "application/json");
+            ]
+          ~meth:`POST ~body (waq "/api/v1/statuses")
+      in
+      expected_uri :=
+        Yojson.Safe.from_string r |> expect_assoc |> List.assoc "uri"
+        |> expect_string |> Option.some;
+      pushf None);%lwt
+  assert (Option.get !got_uri = Option.get !expected_uri);
+  Lwt.return_unit
 
 let scenarios_with_waq_and_mstdn () =
   [ (1, scenario1); (2, scenario2) ]

@@ -10,6 +10,9 @@ let url (l : string list) =
 let is_my_domain (u : string) =
   u |> Uri.of_string |> Uri.domain |> Config.is_my_domain
 
+let acct (username : string) (domain : string option) : string =
+  match domain with None -> username | Some domain -> username ^ "@" ^ domain
+
 (* .well-known/webfinger *)
 type webfinger_link = {
   rel : string;
@@ -166,3 +169,37 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
     when Cohttp.Code.(status |> code_of_status |> is_success) ->
       ()
   | _ -> failwith "Failed to post activity to inbox"
+
+(* Entity account *)
+type account = {
+  id : string;
+  username : string;
+  acct : string;
+  display_name : string;
+  created_at : string;
+}
+[@@deriving make, yojson]
+
+let make_account_from_model (a : Db.Account.t) =
+  make_account ~id:(string_of_int a.id) ~username:a.username
+    ~acct:(acct a.username a.domain) ~display_name:a.display_name
+    ~created_at:(Ptime.to_rfc3339 a.created_at)
+
+(* Entity status *)
+type status = {
+  id : string;
+  created_at : string;
+  visibility : string;
+  uri : string;
+  content : string;
+  account : account;
+}
+[@@deriving make, yojson]
+
+let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
+  let open Lwt.Infix in
+  Db.Account.get_one ~id:s.account_id () >|= fun a ->
+  let account = make_account_from_model a in
+  make_status ~id:(string_of_int s.id)
+    ~created_at:(Ptime.to_rfc3339 s.created_at)
+    ~visibility ~uri:s.uri ~content:s.text ~account

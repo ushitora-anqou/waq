@@ -1,20 +1,32 @@
-type key = int * string
+type stream = [ `User ]
+type key = int * stream
+type connection = [ `WebSocket of Http.ws_conn ]
 
-let connections : (key, [< `WebSocket of Http.ws_conn ]) Hashtbl.t =
-  Hashtbl.create 10
+module Connection = struct
+  type t = connection
 
+  let compare = compare
+end
+
+module ConnectionSet = Set.Make (Connection)
+
+let connections : (key, ConnectionSet.t) Hashtbl.t = Hashtbl.create 10
 let make_key ~user_id ~stream = (user_id, stream)
 
-let add ~user_id ~stream = function
-  | `WebSocket (conn : Http.ws_conn) ->
-      let key = make_key ~user_id ~stream in
-      assert (not (Hashtbl.mem connections key));
-      Hashtbl.add connections key (`WebSocket conn)
+let add (k : key) (conn : connection) =
+  Hashtbl.find_opt connections k
+  |> Option.value ~default:ConnectionSet.empty
+  |> ConnectionSet.add conn
+  |> Hashtbl.replace connections k
 
-let remove ~user_id ~stream = Hashtbl.remove connections (user_id, stream)
+let remove (k : key) (conn : connection) =
+  match Hashtbl.find_opt connections k with
+  | None -> invalid_arg "Streaming.remove: key not found"
+  | Some s -> s |> ConnectionSet.remove conn |> Hashtbl.replace connections k
 
-let push ~user_id ~stream msg =
-  let key = make_key ~user_id ~stream in
-  match Hashtbl.find_opt connections key with
+let push (k : key) msg =
+  match Hashtbl.find_opt connections k with
   | None -> () (* Just ignore *)
-  | Some (`WebSocket conn) -> Http.ws_send conn msg
+  | Some s ->
+      s
+      |> ConnectionSet.iter (function `WebSocket conn -> Http.ws_send conn msg)
