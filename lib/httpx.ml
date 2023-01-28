@@ -19,12 +19,14 @@ let query ?default name (r : request) =
         | `Bool b -> string_of_bool b
         | `Int i -> string_of_int i
         | `String s -> s
-        | _ -> Http.raise_error_response `Bad_request)
-    | JSON _ -> Http.raise_error_response `Bad_request
+        | _ -> failwith "json assoc")
+    | JSON _ -> failwith "json"
     | Form _body ->
         (* FIXME: use body *)
         Http.query name r.http_request |> List.hd
-  with _ when default <> None -> Option.get default
+  with
+  | _ when default <> None -> Option.get default
+  | _ -> Http.raise_error_response `Bad_request
 
 let query_opt name (r : request) = try Some (query name r) with _ -> None
 
