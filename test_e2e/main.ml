@@ -1,3 +1,4 @@
+open Lwt.Infix
 module Log = Waq.Log
 module Uri = Waq.Http.Uri
 module Ptime = Waq.Util.Ptime
@@ -104,254 +105,65 @@ let mstdn url =
   let server_name = "http://localhost:3000" in
   server_name ^ url
 
+let url = function `Waq -> waq | `Mstdn -> mstdn
+
 let pp_json (s : string) =
   Log.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
-let waq_mstdn_scenario_1 waq_token mstdn_token =
-  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
-  let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
-
-  (* Connect WebSocket *)
-  let ws_statuses = ref [] in
-  let _set_current_state, handler =
-    websocket_handler_state_machine ~init:`Recv
-      ~states:
-        [
-          ( `Recv,
-            fun l _pushf ->
-              assert (List.assoc "stream" l = `List [ `String "user" ]);
-              assert (List.assoc "event" l |> expect_string = "update");
-              let payload = List.assoc "payload" l |> expect_string in
-              ws_statuses :=
-                (Yojson.Safe.from_string payload |> expect_assoc)
-                :: !ws_statuses;
-              Lwt.return `Recv );
-        ]
-      ()
-  in
+let lookup ~token kind ?domain ~username () =
+  let headers = [ ("Authorization", "Bearer " ^ token) ] in
   let target =
-    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
+    let src = "/api/v1/accounts/search?resolve=true&q=@" in
+    match domain with
+    | None -> src ^ username
+    | Some domain -> src ^ username ^ "@" ^ domain
   in
-  let uris = ref [] in
-  websocket (waq target) handler (fun pushf ->
-      (* Lookup @admin@localhost:3000 *)
-      let%lwt r =
-        fetch_exn
-          (waq "/api/v1/accounts/search?q=@admin@localhost:3000&resolve=true")
-      in
-      let admin_id, username, acct =
-        let l =
-          match Yojson.Safe.from_string r with
-          | `List [ `Assoc l ] -> l
-          | _ -> assert false
-        in
-        ( l |> List.assoc "id" |> expect_string,
-          l |> List.assoc "username" |> expect_string,
-          l |> List.assoc "acct" |> expect_string )
-      in
-      assert (username = "admin");
-      assert (acct = "admin@localhost:3000");
-
-      (* Follow @admin@localhost:3000 *)
-      fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-        (waq (Printf.sprintf "/api/v1/accounts/%s/follow" admin_id))
-      |> ignore_lwt;%lwt
-      Lwt_unix.sleep 1.0;%lwt
-
-      (* Post by @admin@localhost:3000 *)
-      let content = "こんにちは、世界！" in
-      let%lwt r =
-        let body =
-          `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
-        in
-        fetch_exn
-          ~headers:
-            [
-              mstdn_auth;
-              ("Accept", "application/json");
-              ("Content-Type", "application/json");
-            ]
-          ~meth:`POST ~body (mstdn "/api/v1/statuses")
-      in
-      let uri, content =
-        let l = Yojson.Safe.from_string r |> expect_assoc in
-        ( List.assoc "uri" l |> expect_string,
-          List.assoc "content" l |> expect_string )
-      in
-      uris := uri :: !uris;
-      Lwt_unix.sleep 1.0;%lwt
-
-      (* Post by me *)
-      let content2 = "こんにちは、世界！２" in
-      let%lwt r =
-        let body =
-          `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
-        in
-        fetch_exn
-          ~headers:
-            [
-              waq_auth;
-              ("Accept", "application/json");
-              ("Content-Type", "application/json");
-            ]
-          ~meth:`POST ~body (waq "/api/v1/statuses")
-      in
-      let uri2, content2 =
-        let l = Yojson.Safe.from_string r |> expect_assoc in
-        ( List.assoc "uri" l |> expect_string,
-          List.assoc "content" l |> expect_string )
-      in
-      uris := uri2 :: !uris;
-      Lwt_unix.sleep 1.0;%lwt
-
-      (* Get my home timeline and check *)
-      let%lwt r =
-        fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home")
-      in
-      (match Yojson.Safe.from_string r with
-      | `List [ `Assoc l2; `Assoc l ] ->
-          (* Check if the timeline is correct *)
-          assert (uri = (l |> List.assoc "uri" |> expect_string));
-          assert (content = (l |> List.assoc "content" |> expect_string));
-          assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-          assert (content2 = (l2 |> List.assoc "content" |> expect_string));
-          ()
-      | _ -> assert false);
-
-      (* Unfollow @admin@localhost:3000 *)
-      fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-        (waq (Printf.sprintf "/api/v1/accounts/%s/unfollow" admin_id))
-      |> ignore_lwt;%lwt
-      Lwt_unix.sleep 1.0;%lwt
-
-      (* Get my home timeline and check again *)
-      let%lwt r =
-        fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home")
-      in
-      (match Yojson.Safe.from_string r with
-      | `List [ `Assoc l2 ] ->
-          (* Check if the timeline is correct *)
-          assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-          assert (content2 = (l2 |> List.assoc "content" |> expect_string));
-          ()
-      | _ -> assert false);
-
-      pushf None);%lwt
-
-  let expected_uris = List.sort compare !uris in
-  let got_uris =
-    !ws_statuses
-    |> List.map (fun s -> s |> List.assoc "uri" |> expect_string)
-    |> List.sort compare
-  in
-  assert (expected_uris = got_uris);
-
-  Lwt.return_unit
-
-let waq_mstdn_scenario_2 waq_token mstdn_token =
-  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
-  let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
-
-  (* Lookup me from localhost:3000 *)
-  let%lwt r =
-    fetch_exn ~headers:[ mstdn_auth ]
-      (mstdn "/api/v1/accounts/search?q=@user1@"
-      ^ waq_server_domain ^ "&resolve=true")
-  in
-  let aid =
+  let%lwt r = fetch_exn ~headers (url kind target) in
+  let l =
     match Yojson.Safe.from_string r with
-    | `List [ `Assoc l ] -> l |> List.assoc "id" |> expect_string
-    | _ ->
-        pp_json r;
-        assert false
+    | `List [ `Assoc l ] -> l
+    | _ -> assert false
   in
+  Lwt.return
+    ( l |> List.assoc "id" |> expect_string,
+      l |> List.assoc "username" |> expect_string,
+      l |> List.assoc "acct" |> expect_string )
 
-  (* Follow me from @admin@localhost:3000 *)
-  let%lwt _ =
-    fetch_exn ~meth:`POST ~headers:[ mstdn_auth ]
-      (mstdn ("/api/v1/accounts/" ^ aid ^ "/follow"))
-  in
-  Lwt_unix.sleep 1.0;%lwt
+let follow ~token kind account_id =
+  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  fetch_exn ~meth:`POST ~headers
+    (url kind (Printf.sprintf "/api/v1/accounts/%s/follow" account_id))
+  |> ignore_lwt
 
-  (* Post by @admin@localhost:3000 *)
-  let content = "こんにちは、世界！" in
+let unfollow ~token kind account_id =
+  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  fetch_exn ~meth:`POST ~headers
+    (url kind (Printf.sprintf "/api/v1/accounts/%s/unfollow" account_id))
+  |> ignore_lwt
+
+let post ~token kind ?content () =
+  let content = content |> Option.value ~default:"こんにちは、世界！" in
   let%lwt r =
     let body =
       `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
     in
-    fetch_exn
-      ~headers:
-        [
-          mstdn_auth;
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (mstdn "/api/v1/statuses")
-  in
-  let uri, content =
-    match Yojson.Safe.from_string r with
-    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
-    | _ -> assert false
-  in
-  Lwt_unix.sleep 1.0;%lwt
-
-  (* Post by me *)
-  let content2 = "こんにちは、世界！２" in
-  let%lwt r =
-    let body =
-      `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
+    let headers =
+      [
+        ("Authorization", "Bearer " ^ token);
+        ("Accept", "application/json");
+        ("Content-Type", "application/json");
+      ]
     in
-    fetch_exn
-      ~headers:
-        [
-          waq_auth;
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (waq "/api/v1/statuses")
+    fetch_exn ~headers ~meth:`POST ~body (url kind "/api/v1/statuses")
   in
-  let uri2, content2 =
-    match Yojson.Safe.from_string r with
-    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
-    | _ -> assert false
-  in
-  Lwt_unix.sleep 1.0;%lwt
+  let l = Yojson.Safe.from_string r |> expect_assoc in
+  List.assoc "uri" l |> expect_string |> Lwt.return
 
-  (* Get home timeline of @admin@localhost:3000 and check *)
-  let%lwt r =
-    fetch_exn ~headers:[ mstdn_auth ] (mstdn "/api/v1/timelines/home")
-  in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l2; `Assoc l ] ->
-      (* Check if the timeline is correct *)
-      assert (uri = List.assoc "uri" l);
-      assert (content = List.assoc "content" l);
-      assert (uri2 = List.assoc "uri" l2);
-      assert (content2 = List.assoc "content" l2);
-      ()
-  | _ -> assert false);
-
-  (* Unfollow me from @admin@localhost:3000 *)
-  let%lwt _ =
-    fetch_exn ~meth:`POST ~headers:[ mstdn_auth ]
-      (mstdn ("/api/v1/accounts/" ^ aid ^ "/unfollow"))
-  in
-  Lwt_unix.sleep 1.0;%lwt
-
-  (* Get home timeline of @admin@localhost:3000 and check again *)
-  let%lwt r =
-    fetch_exn ~headers:[ mstdn_auth ] (mstdn "/api/v1/timelines/home")
-  in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l ] ->
-      (* Check if the timeline is correct *)
-      assert (uri = List.assoc "uri" l);
-      assert (content = List.assoc "content" l);
-      ()
-  | _ -> assert false);
-
-  Lwt.return_unit
+let home_timeline ~token kind =
+  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  fetch_exn ~headers (url kind "/api/v1/timelines/home") >|= fun r ->
+  match Yojson.Safe.from_string r with `List l -> l | _ -> assert false
 
 let fetch_access_token ~username =
   let%lwt r =
@@ -409,6 +221,127 @@ let fetch_access_token ~username =
   | `Assoc l -> l |> List.assoc "access_token" |> expect_string |> Lwt.return
   | _ -> assert false
 
+let waq_mstdn_scenario_1 waq_token mstdn_token =
+  (* Connect WebSocket *)
+  let ws_statuses = ref [] in
+  let _set_current_state, handler =
+    websocket_handler_state_machine ~init:`Recv
+      ~states:
+        [
+          ( `Recv,
+            fun l _pushf ->
+              assert (List.assoc "stream" l = `List [ `String "user" ]);
+              assert (List.assoc "event" l |> expect_string = "update");
+              let payload = List.assoc "payload" l |> expect_string in
+              ws_statuses :=
+                (Yojson.Safe.from_string payload |> expect_assoc)
+                :: !ws_statuses;
+              Lwt.return `Recv );
+        ]
+      ()
+  in
+  let target =
+    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
+  in
+  let uris = ref [] in
+  websocket (waq target) handler (fun pushf ->
+      (* Lookup @admin@localhost:3000 *)
+      let%lwt admin_id, username, acct =
+        lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000"
+          ()
+      in
+      assert (username = "admin");
+      assert (acct = "admin@localhost:3000");
+
+      (* Follow @admin@localhost:3000 *)
+      follow `Waq ~token:waq_token admin_id;%lwt
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Post by @admin@localhost:3000 *)
+      let%lwt uri = post `Mstdn ~token:mstdn_token () in
+      uris := uri :: !uris;
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Post by me *)
+      let%lwt uri2 = post `Waq ~token:waq_token () in
+      uris := uri2 :: !uris;
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Get my home timeline and check *)
+      (home_timeline `Waq ~token:waq_token >|= function
+       | [ `Assoc l2; `Assoc l ] ->
+           (* Check if the timeline is correct *)
+           assert (uri = (l |> List.assoc "uri" |> expect_string));
+           assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+           ()
+       | _ -> assert false);%lwt
+
+      (* Unfollow @admin@localhost:3000 *)
+      unfollow `Waq ~token:waq_token admin_id;%lwt
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Get my home timeline and check again *)
+      (home_timeline `Waq ~token:waq_token >|= function
+       | [ `Assoc l2 ] ->
+           (* Check if the timeline is correct *)
+           assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+           ()
+       | _ -> assert false);%lwt
+
+      pushf None);%lwt
+
+  let expected_uris = List.sort compare !uris in
+  let got_uris =
+    !ws_statuses
+    |> List.map (fun s -> s |> List.assoc "uri" |> expect_string)
+    |> List.sort compare
+  in
+  assert (expected_uris = got_uris);
+
+  Lwt.return_unit
+
+let waq_mstdn_scenario_2 waq_token mstdn_token =
+  (* Lookup me from localhost:3000 *)
+  let%lwt aid, _, _ =
+    lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
+      ()
+  in
+
+  (* Follow me from @admin@localhost:3000 *)
+  follow `Mstdn ~token:mstdn_token aid;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by @admin@localhost:3000 *)
+  let%lwt uri = post `Mstdn ~token:mstdn_token () in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by me *)
+  let%lwt uri2 = post `Waq ~token:waq_token () in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get home timeline of @admin@localhost:3000 and check *)
+  (home_timeline `Mstdn ~token:mstdn_token >|= function
+   | [ `Assoc l2; `Assoc l ] ->
+       (* Check if the timeline is correct *)
+       assert (uri = (List.assoc "uri" l |> expect_string));
+       assert (uri2 = (List.assoc "uri" l2 |> expect_string));
+       ()
+   | _ -> assert false);%lwt
+
+  (* Unfollow me from @admin@localhost:3000 *)
+  unfollow `Mstdn ~token:mstdn_token aid;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get home timeline of @admin@localhost:3000 and check again *)
+  (home_timeline `Mstdn ~token:mstdn_token >|= function
+   | [ `Assoc l ] ->
+       (* Check if the timeline is correct *)
+       assert (uri = (List.assoc "uri" l |> expect_string));
+       ()
+   | _ -> assert false);%lwt
+
+  Lwt.return_unit
+
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
   let%lwt r =
@@ -424,7 +357,6 @@ let waq_scenario_1 _waq_token =
   Lwt.return_unit
 
 let waq_scenario_2 waq_token =
-  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
   let target =
     Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
   in
@@ -455,23 +387,8 @@ let waq_scenario_2 waq_token =
   let expected_uri = ref None in
   let mtx = Lwt_mutex.create () in
   websocket ~mtx (waq target) handler (fun _pushf ->
-      let content = "こんにちは、世界！" in
-      let%lwt r =
-        let body =
-          `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
-        in
-        fetch_exn
-          ~headers:
-            [
-              waq_auth;
-              ("Accept", "application/json");
-              ("Content-Type", "application/json");
-            ]
-          ~meth:`POST ~body (waq "/api/v1/statuses")
-      in
-      expected_uri :=
-        Yojson.Safe.from_string r |> expect_assoc |> List.assoc "uri"
-        |> expect_string |> Option.some;
+      let%lwt uri = post `Waq ~token:waq_token () in
+      expected_uri := Some uri;
       set_current_state `Recv;
       Lwt.return_unit);%lwt
 
@@ -479,89 +396,39 @@ let waq_scenario_2 waq_token =
   Lwt.return_unit
 
 let waq_scenario_3 waq_token =
-  let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
   let%lwt waq_token' = fetch_access_token ~username:"user2" in
-  let waq_auth' = ("Authorization", "Bearer " ^ waq_token') in
 
   (* Look up & Follow @user2 *)
-  let%lwt r = fetch_exn (waq "/api/v1/accounts/search?q=@user2") in
-  let user2_id =
-    match Yojson.Safe.from_string r with
-    | `List [ `Assoc l ] -> l |> List.assoc "id" |> expect_string
-    | _ -> assert false
-  in
-  fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-    (waq (Printf.sprintf "/api/v1/accounts/%s/follow" user2_id))
-  |> ignore_lwt;%lwt
+  let%lwt user2_id, _, _ = lookup `Waq ~token:waq_token ~username:"user2" () in
+  follow `Waq ~token:waq_token user2_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @user2 *)
-  let content = "こんにちは、世界！" in
-  let%lwt r =
-    let body =
-      `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
-    in
-    fetch_exn
-      ~headers:
-        [
-          waq_auth';
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (waq "/api/v1/statuses")
-  in
-  let uri =
-    let l = Yojson.Safe.from_string r |> expect_assoc in
-    List.assoc "uri" l |> expect_string
-  in
+  let%lwt uri = post `Waq ~token:waq_token' () in
 
   (* Post by me *)
-  let content2 = "こんにちは、世界！２" in
-  let%lwt r =
-    let body =
-      `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
-    in
-    fetch_exn
-      ~headers:
-        [
-          waq_auth;
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (waq "/api/v1/statuses")
-  in
-  let uri2 =
-    let l = Yojson.Safe.from_string r |> expect_assoc in
-    List.assoc "uri" l |> expect_string
-  in
+  let%lwt uri2 = post `Waq ~token:waq_token () in
 
   (* Get my home timeline and check *)
-  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l2; `Assoc l ] ->
-      (* Check if the timeline is correct *)
-      assert (uri = (l |> List.assoc "uri" |> expect_string));
-      assert (content = (l |> List.assoc "content" |> expect_string));
-      assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-      assert (content2 = (l2 |> List.assoc "content" |> expect_string));
-      ()
-  | _ -> assert false);
+  (home_timeline `Waq ~token:waq_token >|= function
+   | [ `Assoc l2; `Assoc l ] ->
+       (* Check if the timeline is correct *)
+       assert (uri = (l |> List.assoc "uri" |> expect_string));
+       assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+       ()
+   | _ -> assert false);%lwt
 
   (* Unfollow @user2 *)
-  fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-    (waq (Printf.sprintf "/api/v1/accounts/%s/unfollow" user2_id))
-  |> ignore_lwt;%lwt
+  unfollow `Waq ~token:waq_token user2_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get my home timeline and check again *)
-  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l2 ] ->
-      (* Check if the timeline is correct *)
-      assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-      assert (content2 = (l2 |> List.assoc "content" |> expect_string));
-      ()
-  | _ -> assert false);
+  (home_timeline `Waq ~token:waq_token >|= function
+   | [ `Assoc l2 ] ->
+       (* Check if the timeline is correct *)
+       assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+       ()
+   | _ -> assert false);%lwt
 
   Lwt.return_unit
 
