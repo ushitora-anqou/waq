@@ -56,10 +56,10 @@ let websocket ?mtx uri handler f =
 let websocket_handler_state_machine ~states ~init () =
   let current = ref init in
   let set_current v = current := v in
-  let handler content _pushf =
+  let handler content pushf =
     let real_handler = states |> List.assoc !current in
     let%lwt next_state =
-      content |> Yojson.Safe.from_string |> expect_assoc |> real_handler
+      real_handler (content |> Yojson.Safe.from_string |> expect_assoc) pushf
     in
     set_current next_state;
     Lwt.return_unit
@@ -115,16 +115,39 @@ let scenario1 waq_token mstdn_token =
   let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
   let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
 
-  (* Lookup @admin@localhost:3000 *)
-  let%lwt r =
-    fetch_exn
-      (waq "/api/v1/accounts/search?q=@admin@localhost:3000&resolve=true")
+  (* Connect WebSocket *)
+  let ws_statuses = ref [] in
+  let _set_current_state, handler =
+    websocket_handler_state_machine ~init:`Recv
+      ~states:
+        [
+          ( `Recv,
+            fun l _pushf ->
+              assert (List.assoc "stream" l = `List [ `String "user" ]);
+              assert (List.assoc "event" l |> expect_string = "update");
+              let payload = List.assoc "payload" l |> expect_string in
+              ws_statuses :=
+                (Yojson.Safe.from_string payload |> expect_assoc)
+                :: !ws_statuses;
+              Lwt.return `Recv );
+        ]
+      ()
   in
-  assert (
-    let open Yojson.Safe in
-    equal (from_string r)
-      (from_string
-         {|
+  let target =
+    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
+  in
+  let uris = ref [] in
+  websocket (waq target) handler (fun pushf ->
+      (* Lookup @admin@localhost:3000 *)
+      let%lwt r =
+        fetch_exn
+          (waq "/api/v1/accounts/search?q=@admin@localhost:3000&resolve=true")
+      in
+      assert (
+        let open Yojson.Safe in
+        equal (from_string r)
+          (from_string
+             {|
 [{
   "id": "2",
   "username": "admin",
@@ -132,82 +155,99 @@ let scenario1 waq_token mstdn_token =
   "display_name": ""
 }]|}));
 
-  (* Follow @admin@localhost:3000 *)
-  fetch_exn ~meth:`POST ~headers:[ waq_auth ] (waq "/api/v1/accounts/2/follow")
-  |> ignore_lwt;%lwt
-  Lwt_unix.sleep 1.0;%lwt
+      (* Follow @admin@localhost:3000 *)
+      fetch_exn ~meth:`POST ~headers:[ waq_auth ]
+        (waq "/api/v1/accounts/2/follow")
+      |> ignore_lwt;%lwt
+      Lwt_unix.sleep 1.0;%lwt
 
-  (* Post by @admin@localhost:3000 *)
-  let content = "こんにちは、世界！" in
-  let%lwt r =
-    let body =
-      `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
-    in
-    fetch_exn
-      ~headers:
-        [
-          mstdn_auth;
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (mstdn "/api/v1/statuses")
+      (* Post by @admin@localhost:3000 *)
+      let content = "こんにちは、世界！" in
+      let%lwt r =
+        let body =
+          `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
+        in
+        fetch_exn
+          ~headers:
+            [
+              mstdn_auth;
+              ("Accept", "application/json");
+              ("Content-Type", "application/json");
+            ]
+          ~meth:`POST ~body (mstdn "/api/v1/statuses")
+      in
+      let uri, content =
+        let l = Yojson.Safe.from_string r |> expect_assoc in
+        ( List.assoc "uri" l |> expect_string,
+          List.assoc "content" l |> expect_string )
+      in
+      uris := uri :: !uris;
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Post by me *)
+      let content2 = "こんにちは、世界！２" in
+      let%lwt r =
+        let body =
+          `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
+        in
+        fetch_exn
+          ~headers:
+            [
+              waq_auth;
+              ("Accept", "application/json");
+              ("Content-Type", "application/json");
+            ]
+          ~meth:`POST ~body (waq "/api/v1/statuses")
+      in
+      let uri2, content2 =
+        let l = Yojson.Safe.from_string r |> expect_assoc in
+        ( List.assoc "uri" l |> expect_string,
+          List.assoc "content" l |> expect_string )
+      in
+      uris := uri2 :: !uris;
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Get my home timeline and check *)
+      let%lwt r =
+        fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home")
+      in
+      (match Yojson.Safe.from_string r with
+      | `List [ `Assoc l2; `Assoc l ] ->
+          (* Check if the timeline is correct *)
+          assert (uri = (l |> List.assoc "uri" |> expect_string));
+          assert (content = (l |> List.assoc "content" |> expect_string));
+          assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+          assert (content2 = (l2 |> List.assoc "content" |> expect_string));
+          ()
+      | _ -> assert false);
+
+      (* Unfollow @admin@localhost:3000 *)
+      fetch_exn ~meth:`POST ~headers:[ waq_auth ]
+        (waq "/api/v1/accounts/2/unfollow")
+      |> ignore_lwt;%lwt
+      Lwt_unix.sleep 1.0;%lwt
+
+      (* Get my home timeline and check again *)
+      let%lwt r =
+        fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home")
+      in
+      (match Yojson.Safe.from_string r with
+      | `List [ `Assoc l2 ] ->
+          (* Check if the timeline is correct *)
+          assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+          assert (content2 = (l2 |> List.assoc "content" |> expect_string));
+          ()
+      | _ -> assert false);
+
+      pushf None);%lwt
+
+  let expected_uris = List.sort compare !uris in
+  let got_uris =
+    !ws_statuses
+    |> List.map (fun s -> s |> List.assoc "uri" |> expect_string)
+    |> List.sort compare
   in
-  let uri, content =
-    match Yojson.Safe.from_string r with
-    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
-    | _ -> assert false
-  in
-  Lwt_unix.sleep 1.0;%lwt
-
-  (* Post by me *)
-  let content2 = "こんにちは、世界！２" in
-  let%lwt r =
-    let body =
-      `Assoc [ ("status", `String content2) ] |> Yojson.Safe.to_string
-    in
-    fetch_exn
-      ~headers:
-        [
-          waq_auth;
-          ("Accept", "application/json");
-          ("Content-Type", "application/json");
-        ]
-      ~meth:`POST ~body (waq "/api/v1/statuses")
-  in
-  let uri2, content2 =
-    match Yojson.Safe.from_string r with
-    | `Assoc l -> (List.assoc "uri" l, List.assoc "content" l)
-    | _ -> assert false
-  in
-  Lwt_unix.sleep 1.0;%lwt
-
-  (* Get my home timeline and check *)
-  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l2; `Assoc l ] ->
-      (* Check if the timeline is correct *)
-      assert (uri = List.assoc "uri" l);
-      assert (content = List.assoc "content" l);
-      assert (uri2 = List.assoc "uri" l2);
-      assert (content2 = List.assoc "content" l2);
-      ()
-  | _ -> assert false);
-
-  (* Unfollow @admin@localhost:3000 *)
-  fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-    (waq "/api/v1/accounts/2/unfollow")
-  |> ignore_lwt;%lwt
-  Lwt_unix.sleep 1.0;%lwt
-
-  (* Get my home timeline and check again *)
-  let%lwt r = fetch_exn ~headers:[ waq_auth ] (waq "/api/v1/timelines/home") in
-  (match Yojson.Safe.from_string r with
-  | `List [ `Assoc l2 ] ->
-      (* Check if the timeline is correct *)
-      assert (uri2 = List.assoc "uri" l2);
-      assert (content2 = List.assoc "content" l2);
-      ()
-  | _ -> assert false);
+  assert (expected_uris = got_uris);
 
   Lwt.return_unit
 
@@ -394,7 +434,7 @@ let waq_scenario_2 waq_token =
         [
           (`Init, fun _ -> assert false);
           ( `Recv,
-            fun l ->
+            fun l pushf ->
               assert (List.assoc "stream" l = `List [ `String "user" ]);
               assert (List.assoc "event" l |> expect_string = "update");
               let payload = List.assoc "payload" l |> expect_string in
@@ -403,6 +443,7 @@ let waq_scenario_2 waq_token =
                 List.assoc "uri" l |> expect_string
               in
               got_uri := Some uri;
+              pushf None;%lwt
               Lwt.return `End );
           (`End, fun _ -> assert false);
         ]
@@ -411,7 +452,7 @@ let waq_scenario_2 waq_token =
 
   let expected_uri = ref None in
   let mtx = Lwt_mutex.create () in
-  websocket ~mtx (waq target) handler (fun pushf ->
+  websocket ~mtx (waq target) handler (fun _pushf ->
       let content = "こんにちは、世界！" in
       let%lwt r =
         let body =
@@ -430,7 +471,7 @@ let waq_scenario_2 waq_token =
         Yojson.Safe.from_string r |> expect_assoc |> List.assoc "uri"
         |> expect_string |> Option.some;
       set_current_state `Recv;
-      pushf None);%lwt
+      Lwt.return_unit);%lwt
 
   assert (Option.get !got_uri = Option.get !expected_uri);
   Lwt.return_unit

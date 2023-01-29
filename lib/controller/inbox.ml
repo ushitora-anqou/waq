@@ -75,11 +75,14 @@ let kick_inbox_create (req : ap_create) =
   in
   Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
   let%lwt attributedTo = fetch_account (`Uri note.attributedTo) in
-  Db.Status.(
-    make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
-      ~updated_at:published ~account_id:attributedTo.id
-    |> save_one)
-  |> ignore_lwt
+  let%lwt s =
+    Db.Status.(
+      make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
+        ~updated_at:published ~account_id:attributedTo.id
+      |> save_one)
+  in
+  Service.Distribute.kick s;
+  Lwt.return_unit
 
 (* Recv POST /users/:name/inbox *)
 let post req =
