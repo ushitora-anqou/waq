@@ -7,6 +7,23 @@ let iota n =
   let rec f acc = function 0 -> acc | n -> f ((n - 1) :: acc) (n - 1) in
   f [] n
 
+module Lwt_list = struct
+  include Lwt_list
+
+  let partition_map_p (f : 'a -> ('b, 'c) Either.t Lwt.t) (l : 'a list) :
+      ('b list * 'c list) Lwt.t =
+    let open Lwt.Infix in
+    l |> List.map f
+    |> List.fold_left
+         (fun a p ->
+           let%lwt left, right = a in
+           p >|= function
+           | Either.Left x -> (x :: left, right)
+           | Right y -> (left, y :: right))
+         (Lwt.return ([], []))
+    >|= fun (left, right) -> (List.rev left, List.rev right)
+end
+
 module Ptime = struct
   include Ptime
 
