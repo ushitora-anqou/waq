@@ -57,12 +57,6 @@ module Account = struct
     updated_at : Ptime.t;
   }
   [@@sql.table_name "accounts"] [@@deriving make, sql]
-
-  let get_one_by_domain_and_username ~domain ~username =
-    get_one
-      ~where:"domain IS NOT DISTINCT FROM :domain AND username = :username"
-      ~p:[ ("domain", `NullString domain); ("username", `String username) ]
-      ()
 end
 
 module Status = struct

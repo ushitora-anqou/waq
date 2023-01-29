@@ -16,9 +16,7 @@ let get req =
       failwith "Invalid request";
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
-    let%lwt a =
-      Db.Account.get_one_by_domain_and_username ~domain:None ~username:name
-    in
+    let%lwt a = Db.Account.get_one ~domain:None ~username:name () in
     let%lwt _ = Db.User.get_one ~account_id:a.id () in
     make_webfinger
       ~subject:("acct:" ^ name ^ "@" ^ dom)

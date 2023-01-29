@@ -13,6 +13,15 @@ module Attrs = struct
       ()
 end
 
+let core_type_mapper = function
+  | [%type: int] -> `Int
+  | [%type: int option] -> `IntOption
+  | [%type: string] -> `String
+  | [%type: string option] -> `StringOption
+  | [%type: Ptime.t] -> `Ptime
+  | [%type: Ptime.t option] -> `PtimeOption
+  | _ -> assert false
+
 let accessor_impl ptype_name (ld : label_declaration) =
   let loc = ld.pld_loc in
   Ast_helper.with_default_loc loc @@ fun () ->
@@ -31,22 +40,21 @@ let pack_impl loc (fields : label_declaration list) =
            let e_fname = estring ~loc fname in
            ( (* label *) { loc; txt = lident fname },
              (* field *)
-             match f.pld_type with
-             | [%type: int] ->
-                 [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_int]
-             | [%type: int option] ->
+             match core_type_mapper f.pld_type with
+             | `Int -> [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_int]
+             | `IntOption ->
                  [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_int_opt]
-             | [%type: string] ->
+             | `String ->
                  [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_string]
-             | [%type: string option] ->
+             | `StringOption ->
                  [%expr
                    List.assoc [%e e_fname] l |> Sql.Value.expect_string_opt]
-             | [%type: Ptime.t] ->
+             | `Ptime ->
                  [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_timestamp]
-             | [%type: Ptime.t option] ->
+             | `PtimeOption ->
                  [%expr
                    List.assoc [%e e_fname] l |> Sql.Value.expect_timestamp_opt]
-             | _ -> assert false ))
+           ))
   in
   [%stri
     let [%p ppat_var ~loc { loc; txt = funname }] =
@@ -54,17 +62,16 @@ let pack_impl loc (fields : label_declaration list) =
       [%e pexp_record ~loc record_fields None]]
 
 let wrap_value_with_type loc pld_type value =
-  match pld_type with
-  | [%type: int] -> [%expr `Int [%e value]]
-  | [%type: int option] ->
+  match core_type_mapper pld_type with
+  | `Int -> [%expr `Int [%e value]]
+  | `IntOption ->
       [%expr match [%e value] with None -> `Null | Some v -> `Int v]
-  | [%type: string] -> [%expr `String [%e value]]
-  | [%type: string option] ->
+  | `String -> [%expr `String [%e value]]
+  | `StringOption ->
       [%expr match [%e value] with None -> `Null | Some v -> `String v]
-  | [%type: Ptime.t] -> [%expr `Timestamp [%e value]]
-  | [%type: Ptime.t option] ->
+  | `Ptime -> [%expr `Timestamp [%e value]]
+  | `PtimeOption ->
       [%expr match [%e value] with None -> `Null | Some v -> `Timestamp v]
-  | _ -> assert false
 
 let unpack_impl loc (fields : label_declaration list) =
   Ast_helper.with_default_loc loc @@ fun () ->
@@ -175,7 +182,13 @@ let general_where_impl kind loc (fields : label_declaration list)
             *)
             Option.fold ~none:(query, params)
               ~some:(fun x ->
-                ( [%e estring ~loc (name ^ " = :" ^ name)] :: query,
+                ( [%e
+                    match core_type_mapper f.pld_type with
+                    | `Int | `String | `Ptime ->
+                        estring ~loc (name ^ " = :" ^ name)
+                    | `IntOption | `StringOption | `PtimeOption ->
+                        estring ~loc (name ^ " IS NOT DISTINCT FROM :" ^ name)]
+                  :: query,
                   ( [%e estring ~loc name],
                     [%e wrap_value_with_type loc f.pld_type [%expr x]] )
                   :: params ))

@@ -124,7 +124,7 @@ let fetch_account ?(scheme = "https") by =
   in
   match by with
   | `Webfinger (domain, username) -> (
-      match%lwt Db.Account.get_one_by_domain_and_username ~domain ~username with
+      match%lwt Db.Account.get_one ~domain ~username () with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound when domain = None (* Local *) ->
           failwith "Couldn't fetch the account"
