@@ -108,10 +108,7 @@ let pp_json (s : string) =
   Log.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
-(*
- ========= Scenario 1 =========
-*)
-let scenario1 waq_token mstdn_token =
+let waq_mstdn_scenario_1 waq_token mstdn_token =
   let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
   let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
 
@@ -251,10 +248,7 @@ let scenario1 waq_token mstdn_token =
 
   Lwt.return_unit
 
-(*
- ========= Scenario 2 =========
-*)
-let scenario2 waq_token mstdn_token =
+let waq_mstdn_scenario_2 waq_token mstdn_token =
   let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
   let mstdn_auth = ("Authorization", "Bearer " ^ mstdn_token) in
 
@@ -358,7 +352,7 @@ let scenario2 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let scenario3 _waq_token =
+let waq_scenario_1 _waq_token =
   let%lwt r =
     fetch_exn ~meth:`POST
       ~headers:[ ("Content-Type", "application/json") ]
@@ -477,7 +471,7 @@ let waq_scenario_2 waq_token =
   Lwt.return_unit
 
 let scenarios_with_waq_and_mstdn () =
-  [ (1, scenario1); (2, scenario2) ]
+  [ (1, waq_mstdn_scenario_1); (2, waq_mstdn_scenario_2) ]
   |> List.iter @@ fun (i, scenario) ->
      Log.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
      new_session @@ fun waq_token ->
@@ -488,7 +482,7 @@ let scenarios_with_waq_and_mstdn () =
      Lwt_main.run @@ scenario waq_token mstdn_token
 
 let scenarios_with_waq () =
-  [ (1, scenario3); (2, waq_scenario_2) ]
+  [ (1, waq_scenario_1); (2, waq_scenario_2) ]
   |> List.iter @@ fun (i, scenario) ->
      Log.debug (fun m -> m "===== Scenario waq-%d =====" i);
      new_session @@ fun waq_token ->
