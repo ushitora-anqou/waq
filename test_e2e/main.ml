@@ -368,9 +368,16 @@ let waq_scenario_1 _waq_token =
   in
 
   let%lwt r =
-    fetch
-      (waq "/oauth/authorize?response_type=code&client_id="
-      ^ client_id ^ "&redirect_uri=http://example.com")
+    let body =
+      Uri.encoded_of_query
+        [
+          ("response_type", [ "code" ]);
+          ("client_id", [ client_id ]);
+          ("redirect_uri", [ "http://example.com" ]);
+          ("username", [ "foobar" ]);
+        ]
+    in
+    fetch ~meth:`POST ~body (waq "/oauth/authorize")
   in
   let auth_code =
     match r with

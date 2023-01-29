@@ -21,6 +21,7 @@ let routes_from_clients =
     get "/api/v1/timelines/home" Controller.Api_v1_timelines_home.get;
     post "/api/v1/apps" Controller.Api_v1_apps.post;
     get "/oauth/authorize" Controller.Oauth_authorize.get;
+    post "/oauth/authorize" Controller.Oauth_authorize.post;
     post "/oauth/token" Controller.Oauth_token.post;
     get "/api/v1/apps/verify_credentials"
       Controller.Api_v1_apps_verify_credentials.get;

@@ -1,4 +1,6 @@
-type request_body = JSON of Yojson.Safe.t | Form of string
+type request_body =
+  | JSON of Yojson.Safe.t
+  | Form of (string * string list) list
 
 type request = {
   http_request : Http.request;
@@ -21,9 +23,10 @@ let query ?default name (r : request) =
         | `String s -> s
         | _ -> failwith "json assoc")
     | JSON _ -> failwith "json"
-    | Form _body ->
-        (* FIXME: use body *)
-        Http.query name r.http_request |> List.hd
+    | Form body -> (
+        match Http.query_opt name r.http_request with
+        | Some l -> List.hd l
+        | None -> body |> List.assoc name |> List.hd)
   with
   | _ when default <> None -> Option.get default
   | _ -> Http.raise_error_response `Bad_request
@@ -50,7 +53,8 @@ let call ~meth target f =
   let body =
     match List.assoc_opt "content-type" headers with
     | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
-    | _ -> Form raw_body
+    | Some "application/x-www-form-urlencoded" | _ ->
+        Form (raw_body |> Uri.query_of_encoded)
   in
   let req = make_request ~http_request:req ~raw_body ~body ~headers () in
   f req
