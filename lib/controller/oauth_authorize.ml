@@ -12,9 +12,13 @@ let post req =
     Http.raise_error_response `Bad_request;
 
   let%lwt resource_owner_id =
-    let%lwt a = Db.Account.get_one ~domain:None ~username () in
-    let%lwt u = Db.User.get_one ~account_id:a.id () in
-    Lwt.return u.id
+    match%lwt
+      Db.(Account.get_one ~domain:None ~username () |> maybe_no_row)
+    with
+    | None -> Http.raise_error_response `Bad_request
+    | Some a ->
+        let%lwt u = Db.User.get_one ~account_id:a.id () in
+        Lwt.return u.id
   in
 
   let%lwt grant =

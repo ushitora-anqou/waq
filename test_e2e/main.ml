@@ -140,21 +140,22 @@ let waq_mstdn_scenario_1 waq_token mstdn_token =
         fetch_exn
           (waq "/api/v1/accounts/search?q=@admin@localhost:3000&resolve=true")
       in
-      assert (
-        let open Yojson.Safe in
-        equal (from_string r)
-          (from_string
-             {|
-[{
-  "id": "2",
-  "username": "admin",
-  "acct": "admin@localhost:3000",
-  "display_name": ""
-}]|}));
+      let id, username, acct =
+        let l =
+          match Yojson.Safe.from_string r with
+          | `List [ `Assoc l ] -> l
+          | _ -> assert false
+        in
+        ( l |> List.assoc "id" |> expect_string,
+          l |> List.assoc "username" |> expect_string,
+          l |> List.assoc "acct" |> expect_string )
+      in
+      assert (username = "admin");
+      assert (acct = "admin@localhost:3000");
 
       (* Follow @admin@localhost:3000 *)
       fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-        (waq "/api/v1/accounts/2/follow")
+        (waq (Printf.sprintf "/api/v1/accounts/%s/follow" id))
       |> ignore_lwt;%lwt
       Lwt_unix.sleep 1.0;%lwt
 
@@ -220,7 +221,7 @@ let waq_mstdn_scenario_1 waq_token mstdn_token =
 
       (* Unfollow @admin@localhost:3000 *)
       fetch_exn ~meth:`POST ~headers:[ waq_auth ]
-        (waq "/api/v1/accounts/2/unfollow")
+        (waq (Printf.sprintf "/api/v1/accounts/%s/unfollow" id))
       |> ignore_lwt;%lwt
       Lwt_unix.sleep 1.0;%lwt
 
@@ -255,7 +256,7 @@ let waq_mstdn_scenario_2 waq_token mstdn_token =
   (* Lookup me from localhost:3000 *)
   let%lwt r =
     fetch_exn ~headers:[ mstdn_auth ]
-      (mstdn "/api/v1/accounts/search?q=@foobar@"
+      (mstdn "/api/v1/accounts/search?q=@user1@"
       ^ waq_server_domain ^ "&resolve=true")
   in
   let aid =
@@ -374,7 +375,7 @@ let waq_scenario_1 _waq_token =
           ("response_type", [ "code" ]);
           ("client_id", [ client_id ]);
           ("redirect_uri", [ "http://example.com" ]);
-          ("username", [ "foobar" ]);
+          ("username", [ "user1" ]);
         ]
     in
     fetch ~meth:`POST ~body (waq "/oauth/authorize")
