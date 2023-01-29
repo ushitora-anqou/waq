@@ -6,6 +6,66 @@ let ignore_lwt = Waq.Util.ignore_lwt
 let fetch = Waq.Http.fetch
 let fetch_exn = Waq.Http.fetch_exn
 
+let expect_string = function
+  | `String s -> s
+  | _ -> failwith "Expected string, got something different"
+
+let expect_assoc = function
+  | `Assoc l -> l
+  | _ -> failwith "Expected assoc, got something different"
+
+let with_lock mtx f =
+  match mtx with None -> f () | Some mtx -> Lwt_mutex.with_lock mtx f
+
+let websocket ?mtx uri handler f =
+  let open Websocket_lwt_unix in
+  let uri = Uri.of_string uri in
+  let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
+  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
+  let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
+  let%lwt conn = connect ~ctx client uri in
+  let close_sent = ref false in
+  let pushf msg =
+    match msg with
+    | Some content -> write conn (Websocket.Frame.create ~content ())
+    | None ->
+        write conn (Websocket.Frame.create ~opcode:Close ());%lwt
+        Lwt.return (close_sent := true)
+  in
+  let rec react () =
+    match%lwt read conn with
+    | { Websocket.Frame.opcode = Ping; _ } ->
+        write conn (Websocket.Frame.create ~opcode:Pong ());%lwt
+        react ()
+    | { opcode = Pong; _ } -> react ()
+    | { opcode = Text; content; _ } | { opcode = Binary; content; _ } ->
+        with_lock mtx (fun () -> handler content pushf);%lwt
+        react ()
+    | { opcode = Close; content; _ } ->
+        if !close_sent then Lwt.return_unit
+        else if String.length content >= 2 then
+          write conn
+            (Websocket.Frame.create ~opcode:Close
+               ~content:(String.sub content 0 2) ())
+        else write conn (Websocket.Frame.close 1000);%lwt
+        close_transport conn
+    | _ -> close_transport conn
+  in
+  Lwt.join [ with_lock mtx (fun () -> f pushf); react () ]
+
+let websocket_handler_state_machine ~states ~init () =
+  let current = ref init in
+  let set_current v = current := v in
+  let handler content _pushf =
+    let real_handler = states |> List.assoc !current in
+    let%lwt next_state =
+      content |> Yojson.Safe.from_string |> expect_assoc |> real_handler
+    in
+    set_current next_state;
+    Lwt.return_unit
+  in
+  (set_current, handler)
+
 let new_session f =
   let path =
     Sys.getenv_opt "WAQ_BIN" |> Option.value ~default:"test_e2e/launch_waq.sh"
@@ -35,14 +95,6 @@ let new_mastodon_session f =
       Log.debug (fun m -> m "Killing mastodon processes");
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
-
-let expect_string = function
-  | `String s -> s
-  | _ -> failwith "Expected string, got something different"
-
-let expect_assoc = function
-  | `Assoc l -> l
-  | _ -> failwith "Expected assoc, got something different"
 
 let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
@@ -329,63 +381,37 @@ let scenario3 _waq_token =
 
   Lwt.return_unit
 
-let websocket uri handler f =
-  let open Websocket_lwt_unix in
-  let uri = Uri.of_string uri in
-  let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
-  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
-  let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
-  let%lwt conn = connect ~ctx client uri in
-  let close_sent = ref false in
-  let pushf msg =
-    match msg with
-    | Some content -> write conn (Websocket.Frame.create ~content ())
-    | None ->
-        write conn (Websocket.Frame.create ~opcode:Close ());%lwt
-        Lwt.return (close_sent := true)
-  in
-  let rec react () =
-    match%lwt read conn with
-    | { Websocket.Frame.opcode = Ping; _ } ->
-        write conn (Websocket.Frame.create ~opcode:Pong ());%lwt
-        react ()
-    | { opcode = Pong; _ } -> react ()
-    | { opcode = Text; content; _ } | { opcode = Binary; content; _ } ->
-        handler content pushf;%lwt
-        react ()
-    | { opcode = Close; content; _ } ->
-        if !close_sent then Lwt.return_unit
-        else if String.length content >= 2 then
-          write conn
-            (Websocket.Frame.create ~opcode:Close
-               ~content:(String.sub content 0 2) ())
-        else write conn (Websocket.Frame.close 1000);%lwt
-        close_transport conn
-    | _ -> close_transport conn
-  in
-  Lwt.join [ f pushf; react () ]
-
 let waq_scenario_2 waq_token =
   let waq_auth = ("Authorization", "Bearer " ^ waq_token) in
-
-  let got_uri = ref None in
   let target =
     Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
   in
-  let handler content _pushf =
-    let l = Yojson.Safe.from_string content |> expect_assoc in
-    assert (List.assoc "stream" l = `List [ `String "user" ]);
-    assert (List.assoc "event" l |> expect_string = "update");
-    let payload = List.assoc "payload" l |> expect_string in
-    let uri =
-      let l = Yojson.Safe.from_string payload |> expect_assoc in
-      List.assoc "uri" l |> expect_string
-    in
-    got_uri := Some uri;
-    Lwt.return_unit
+
+  let got_uri = ref None in
+  let set_current_state, handler =
+    websocket_handler_state_machine ~init:`Init
+      ~states:
+        [
+          (`Init, fun _ -> assert false);
+          ( `Recv,
+            fun l ->
+              assert (List.assoc "stream" l = `List [ `String "user" ]);
+              assert (List.assoc "event" l |> expect_string = "update");
+              let payload = List.assoc "payload" l |> expect_string in
+              let uri =
+                let l = Yojson.Safe.from_string payload |> expect_assoc in
+                List.assoc "uri" l |> expect_string
+              in
+              got_uri := Some uri;
+              Lwt.return `End );
+          (`End, fun _ -> assert false);
+        ]
+      ()
   in
+
   let expected_uri = ref None in
-  websocket (waq target) handler (fun pushf ->
+  let mtx = Lwt_mutex.create () in
+  websocket ~mtx (waq target) handler (fun pushf ->
       let content = "こんにちは、世界！" in
       let%lwt r =
         let body =
@@ -403,7 +429,9 @@ let waq_scenario_2 waq_token =
       expected_uri :=
         Yojson.Safe.from_string r |> expect_assoc |> List.assoc "uri"
         |> expect_string |> Option.some;
+      set_current_state `Recv;
       pushf None);%lwt
+
   assert (Option.get !got_uri = Option.get !expected_uri);
   Lwt.return_unit
 
