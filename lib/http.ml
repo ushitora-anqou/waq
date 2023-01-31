@@ -182,7 +182,7 @@ type request = {
 
 type response = Cohttp_lwt_unix.Server.response_action
 type handler = request -> response Lwt.t
-type path = [ `L of string | `P of string ] list
+type path = [ `L of string | `P of string | `S ] list
 type method_ = Method.t
 type route = method_ * path * handler
 
@@ -220,7 +220,7 @@ let start_server ?(port = 8080) f (routes : route list) =
              ""
       in
       let rec match_path param = function
-        | [], [] -> Some param
+        | [], [] | _, [ `S ] -> Some param
         | x :: xs, `L y :: ys when x = y -> match_path param (xs, ys)
         | x :: xs, `P y :: ys -> match_path ((y, x) :: param) (xs, ys)
         | _ -> None
@@ -269,6 +269,7 @@ let router (routes : route list) = routes
 let parse_path (src : string) : path =
   src |> String.split_on_char '/' |> List.tl
   |> List.map (function
+       | "*" -> `S
        | x when String.starts_with ~prefix:":" x -> `P x
        | x -> `L x)
 

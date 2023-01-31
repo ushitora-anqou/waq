@@ -5,6 +5,7 @@ let test_parse_path () =
   assert (parse_path "" = []);
   assert (parse_path "/foo/bar/2000" = [ `L "foo"; `L "bar"; `L "2000" ]);
   assert (parse_path "/foo/:bar/2000" = [ `L "foo"; `P ":bar"; `L "2000" ]);
+  assert (parse_path "/foo/*" = [ `L "foo"; `S ]);
   ()
 
 let test_build_signing_string () =
