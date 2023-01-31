@@ -44,8 +44,7 @@ let bool_of_string s =
   | Some b -> b
 
 let call ~meth target f =
-  let g = match meth with `GET -> Http.get | `POST -> Http.post in
-  g target @@ fun req ->
+  Http.call meth target @@ fun req ->
   let%lwt raw_body = Http.body req in
   let headers =
     Http.headers req |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
@@ -61,6 +60,7 @@ let call ~meth target f =
 
 let get = call ~meth:`GET
 let post = call ~meth:`POST
+let options = call ~meth:`OPTIONS
 
 let authenticate_bearer (r : request) =
   try
@@ -77,3 +77,31 @@ let authenticate_user (r : request) =
   with _ -> Http.raise_error_response `Unauthorized
 
 let websocket (r : request) = Http.websocket r.http_request
+
+module Cors = struct
+  type t = { target : string; methods : Http.Method.t list; origin : string }
+
+  let make target ?(origin = "*") ~methods () = { target; methods; origin }
+end
+
+let router ~cors routes =
+  let cors_routes =
+    let handler (r : Cors.t) req =
+      let headers =
+        [
+          ("access-control-allow-origin", r.origin);
+          ( "access-control-allow-methods",
+            r.methods |> List.map Http.Method.to_string |> String.concat ", " );
+        ]
+      in
+      let headers =
+        req.headers
+        |> List.assoc_opt "access-control-request-headers"
+        |> Option.fold ~none:headers ~some:(fun v ->
+               ("access-control-allow-headers", v) :: headers)
+      in
+      Http.respond ~status:`No_content ~headers ""
+    in
+    cors |> List.map (fun (r : Cors.t) -> options r.target (handler r))
+  in
+  Http.router (routes @ cors_routes)

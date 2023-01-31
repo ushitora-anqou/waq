@@ -3,6 +3,15 @@ open Util [@@warning "-33"]
 let get = Httpx.get
 let post = Httpx.post
 
+let cors =
+  Httpx.Cors.
+    [
+      make "/.well-known/*" ~methods:[ `GET ] ();
+      make "/users/:username" ~methods:[ `GET ] ();
+      make "/api/*" ~methods:[ `POST; `PUT; `DELETE; `GET; `PATCH; `OPTIONS ] ();
+      make "/oauth/token" ~methods:[ `POST ] ();
+    ]
+
 let routes_from_servers =
   [
     get "/.well-known/host-meta" Controller.Well_known_host_meta.get;
@@ -28,4 +37,4 @@ let routes_from_clients =
     get "/api/v1/streaming" Controller.Api_v1_streaming.get;
   ]
 
-let routes = Http.router (routes_from_servers @ routes_from_clients)
+let routes = Httpx.router ~cors (routes_from_servers @ routes_from_clients)

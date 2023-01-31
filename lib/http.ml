@@ -272,13 +272,9 @@ let parse_path (src : string) : path =
        | x when String.starts_with ~prefix:":" x -> `P x
        | x -> `L x)
 
-let get (path : string) (handler : handler) =
+let call (meth : Method.t) (path : string) (h : handler) =
   let path = parse_path path in
-  (`GET, path, handler)
-
-let post (path : string) (handler : handler) =
-  let path = parse_path path in
-  (`POST, path, handler)
+  (meth, path, h)
 
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query
