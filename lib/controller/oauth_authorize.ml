@@ -58,8 +58,8 @@ let get req =
   <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
   <input type="hidden" name="scope" value="{{ scope }}">
   <div>
-    <label for="name">Username: </label>
-    <input type="text" name="name" id="name" required>
+    <label for="username">Username: </label>
+    <input type="text" name="username" id="username" required>
   </div>
   <div>
     <label for="password">Password: </label>
