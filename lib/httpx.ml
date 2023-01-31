@@ -50,10 +50,12 @@ let call ~meth target f =
     Http.headers req |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
   in
   let body =
-    match List.assoc_opt "content-type" headers with
-    | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
-    | Some "application/x-www-form-urlencoded" | _ ->
-        Form (raw_body |> Uri.query_of_encoded)
+    if raw_body = "" then Form []
+    else
+      match List.assoc_opt "content-type" headers with
+      | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
+      | Some "application/x-www-form-urlencoded" | _ ->
+          Form (raw_body |> Uri.query_of_encoded)
   in
   let req = make_request ~http_request:req ~raw_body ~body ~headers () in
   f req
