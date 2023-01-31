@@ -169,7 +169,8 @@ let fetch_access_token ~username =
   let%lwt r =
     fetch_exn ~meth:`POST
       ~headers:[ ("Content-Type", "application/json") ]
-      ~body:{|{"client_name":"foo","redirect_uris":"http://example.com"}|}
+      ~body:
+        {|{"client_name":"foo","redirect_uris":"http://example.com?origin=http://example.com"}|}
       (waq "/api/v1/apps")
   in
   let client_id, client_secret =
@@ -186,7 +187,7 @@ let fetch_access_token ~username =
         [
           ("response_type", [ "code" ]);
           ("client_id", [ client_id ]);
-          ("redirect_uri", [ "http://example.com" ]);
+          ("redirect_uri", [ "http://example.com?origin=http://example.com" ]);
           ("username", [ username ]);
         ]
     in
@@ -197,8 +198,8 @@ let fetch_access_token ~username =
     | Ok (`Found, headers, _body) ->
         (* 0123456789012345678901234
            http://example.com?code=... *)
-        let loc = headers |> List.assoc "location" in
-        String.sub loc 24 (String.length loc - 24)
+        headers |> List.assoc "location" |> Uri.of_string |> Uri.query
+        |> List.assoc "code" |> List.hd
     | _ -> assert false
   in
 
@@ -212,7 +213,8 @@ let fetch_access_token ~username =
              ("code", `String auth_code);
              ("client_id", `String client_id);
              ("client_secret", `String client_secret);
-             ("redirect_uri", `String "http://example.com");
+             ( "redirect_uri",
+               `String "http://example.com?origin=http://example.com" );
            ]
         |> Yojson.Safe.to_string)
       (waq "/oauth/token")

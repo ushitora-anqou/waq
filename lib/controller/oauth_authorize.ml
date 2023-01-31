@@ -29,9 +29,9 @@ let post req =
   if grant.redirect_uri = "urn:ietf:wg:oauth:2.0:oob" then
     Http.respond grant.token
   else
-    Http.respond ~status:`Found
-      ~headers:[ ("Location", grant.redirect_uri ^ "?code=" ^ grant.token) ]
-      ""
+    let u = Uri.of_string grant.redirect_uri in
+    let u = Uri.add_query_param u ("code", [ grant.token ]) in
+    Http.respond ~status:`Found ~headers:[ ("Location", Uri.to_string u) ] ""
 
 let get req =
   let response_type = req |> Httpx.query "response_type" in
