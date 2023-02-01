@@ -15,11 +15,11 @@ let test_build_signing_string () =
   in
   let headers =
     [
-      ("Host", "example.com");
-      ("Date", "Sun, 05 Jan 2014 21:31:40 GMT");
-      ("Content-Type", "application/json");
-      ("Digest", "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=");
-      ("Content-Length", "18");
+      (`Host, "example.com");
+      (`Date, "Sun, 05 Jan 2014 21:31:40 GMT");
+      (`Content_type, "application/json");
+      (`Digest, "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=");
+      (`Content_length, "18");
     ]
   in
   let meth = `POST in
@@ -52,13 +52,13 @@ QwIDAQAB
   in
   let headers =
     [
-      ("Digest", "SHA-256=EJuNLu/GVnfYCOqSt0yi4SnnM2/TC5YuvA+ga0rvDIA=");
-      ("Date", "Tue, 27 Dec 2022 11:33:08 GMT");
-      ("Content-Type", "application/activity+json");
-      ("Accept-Encoding", "gzip");
-      ("Content-Length", "238");
-      ("User-Agent", "http.rb/5.1.0 (Mastodon/4.0.2; +http://localhost:3000/)");
-      ("Host", "c5ab-220-153-158-42.ngrok.io");
+      (`Digest, "SHA-256=EJuNLu/GVnfYCOqSt0yi4SnnM2/TC5YuvA+ga0rvDIA=");
+      (`Date, "Tue, 27 Dec 2022 11:33:08 GMT");
+      (`Content_type, "application/activity+json");
+      (`Accept_encoding, "gzip");
+      (`Content_length, "238");
+      (`User_agent, "http.rb/5.1.0 (Mastodon/4.0.2; +http://localhost:3000/)");
+      (`Host, "c5ab-220-153-158-42.ngrok.io");
     ]
   in
   let meth = `POST in
@@ -141,12 +141,12 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
   in
   let headers =
     [
-      ("Date", "Tue, 27 Dec 2022 11:33:08 GMT");
-      ("Content-Type", "application/activity+json");
-      ("Accept-Encoding", "gzip");
-      ("Content-Length", "238");
-      ("User-Agent", "http.rb/5.1.0 (Mastodon/4.0.2; +http://localhost:3000/)");
-      ("Host", "c5ab-220-153-158-42.ngrok.io");
+      (`Date, "Tue, 27 Dec 2022 11:33:08 GMT");
+      (`Content_type, "application/activity+json");
+      (`Accept_encoding, "gzip");
+      (`Content_length, "238");
+      (`User_agent, "http.rb/5.1.0 (Mastodon/4.0.2; +http://localhost:3000/)");
+      (`Host, "c5ab-220-153-158-42.ngrok.io");
     ]
   in
   let meth = `POST in
@@ -162,17 +162,17 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
   in
   assert (
     List.combine
-      (("Signature", "") :: ("Digest", "") :: headers |> List.sort compare)
+      ((`Signature, "") :: (`Digest, "") :: headers |> List.sort compare)
       (new_headers |> List.sort compare)
     |> List.for_all (fun ((k, v), (k', v')) ->
-           k = k' && (k = "Signature" || k = "Digest" || v = v')));
+           k = k' && (k = `Signature || k = `Digest || v = v')));
   let {
     Http.Signature.key_id = key_id';
     algorithm;
     headers = signed_headers;
     signature;
   } =
-    List.assoc "Signature" new_headers |> Http.Signature.parse_signature_header
+    List.assoc `Signature new_headers |> Http.Signature.parse_signature_header
   in
   assert (key_id = key_id');
   assert (

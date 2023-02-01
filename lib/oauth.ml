@@ -32,11 +32,11 @@ let authenticate_access_token token = Db.OAuthAccessToken.get_one ~token ()
 let authenticate_application uid =
   match%lwt Db.(OAuthApplication.get_one ~uid () |> maybe_no_row) with
   | Some app -> Lwt.return app
-  | None -> Http.raise_error_response `Bad_request
+  | None -> Http.Server.raise_error_response `Bad_request
 
 let authenticate_access_grant auth_code =
   match%lwt
     Db.(OAuthAccessGrant.get_one ~token:auth_code () |> maybe_no_row)
   with
   | Some grant -> Lwt.return grant
-  | None -> Http.raise_error_response `Bad_request
+  | None -> Http.Server.raise_error_response `Bad_request

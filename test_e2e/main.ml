@@ -4,8 +4,8 @@ module Uri = Waq.Http.Uri
 module Ptime = Waq.Util.Ptime
 
 let ignore_lwt = Waq.Util.ignore_lwt
-let fetch = Waq.Http.fetch
-let fetch_exn = Waq.Http.fetch_exn
+let fetch = Waq.Http.Client.fetch
+let fetch_exn = Waq.Http.Client.fetch_exn
 
 let expect_string = function
   | `String s -> s
@@ -112,7 +112,7 @@ let pp_json (s : string) =
   [@@warning "-32"]
 
 let lookup ~token kind ?domain ~username () =
-  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  let headers = [ (`Authorization, "Bearer " ^ token) ] in
   let target =
     let src = "/api/v1/accounts/search?resolve=true&q=@" in
     match domain with
@@ -131,13 +131,13 @@ let lookup ~token kind ?domain ~username () =
       l |> List.assoc "acct" |> expect_string )
 
 let follow ~token kind account_id =
-  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  let headers = [ (`Authorization, "Bearer " ^ token) ] in
   fetch_exn ~meth:`POST ~headers
     (url kind (Printf.sprintf "/api/v1/accounts/%s/follow" account_id))
   |> ignore_lwt
 
 let unfollow ~token kind account_id =
-  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  let headers = [ (`Authorization, "Bearer " ^ token) ] in
   fetch_exn ~meth:`POST ~headers
     (url kind (Printf.sprintf "/api/v1/accounts/%s/unfollow" account_id))
   |> ignore_lwt
@@ -150,9 +150,9 @@ let post ~token kind ?content () =
     in
     let headers =
       [
-        ("Authorization", "Bearer " ^ token);
-        ("Accept", "application/json");
-        ("Content-Type", "application/json");
+        (`Authorization, "Bearer " ^ token);
+        (`Accept, "application/json");
+        (`Content_type, "application/json");
       ]
     in
     fetch_exn ~headers ~meth:`POST ~body (url kind "/api/v1/statuses")
@@ -161,14 +161,14 @@ let post ~token kind ?content () =
   List.assoc "uri" l |> expect_string |> Lwt.return
 
 let home_timeline ~token kind =
-  let headers = [ ("Authorization", "Bearer " ^ token) ] in
+  let headers = [ (`Authorization, "Bearer " ^ token) ] in
   fetch_exn ~headers (url kind "/api/v1/timelines/home") >|= fun r ->
   match Yojson.Safe.from_string r with `List l -> l | _ -> assert false
 
 let fetch_access_token ~username =
   let%lwt r =
     fetch_exn ~meth:`POST
-      ~headers:[ ("Content-Type", "application/json") ]
+      ~headers:[ (`Content_type, "application/json") ]
       ~body:
         {|{"client_name":"foo","redirect_uris":"http://example.com?origin=http://example.com"}|}
       (waq "/api/v1/apps")
@@ -205,7 +205,7 @@ let fetch_access_token ~username =
 
   let%lwt r =
     fetch_exn ~meth:`POST
-      ~headers:[ ("Content-Type", "application/json") ]
+      ~headers:[ (`Content_type, "application/json") ]
       ~body:
         (`Assoc
            [
@@ -348,7 +348,7 @@ let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
   let%lwt r =
     fetch_exn
-      ~headers:[ ("Authorization", "Bearer " ^ access_token) ]
+      ~headers:[ (`Authorization, "Bearer " ^ access_token) ]
       (waq "/api/v1/apps/verify_credentials")
   in
   assert (

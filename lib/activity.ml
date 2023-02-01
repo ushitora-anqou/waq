@@ -95,7 +95,9 @@ type ap_create = {
 (* Send GET /users/:name *)
 let get_uri href =
   let%lwt body =
-    Http.fetch_exn ~headers:[ ("Accept", "application/activity+json") ] href
+    Http.Client.fetch_exn
+      ~headers:[ (`Accept, "application/activity+json") ]
+      href
   in
   body |> Yojson.Safe.from_string |> ap_user_of_yojson |> Result.get_ok
   |> Lwt.return
@@ -104,7 +106,7 @@ let get_uri href =
 let get_webfinger ~scheme ~domain ~username =
   (* FIXME: Check /.well-known/host-meta if necessary *)
   let%lwt body =
-    Http.fetch_exn @@ scheme ^ ":/" ^/ domain
+    Http.Client.fetch_exn @@ scheme ^ ":/" ^/ domain
     ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
   in
   body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
@@ -160,8 +162,8 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
     Some (priv_key, key_id, signed_headers)
   in
   let meth = `POST in
-  let headers = [ ("Content-Type", "application/activity+json") ] in
-  let%lwt res = Http.fetch ~meth ~headers ~body ~sign dst.inbox_url in
+  let headers = [ (`Content_type, "application/activity+json") ] in
+  let%lwt res = Http.Client.fetch ~meth ~headers ~body ~sign dst.inbox_url in
   Lwt.return
   @@
   match res with

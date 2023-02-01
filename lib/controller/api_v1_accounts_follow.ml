@@ -16,8 +16,8 @@ type post_api_v1_accounts_follow_res = {
 [@@deriving make, yojson { strict = false }]
 
 let post req =
-  let%lwt self_id = Httpx.authenticate_user req in
-  let id = Httpx.(req |> param ":id" |> int_of_string) in
+  let%lwt self_id = Helper.authenticate_user req in
+  let id = req |> Http.Server.param ":id" |> Helper.int_of_string in
 
   (* Check if accounts are valid *)
   let%lwt self = Db.Account.get_one ~id:self_id () in
@@ -41,4 +41,4 @@ let post req =
     ~blocked_by:false ~muting:false ~muting_notifications:false ~requested:false
     ~domain_blocking:false ~endorsed:false
   |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
-  |> Httpx.respond ~headers:[ Helper.content_type_app_json ]
+  |> Http.Server.respond ~headers:[ Helper.content_type_app_json ]

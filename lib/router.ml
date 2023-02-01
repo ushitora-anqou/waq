@@ -1,10 +1,10 @@
 open Util [@@warning "-33"]
 
-let get = Httpx.get
-let post = Httpx.post
+let get = Http.Server.get
+let post = Http.Server.post
 
 let cors =
-  Httpx.Cors.
+  Http.Server.Cors.
     [
       make "/.well-known/*" ~methods:[ `GET ] ();
       make "/users/:username" ~methods:[ `GET ] ();
@@ -37,4 +37,7 @@ let routes_from_clients =
     get "/api/v1/streaming" Controller.Api_v1_streaming.get;
   ]
 
-let routes = Httpx.router ~cors (routes_from_servers @ routes_from_clients)
+let handler =
+  let open Http.Server in
+  middleware_cors cors
+  @@ router (routes_from_servers @ routes_from_clients) default_handler

@@ -3,7 +3,7 @@ open Activity
 (* Recv GET /.well-known/webfinger *)
 let get req =
   try%lwt
-    let s = req |> Httpx.query "resource" in
+    let s = req |> Http.Server.query "resource" in
     let s =
       (* Remove 'acct:' prefix if exists *)
       if String.starts_with ~prefix:"acct:" s then
@@ -29,10 +29,10 @@ let get req =
         ]
       ()
     |> webfinger_to_yojson |> Yojson.Safe.to_string
-    |> Httpx.respond ~headers:[ Helper.content_type_app_jrd_json ]
+    |> Http.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Log.debug (fun m ->
         m "[well_known_webfinger] Can't find user: %s\n%s"
           (Printexc.to_string e)
           (Printexc.get_backtrace ()));
-    Http.raise_error_response `Not_found
+    Http.Server.raise_error_response `Not_found

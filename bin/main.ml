@@ -26,10 +26,10 @@ let register_user ~username ~display_name ~email =
 
 let server () =
   let _host, port = (C.listen_host (), C.listen_port ()) in
-  Router.routes
-  |> Http.start_server ~port @@ fun () ->
-     Log.info (fun m -> m "Listening on 127.0.0.1:%d" port);
-     Lwt.return_unit
+
+  Http.Server.start_server ~port Router.handler @@ fun () ->
+  Log.info (fun m -> m "Listening on 127.0.0.1:%d" port);
+  Lwt.return_unit
 
 let db_reset () =
   let f : unit Lwt.t =

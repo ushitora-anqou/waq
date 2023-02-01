@@ -1,6 +1,6 @@
 type stream = [ `User ]
 type key = int * stream
-type connection = [ `WebSocket of Http.ws_conn ]
+type connection = [ `WebSocket of Http.Server.ws_conn ]
 
 module Connection = struct
   type t = connection
@@ -29,4 +29,5 @@ let push (k : key) msg =
   | None -> () (* Just ignore *)
   | Some s ->
       s
-      |> ConnectionSet.iter (function `WebSocket conn -> Http.ws_send conn msg)
+      |> ConnectionSet.iter (function `WebSocket conn ->
+             Http.Server.ws_send conn msg)

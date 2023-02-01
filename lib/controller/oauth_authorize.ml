@@ -1,21 +1,21 @@
 let post req =
-  let response_type = req |> Httpx.query "response_type" in
-  let client_id = req |> Httpx.query "client_id" in
-  let redirect_uri = req |> Httpx.query "redirect_uri" in
-  let scope = req |> Httpx.query ~default:"read" "scope" in
-  let username = req |> Httpx.query "username" in
+  let response_type = req |> Http.Server.query "response_type" in
+  let client_id = req |> Http.Server.query "client_id" in
+  let redirect_uri = req |> Http.Server.query "redirect_uri" in
+  let scope = req |> Http.Server.query ~default:"read" "scope" in
+  let username = req |> Http.Server.query "username" in
 
-  if response_type <> "code" then Http.raise_error_response `Bad_request;
+  if response_type <> "code" then Http.Server.raise_error_response `Bad_request;
   let%lwt app = Oauth.authenticate_application client_id in
   (* FIXME: Check if scope is correct *)
   if redirect_uri <> app.redirect_uri then
-    Http.raise_error_response `Bad_request;
+    Http.Server.raise_error_response `Bad_request;
 
   let%lwt resource_owner_id =
     match%lwt
       Db.(Account.get_one ~domain:None ~username () |> maybe_no_row)
     with
-    | None -> Http.raise_error_response `Bad_request
+    | None -> Http.Server.raise_error_response `Bad_request
     | Some a ->
         let%lwt u = Db.User.get_one ~account_id:a.id () in
         Lwt.return u.id
@@ -27,19 +27,21 @@ let post req =
   in
 
   if grant.redirect_uri = "urn:ietf:wg:oauth:2.0:oob" then
-    Httpx.respond grant.token
+    Http.Server.respond grant.token
   else
     let u = Uri.of_string grant.redirect_uri in
     let u = Uri.add_query_param u ("code", [ grant.token ]) in
-    Httpx.respond ~status:`Found ~headers:[ ("Location", Uri.to_string u) ] ""
+    Http.Server.respond ~status:`Found
+      ~headers:[ (`Location, Uri.to_string u) ]
+      ""
 
 let get req =
-  let response_type = req |> Httpx.query "response_type" in
-  let client_id = req |> Httpx.query "client_id" in
-  let redirect_uri = req |> Httpx.query "redirect_uri" in
-  let scope = req |> Httpx.query ~default:"read" "scope" in
+  let response_type = req |> Http.Server.query "response_type" in
+  let client_id = req |> Http.Server.query "client_id" in
+  let redirect_uri = req |> Http.Server.query "redirect_uri" in
+  let scope = req |> Http.Server.query ~default:"read" "scope" in
 
-  Httpx.respond ~status:`OK
+  Http.Server.respond ~status:`OK
     (String.trim
     @@ Jingoo.Jg_template.from_string
          ~models:
