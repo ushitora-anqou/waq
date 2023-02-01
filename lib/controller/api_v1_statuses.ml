@@ -34,4 +34,4 @@ let post req =
   make_post_api_v1_statuses_res ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 now) ~content:s.text ~uri:s.uri
   |> post_api_v1_statuses_res_to_yojson |> Yojson.Safe.to_string
-  |> Http.respond ~headers:[ Helper.content_type_app_json ]
+  |> Httpx.respond ~headers:[ Helper.content_type_app_json ]

@@ -16,7 +16,7 @@ let get req =
       ~name:a.display_name ~summary:"Summary is here" ~url:a.uri ~tag:[]
       ~publicKey ()
     |> ap_user_to_yojson |> Yojson.Safe.to_string
-    |> Http.respond ~headers:[ Helper.content_type_app_jrd_json ]
+    |> Httpx.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Log.debug (fun m ->
         m "[get_users] Can't find user: %s: %s\n%s" username

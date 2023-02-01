@@ -29,7 +29,7 @@ let get req =
         ]
       ()
     |> webfinger_to_yojson |> Yojson.Safe.to_string
-    |> Http.respond ~headers:[ Helper.content_type_app_jrd_json ]
+    |> Httpx.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Log.debug (fun m ->
         m "[well_known_webfinger] Can't find user: %s\n%s"

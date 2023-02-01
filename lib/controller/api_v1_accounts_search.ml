@@ -36,5 +36,5 @@ let get req =
         ~display_name:acc.display_name
     in
     [ ent ] |> to_yojson |> Yojson.Safe.to_string
-    |> Http.respond ~headers:[ Helper.content_type_app_json ]
+    |> Httpx.respond ~headers:[ Helper.content_type_app_json ]
   with _ -> Http.raise_error_response `Not_found

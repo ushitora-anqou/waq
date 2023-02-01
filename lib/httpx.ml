@@ -1,3 +1,5 @@
+module PathPattern = Http.PathPattern
+
 type request_body =
   | JSON of Yojson.Safe.t
   | Form of (string * string list) list
@@ -9,6 +11,16 @@ type request = {
   headers : (string * string) list;
 }
 [@@deriving make]
+
+type response =
+  | Raw of Http.response
+  | Response of {
+      status : Http.Status.t;
+      headers : (string * string) list;
+      body : string;
+    }
+
+type route = Http.Method.t * PathPattern.t * (request -> response Lwt.t)
 
 let param name (r : request) = Http.param name r.http_request
 let body (r : request) = r.raw_body
@@ -33,6 +45,9 @@ let query ?default name (r : request) =
 
 let query_opt name (r : request) = try Some (query name r) with _ -> None
 
+let respond ?(status = `OK) ?(headers = []) (body : string) =
+  Response { status; headers; body } |> Lwt.return
+
 let int_of_string s =
   match int_of_string_opt s with
   | None -> Http.raise_error_response `Bad_request
@@ -43,26 +58,9 @@ let bool_of_string s =
   | None -> Http.raise_error_response `Bad_request
   | Some b -> b
 
-let call ~meth target f =
-  Http.call meth target @@ fun req ->
-  let%lwt raw_body = Http.body req in
-  let headers =
-    Http.headers req |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
-  in
-  let body =
-    if raw_body = "" then Form []
-    else
-      match List.assoc_opt "content-type" headers with
-      | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
-      | Some "application/x-www-form-urlencoded" | _ ->
-          Form (raw_body |> Uri.query_of_encoded)
-  in
-  let req = make_request ~http_request:req ~raw_body ~body ~headers () in
-  f req
-
-let get = call ~meth:`GET
-let post = call ~meth:`POST
-let options = call ~meth:`OPTIONS
+let get target f : route = (`GET, PathPattern.of_string target, f)
+let post target f : route = (`POST, PathPattern.of_string target, f)
+let options target f : route = (`OPTIONS, PathPattern.of_string target, f)
 
 let authenticate_bearer (r : request) =
   try
@@ -78,20 +76,64 @@ let authenticate_user (r : request) =
     token.resource_owner_id |> Option.get |> Lwt.return
   with _ -> Http.raise_error_response `Unauthorized
 
-let websocket (r : request) = Http.websocket r.http_request
+let websocket (r : request) f =
+  let open Lwt.Infix in
+  Http.websocket r.http_request f >|= fun r -> Raw r
 
 module Cors = struct
-  type t = { target : string; methods : Http.Method.t list; origin : string }
+  type t = {
+    target : PathPattern.t;
+    methods : Http.Method.t list;
+    origin : string;
+  }
 
-  let make target ?(origin = "*") ~methods () = { target; methods; origin }
+  let make target ?(origin = "*") ~methods () =
+    { target = PathPattern.of_string target; methods; origin }
 end
 
-let router ~cors routes =
+let router ~cors (routes : route list) =
+  let make_route meth target (f : request -> response Lwt.t) =
+    Http.call meth target @@ fun req ->
+    let%lwt raw_body = Http.body req in
+    let headers =
+      Http.headers req |> List.map (fun (k, v) -> (String.lowercase_ascii k, v))
+    in
+    let body =
+      if raw_body = "" then Form []
+      else
+        match List.assoc_opt "content-type" headers with
+        | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
+        | Some "application/x-www-form-urlencoded" | _ ->
+            Form (raw_body |> Uri.query_of_encoded)
+    in
+    let req = make_request ~http_request:req ~raw_body ~body ~headers () in
+    let%lwt res = f req in
+    let res =
+      match
+        ( res,
+          cors
+          |> List.find_opt (fun Cors.{ target; _ } ->
+                 PathPattern.perform ~pat:target req.http_request.path
+                 |> Option.is_some) )
+      with
+      | _, None | Raw _, _ -> res
+      | Response res, Some { origin; _ } ->
+          Response
+            {
+              res with
+              headers = ("access-control-allow-origin", origin) :: res.headers;
+            }
+    in
+    match res with
+    | Raw res -> Lwt.return res
+    | Response res ->
+        Http.respond ~status:res.status ~headers:res.headers res.body
+  in
+
   let cors_routes =
-    let handler (r : Cors.t) req =
+    let handler (r : Cors.t) (req : request) : response Lwt.t =
       let headers =
         [
-          ("access-control-allow-origin", r.origin);
           ( "access-control-allow-methods",
             r.methods |> List.map Http.Method.to_string |> String.concat ", " );
         ]
@@ -102,8 +144,11 @@ let router ~cors routes =
         |> Option.fold ~none:headers ~some:(fun v ->
                ("access-control-allow-headers", v) :: headers)
       in
-      Http.respond ~status:`No_content ~headers ""
+      respond ~status:`No_content ~headers ""
     in
-    cors |> List.map (fun (r : Cors.t) -> options r.target (handler r))
+    cors |> List.map (fun (r : Cors.t) -> (`OPTIONS, r.target, handler r))
   in
-  Http.router (routes @ cors_routes)
+
+  routes @ cors_routes
+  |> List.map (fun (meth, target, f) -> make_route meth target f)
+  |> Http.router

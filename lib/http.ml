@@ -38,6 +38,29 @@ module Status = struct
   let to_string = Cohttp.Code.string_of_status
 end
 
+module PathPattern = struct
+  type single_pattern = L of string | P of string | S
+  type t = single_pattern list
+
+  let split_on_slash = String.split_on_char '/' |$> List.tl
+
+  let of_string (src : string) : t =
+    src |> split_on_slash
+    |> List.map (function
+         | "*" -> S
+         | x when String.starts_with ~prefix:":" x -> P x
+         | x -> L x)
+
+  let perform ~(pat : t) (src : string) : (string * string) list option =
+    let rec aux param = function
+      | [], [] | _, [ S ] -> Some param
+      | x :: xs, L y :: ys when x = y -> aux param (xs, ys)
+      | x :: xs, P y :: ys -> aux ((y, x) :: param) (xs, ys)
+      | _ -> None
+    in
+    aux [] (split_on_slash src, pat)
+end
+
 module Signature = struct
   type private_key = X509.Private_key.t
   type public_key = X509.Public_key.t
@@ -173,6 +196,7 @@ end
 
 type request = {
   req : Cohttp_lwt.Request.t;
+  path : string;
   query : (string * string list) list;
   param : (string * string) list;
   body : Cohttp_lwt.Body.t;
@@ -182,9 +206,8 @@ type request = {
 
 type response = Cohttp_lwt_unix.Server.response_action
 type handler = request -> response Lwt.t
-type path = [ `L of string | `P of string | `S ] list
 type method_ = Method.t
-type route = method_ * path * handler
+type route = method_ * PathPattern.t * handler
 
 exception ErrorResponse of Status.t * string
 
@@ -204,11 +227,8 @@ let start_server ?(port = 8080) f (routes : route list) =
     let uri = Request.uri req in
     let meth = Request.meth req in
     let headers = Request.headers req |> Header.to_list in
-
-    (* Parse target *)
-    let path, query =
-      (Uri.path uri |> String.split_on_char '/' |> List.tl, Uri.query uri)
-    in
+    let path = Uri.path uri in
+    let query = Uri.query uri in
 
     (* Choose correct handler via router *)
     let param, handler =
@@ -219,17 +239,11 @@ let start_server ?(port = 8080) f (routes : route list) =
                (match meth with `GET -> `Not_found | _ -> `Method_not_allowed)
              ""
       in
-      let rec match_path param = function
-        | [], [] | _, [ `S ] -> Some param
-        | x :: xs, `L y :: ys when x = y -> match_path param (xs, ys)
-        | x :: xs, `P y :: ys -> match_path ((y, x) :: param) (xs, ys)
-        | _ -> None
-      in
       routes
-      |> List.find_map (fun (meth', ptn, handler) ->
+      |> List.find_map (fun (meth', pat, handler) ->
              if meth <> meth' then None
              else
-               match_path [] (path, ptn)
+               PathPattern.perform ~pat path
                |> Option.map (fun param -> (param, handler)))
       |> Option.value ~default:([], default_handler)
     in
@@ -237,7 +251,7 @@ let start_server ?(port = 8080) f (routes : route list) =
     (* Invoke the handler *)
     try%lwt
       let%lwt res =
-        handler (make_request ~req ~query ~param ~body ~headers ())
+        handler (make_request ~path ~req ~query ~param ~body ~headers ())
       in
       (match res with
       | `Response res ->
@@ -265,17 +279,7 @@ let start_server ?(port = 8080) f (routes : route list) =
   Lwt.join [ server; f () ] |> Lwt_main.run
 
 let router (routes : route list) = routes
-
-let parse_path (src : string) : path =
-  src |> String.split_on_char '/' |> List.tl
-  |> List.map (function
-       | "*" -> `S
-       | x when String.starts_with ~prefix:":" x -> `P x
-       | x -> `L x)
-
-let call (meth : Method.t) (path : string) (h : handler) =
-  let path = parse_path path in
-  (meth, path, h)
+let call (meth : Method.t) (path : PathPattern.t) (h : handler) = (meth, path, h)
 
 let query_opt (k : string) (r : request) : string list option =
   List.assoc_opt k r.query

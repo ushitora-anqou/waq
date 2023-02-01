@@ -27,11 +27,11 @@ let post req =
   in
 
   if grant.redirect_uri = "urn:ietf:wg:oauth:2.0:oob" then
-    Http.respond grant.token
+    Httpx.respond grant.token
   else
     let u = Uri.of_string grant.redirect_uri in
     let u = Uri.add_query_param u ("code", [ grant.token ]) in
-    Http.respond ~status:`Found ~headers:[ ("Location", Uri.to_string u) ] ""
+    Httpx.respond ~status:`Found ~headers:[ ("Location", Uri.to_string u) ] ""
 
 let get req =
   let response_type = req |> Httpx.query "response_type" in
@@ -39,7 +39,7 @@ let get req =
   let redirect_uri = req |> Httpx.query "redirect_uri" in
   let scope = req |> Httpx.query ~default:"read" "scope" in
 
-  Http.respond ~status:`OK
+  Httpx.respond ~status:`OK
     (String.trim
     @@ Jingoo.Jg_template.from_string
          ~models:

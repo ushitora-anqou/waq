@@ -19,4 +19,4 @@ let get req =
   let%lwt statuses = Db.home_timeline ~id:self_id ~limit ~max_id ~since_id in
   let%lwt statuses = Lwt_list.map_p conv statuses in
   `List statuses |> Yojson.Safe.to_string
-  |> Http.respond ~headers:[ Helper.content_type_app_json ]
+  |> Httpx.respond ~headers:[ Helper.content_type_app_json ]

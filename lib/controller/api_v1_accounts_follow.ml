@@ -41,4 +41,4 @@ let post req =
     ~blocked_by:false ~muting:false ~muting_notifications:false ~requested:false
     ~domain_blocking:false ~endorsed:false
   |> post_api_v1_accounts_follow_res_to_yojson |> Yojson.Safe.to_string
-  |> Http.respond ~headers:[ Helper.content_type_app_json ]
+  |> Httpx.respond ~headers:[ Helper.content_type_app_json ]
