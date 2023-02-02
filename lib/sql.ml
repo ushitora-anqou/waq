@@ -102,7 +102,7 @@ module Make (D : Driver) = struct
           m "\o033[1;34m%s\o033[0m [%s]"
             (sql |> split_on_char '\n' |> List.map trim
             |> List.filter (( <> ) "")
-            |> List.filter (starts_with ~prefix:"--" |$> not)
+            |> List.filter (starts_with ~prefix:"--" |.> not)
             |> concat " " |> trim)
             (params |> List.map conv |> concat "; "))
 

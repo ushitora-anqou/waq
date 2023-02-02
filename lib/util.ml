@@ -1,4 +1,4 @@
-let ( |$> ) f g x = f x |> g
+let ( |.> ) f g x = f x |> g
 let ignore_lwt (p : _ Lwt.t) = Lwt.bind p (fun _ -> Lwt.return_unit)
 let ( |=> ) = Lwt.Infix.( >|= ) (* More intuitive, isn't it? *)
 let regex ptn = Re.(Pcre.re ptn |> compile)
@@ -62,5 +62,5 @@ module Ptime = struct
     Printf.sprintf "%s, %02d %s %d %02d:%02d:%02d GMT" day_name day_of_month
       month year hour minute second
 
-  let to_int : t -> int = to_span |$> Span.to_int_s |$> Option.get
+  let to_int : t -> int = to_span |.> Span.to_int_s |.> Option.get
 end

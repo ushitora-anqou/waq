@@ -117,7 +117,7 @@ module PathPattern = struct
   type single_pattern = L of string | P of string | S
   type t = single_pattern list
 
-  let split_on_slash = String.split_on_char '/' |$> List.tl
+  let split_on_slash = String.split_on_char '/' |.> List.tl
 
   let of_string (src : string) : t =
     src |> split_on_slash
@@ -337,7 +337,7 @@ module BareServer = struct
   module Request = struct
     include Cohttp_lwt.Request
 
-    let headers = headers |$> Cohttp.Header.to_list
+    let headers = headers |.> Cohttp.Header.to_list
   end
 
   module Response = struct
@@ -403,7 +403,7 @@ module BareServer = struct
           | Pong -> () (* Just ignore *)
           | _ ->
               Websocket.Frame.close 1002
-              |> Option.(some |$> get conn.frames_out_fn))
+              |> Option.(some |.> get conn.frames_out_fn))
     in
     conn.frames_out_fn <- Some frames_out_fn;
     Lwt.async (fun () ->
