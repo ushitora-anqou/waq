@@ -623,4 +623,17 @@ module Server = struct
                    headers =
                      (`Access_control_allow_origin, origin) :: res.headers;
                  })
+
+  (* Middlware Logger *)
+  let middleware_logger (inner_handler : handler) (req : request) :
+      response Lwt.t =
+    let (Request { path; meth; _ }) = req in
+    let meth = Method.to_string meth in
+    Log.debug (fun m -> m "%s %s" meth path);
+    inner_handler req >|= fun resp ->
+    (match resp with
+    | Response { status; _ } ->
+        Log.info (fun m -> m "%s %s %s" (Status.to_string status) meth path)
+    | BareResponse _ -> Log.info (fun m -> m "[bare] %s %s" meth path));
+    resp
 end

@@ -41,5 +41,5 @@ let routes_from_clients =
 
 let handler =
   let open Http.Server in
-  middleware_cors cors
+  middleware_logger @@ middleware_cors cors
   @@ router (routes_from_servers @ routes_from_clients) default_handler
