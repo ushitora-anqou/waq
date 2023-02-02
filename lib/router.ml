@@ -37,6 +37,7 @@ let routes_from_clients =
     get "/api/v1/streaming" Controller.Api_v1_streaming.get;
     get "/api/v1/accounts/verify_credentials"
       Controller.Api_v1_accounts_verify_credentials.get;
+    get "/api/v1/instance" Controller.Api_v1_instance.get;
   ]
 
 let handler =

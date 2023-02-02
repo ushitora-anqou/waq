@@ -369,6 +369,10 @@ let waq_scenario_1 _waq_token =
     l |> List.assoc "source" |> expect_assoc |> List.assoc "privacy"
     |> expect_string = "public");
 
+  let%lwt r = fetch_exn (waq "/api/v1/instance") in
+  let l = Yojson.Safe.from_string r |> expect_assoc in
+  assert (l |> List.mem_assoc "uri");
+
   Lwt.return_unit
 
 let waq_scenario_2 waq_token =
