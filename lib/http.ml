@@ -56,6 +56,7 @@ module Header = struct
     | `Host
     | `Location
     | `Raw of string
+    | `Sec_websocket_protocol
     | `Signature
     | `User_agent ]
 
@@ -75,6 +76,7 @@ module Header = struct
     | `Host -> "host"
     | `Location -> "location"
     | `Raw s -> s
+    | `Sec_websocket_protocol -> "sec-websocket-protocol"
     | `Signature -> "signature"
     | `User_agent -> "user-agent"
 
@@ -96,6 +98,7 @@ module Header = struct
     | "digest" -> `Digest
     | "host" -> `Host
     | "location" -> `Location
+    | "sec-websocket-protocol" -> `Sec_websocket_protocol
     | "signature" -> `Signature
     | "user-agent" -> `User_agent
     | s -> `Raw s
