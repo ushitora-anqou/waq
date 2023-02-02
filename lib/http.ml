@@ -475,6 +475,12 @@ module Server = struct
 
   let query_opt name r = try Some (query name r) with _ -> None
 
+  let header_opt name : request -> string option = function
+    | Request { headers; _ } -> headers |> List.assoc_opt name
+
+  let header name (r : request) : string =
+    match header_opt name r with None -> failwith "header: none" | Some v -> v
+
   let start_server ?(port = 8080) (handler : handler) k : unit =
     BareServer.start_server port (k ())
     @@ fun (req : BareServer.Request.t) (body : BareServer.Body.t) :
