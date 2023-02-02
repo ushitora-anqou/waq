@@ -187,6 +187,29 @@ let make_account_from_model (a : Db.Account.t) =
     ~acct:(acct a.username a.domain) ~display_name:a.display_name
     ~created_at:(Ptime.to_rfc3339 a.created_at)
 
+(* Entity CredentialAccount *)
+type credential_account_source = { privacy : string; sensitive : bool }
+[@@deriving make, yojson]
+
+type credential_account = {
+  id : string;
+  username : string;
+  acct : string;
+  display_name : string;
+  created_at : string;
+  source : credential_account_source;
+}
+[@@deriving make, yojson]
+
+let make_credential_account_from_model (a : Db.Account.t) : credential_account =
+  let source =
+    make_credential_account_source ~privacy:"public" ~sensitive:false
+  in
+  make_credential_account ~id:(string_of_int a.id) ~username:a.username
+    ~acct:(acct a.username a.domain) ~display_name:a.display_name
+    ~created_at:(Ptime.to_rfc3339 a.created_at)
+    ~source
+
 (* Entity status *)
 type status = {
   id : string;

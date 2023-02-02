@@ -346,6 +346,7 @@ let waq_mstdn_scenario_2 waq_token mstdn_token =
 
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
+
   let%lwt r =
     fetch_exn
       ~headers:[ (`Authorization, "Bearer " ^ access_token) ]
@@ -355,6 +356,18 @@ let waq_scenario_1 _waq_token =
     match Yojson.Safe.from_string r with
     | `Assoc l -> l |> List.assoc "name" |> expect_string = "foo"
     | _ -> false);
+
+  let%lwt r =
+    fetch_exn
+      ~headers:[ (`Authorization, "Bearer " ^ access_token) ]
+      (waq "/api/v1/accounts/verify_credentials")
+  in
+  let l = Yojson.Safe.from_string r |> expect_assoc in
+  assert (l |> List.assoc "username" |> expect_string = "user1");
+  assert (l |> List.assoc "acct" |> expect_string = "user1");
+  assert (
+    l |> List.assoc "source" |> expect_assoc |> List.assoc "privacy"
+    |> expect_string = "public");
 
   Lwt.return_unit
 
