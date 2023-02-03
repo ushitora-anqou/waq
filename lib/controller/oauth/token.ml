@@ -19,7 +19,7 @@ let post req =
   if grant_type <> "authorization_code" then
     Httpq.Server.raise_error_response `Bad_request;
 
-  let%lwt grant = Oauth.authenticate_access_grant code in
+  let%lwt grant = Oauth_helper.authenticate_access_grant code in
   (* FIXME: Check if scope is correct *)
   let%lwt app =
     Db.OAuthApplication.get_one ~id:(Option.get grant.application_id) ()
@@ -35,7 +35,7 @@ let post req =
   then Httpq.Server.raise_error_response `Bad_request;
 
   let%lwt token =
-    Oauth.generate_access_token ~scopes:scope
+    Oauth_helper.generate_access_token ~scopes:scope
       ~resource_owner_id:(Option.get grant.resource_owner_id)
       ~app
   in

@@ -1,10 +1,8 @@
 open Util [@@warning "-33"]
-
-let get = Httpq.Server.get
-let post = Httpq.Server.post
+open Httpq.Server
 
 let cors =
-  Httpq.Server.Cors.
+  Cors.
     [
       make "/.well-known/*" ~methods:[ `GET ] ();
       make "/users/:username" ~methods:[ `GET ] ();
@@ -24,23 +22,31 @@ let routes_from_servers =
 let routes_from_clients =
   Controller.
     [
-      post "/api/v1/accounts/:id/follow" Api_v1_accounts_follow.post;
-      post "/api/v1/accounts/:id/unfollow" Api_v1_accounts_unfollow.post;
-      get "/api/v1/accounts/search" Api_v1_accounts_search.get;
-      post "/api/v1/statuses" Api_v1_statuses.post;
-      get "/api/v1/timelines/home" Api_v1_timelines_home.get;
-      post "/api/v1/apps" Api_v1_apps.post;
-      get "/oauth/authorize" Oauth_authorize.get;
-      post "/oauth/authorize" Oauth_authorize.post;
-      post "/oauth/token" Oauth_token.post;
-      get "/api/v1/apps/verify_credentials" Api_v1_apps_verify_credentials.get;
-      get "/api/v1/streaming" Api_v1_streaming.get;
-      get "/api/v1/accounts/verify_credentials"
-        Api_v1_accounts_verify_credentials.get;
-      get "/api/v1/instance" Api_v1_instance.get;
-    ]
+      scope "/api/v1" Api_v1.[
+        get "/streaming" Streaming.get;
+        get "/instance" Instance.get;
+        post "/statuses" Statuses.post;
+        scope "/accounts" Accounts.[
+          post "/:id/follow" Follow.post;
+          post "/:id/unfollow" Unfollow.post;
+          get "/search" Search.get;
+          get "/verify_credentials" Verify_credentials.get;
+        ];
+        scope "/timelines" Timelines.[
+          get "/home" Home.get;
+        ];
+        scope "/apps" Apps.[
+          post "" Root.post;
+          get "/verify_credentials" Verify_credentials.get;
+        ];
+      ];
+      scope "/oauth" Oauth.[
+        get "/authorize" Authorize.get;
+        post "/authorize" Authorize.post;
+        post "/token" Token.post;
+      ];
+    ] [@ocamlformat "disable"]
 
 let handler =
-  let open Httpq.Server in
   middleware_logger @@ middleware_cors cors
   @@ router (routes_from_servers @ routes_from_clients) default_handler

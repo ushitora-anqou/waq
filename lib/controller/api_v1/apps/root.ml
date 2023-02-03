@@ -14,8 +14,8 @@ let post req =
   let scopes = req |> Httpq.Server.query ~default:"read" "scopes" in
 
   let%lwt app =
-    Oauth.generate_application ~name:client_name ~redirect_uri:redirect_uris
-      ~scopes
+    Oauth_helper.generate_application ~name:client_name
+      ~redirect_uri:redirect_uris ~scopes
   in
   make_res ~id:(string_of_int app.id) ~name:app.name
     ~redirect_uri:app.redirect_uri ~client_id:app.uid ~client_secret:app.secret

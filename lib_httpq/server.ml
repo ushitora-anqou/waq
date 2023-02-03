@@ -123,7 +123,10 @@ let websocket (r : request) f =
       Bare_server.websocket bare_req f >|= fun r -> BareResponse r
 
 (* Router *)
-type route = Method.t * Path_pattern.t * (request -> response Lwt.t)
+type route = Method.t * string * (request -> response Lwt.t)
+
+type router_spec_entry = Route of route | Scope of (string * router_spec)
+and router_spec = router_spec_entry list
 
 let default_handler : handler = function
   | Request req ->
@@ -132,8 +135,22 @@ let default_handler : handler = function
       in
       respond ~status ""
 
-let router (routes : route list) (inner_handler : handler) (req : request) :
+let router (spec : router_spec) (inner_handler : handler) (req : request) :
     response Lwt.t =
+  let routes =
+    let rec aux (spec : router_spec) : route list =
+      spec
+      |> List.map (function
+           | Route r -> [ r ]
+           | Scope (name, spec) ->
+               aux spec
+               |> List.map (fun (meth, uri, h) -> (meth, name ^ uri, h)))
+      |> List.flatten
+    in
+    aux spec
+    |> List.map (fun (meth, uri, h) -> (meth, Path_pattern.of_string uri, h))
+  in
+
   match req with
   | Request req ->
       (* Choose correct handler from routes *)
@@ -149,17 +166,23 @@ let router (routes : route list) (inner_handler : handler) (req : request) :
       let req = Request { req with param } in
       handler req
 
-let get target f : route = (`GET, Path_pattern.of_string target, f)
-let post target f : route = (`POST, Path_pattern.of_string target, f)
-let options target f : route = (`OPTIONS, Path_pattern.of_string target, f)
+let get target f : router_spec_entry = Route (`GET, target, f)
+let post target f : router_spec_entry = Route (`POST, target, f)
+let options target f : router_spec_entry = Route (`OPTIONS, target, f)
+let scope (name : string) (spec : router_spec) = Scope (name, spec)
 
 (* Middleware CORS *)
 
 module Cors = struct
-  type t = { target : Path_pattern.t; methods : Method.t list; origin : string }
+  type t = {
+    target : string;
+    target_pat : Path_pattern.t;
+    methods : Method.t list;
+    origin : string;
+  }
 
   let make target ?(origin = "*") ~methods () =
-    { target = Path_pattern.of_string target; methods; origin }
+    { target; target_pat = Path_pattern.of_string target; methods; origin }
 end
 
 let middleware_cors (src : Cors.t list) (inner_handler : handler)
@@ -186,7 +209,7 @@ let middleware_cors (src : Cors.t list) (inner_handler : handler)
 
   (* Construct routes for preflight requests *)
   let routes =
-    src |> List.map (fun (r : Cors.t) -> (`OPTIONS, r.target, handler r))
+    src |> List.map (fun (r : Cors.t) -> options r.target (handler r))
   in
 
   (* Construct router *)
@@ -197,8 +220,8 @@ let middleware_cors (src : Cors.t list) (inner_handler : handler)
      | Request { path; _ } as req -> (
          let path_match =
            src
-           |> List.find_opt (fun Cors.{ target; _ } ->
-                  Path_pattern.perform ~pat:target path |> Option.is_some)
+           |> List.find_opt (fun Cors.{ target_pat; _ } ->
+                  Path_pattern.perform ~pat:target_pat path |> Option.is_some)
          in
          inner_handler req >|= fun resp ->
          match (resp, path_match) with

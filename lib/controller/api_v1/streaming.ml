@@ -13,7 +13,7 @@ let get req =
 
   let%lwt user_id =
     try%lwt
-      Oauth.authenticate_access_token access_token >|= fun token ->
+      Oauth_helper.authenticate_access_token access_token >|= fun token ->
       Option.get token.resource_owner_id
     with _ -> Httpq.Server.raise_error_response `Unauthorized
   in

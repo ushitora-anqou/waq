@@ -6,7 +6,7 @@ let post req =
   let username = req |> Httpq.Server.query "username" in
 
   if response_type <> "code" then Httpq.Server.raise_error_response `Bad_request;
-  let%lwt app = Oauth.authenticate_application client_id in
+  let%lwt app = Oauth_helper.authenticate_application client_id in
   (* FIXME: Check if scope is correct *)
   if redirect_uri <> app.redirect_uri then
     Httpq.Server.raise_error_response `Bad_request;
@@ -22,8 +22,8 @@ let post req =
   in
 
   let%lwt grant =
-    Oauth.generate_access_grant ~expires_in:600 ~redirect_uri ~scopes:scope ~app
-      ~resource_owner_id
+    Oauth_helper.generate_access_grant ~expires_in:600 ~redirect_uri
+      ~scopes:scope ~app ~resource_owner_id
   in
 
   if grant.redirect_uri = "urn:ietf:wg:oauth:2.0:oob" then

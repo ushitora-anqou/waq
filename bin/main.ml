@@ -52,7 +52,7 @@ let oauth_generate_access_token username =
   let f =
     (* Generate a new OAuth application named "Web" *)
     let%lwt web =
-      Oauth.generate_application ~name:"Web"
+      Oauth_helper.generate_application ~name:"Web"
         ~redirect_uri:"urn:ietf:wg:oauth:2.0:oob"
         ~scopes:"read write follow push"
     in
@@ -61,7 +61,7 @@ let oauth_generate_access_token username =
       Db.User.get_one ~account_id:a.id ()
     in
     let%lwt access_token =
-      Oauth.generate_access_token ~scopes:"read write follow push"
+      Oauth_helper.generate_access_token ~scopes:"read write follow push"
         ~resource_owner_id:user.id ~app:web
     in
     Lwt_io.printf "%s\n%!" access_token.token;%lwt

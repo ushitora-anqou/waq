@@ -12,7 +12,7 @@ let authenticate_bearer = function
         let header = r.headers |> List.assoc `Authorization in
         assert (String.starts_with ~prefix:"Bearer " header);
         let bearer_token = String.sub header 7 (String.length header - 7) in
-        Oauth.authenticate_access_token bearer_token
+        Oauth_helper.authenticate_access_token bearer_token
       with _ -> Httpq.Server.raise_error_response `Unauthorized)
 
 let authenticate_user (r : Httpq.Server.request) =
