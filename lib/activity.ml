@@ -1,3 +1,4 @@
+open Lwt.Infix
 open Util
 module Uri = Httpq.Uri
 
@@ -76,6 +77,7 @@ type ap_note = {
   to_ : string list; [@key "to"]
   cc : string list;
   content : string;
+  inReplyTo : Yojson.Safe.t;
 }
 [@@deriving make, yojson { strict = false }]
 
@@ -92,15 +94,10 @@ type ap_create = {
 }
 [@@deriving make, yojson { strict = false }]
 
-(* Send GET /users/:name *)
-let get_uri href =
-  let%lwt body =
-    Httpq.Client.fetch_exn
-      ~headers:[ (`Accept, "application/activity+json") ]
-      href
-  in
-  body |> Yojson.Safe.from_string |> ap_user_of_yojson |> Result.get_ok
-  |> Lwt.return
+(* Get activity+json from the Internet *)
+let fetch_activity ~uri =
+  Httpq.Client.fetch_exn ~headers:[ (`Accept, "application/activity+json") ] uri
+  >|= Yojson.Safe.from_string
 
 (* Send GET /.well-known/webfinger *)
 let get_webfinger ~scheme ~domain ~username =
@@ -115,7 +112,7 @@ let get_webfinger ~scheme ~domain ~username =
 (* Utility function to get an account. Send GET requests if necessary *)
 let fetch_account ?(scheme = "https") by =
   let make_new_account (uri : string) =
-    let%lwt r = get_uri uri in
+    let%lwt r = fetch_activity ~uri >|= ap_user_of_yojson >|= Result.get_ok in
     let domain = Uri.of_string uri |> Uri.domain in
     let now = Ptime.now () in
     Db.Account.make ~username:r.preferredUsername ~domain
@@ -172,6 +169,57 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
       ()
   | _ -> failwith "Failed to post activity to inbox"
 
+(* Conversion functions *)
+let ap_create_note_from_model (s : Db.Status.t) =
+  let%lwt self = Db.Account.get_one ~id:s.account_id () in
+  let%lwt in_reply_to_s =
+    match s.in_reply_to_id with
+    | None -> Lwt.return_none
+    | Some id -> Db.Status.get_one ~id () >|= Option.some
+  in
+  let published = s.created_at |> Ptime.to_rfc3339 in
+  let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
+  let cc = [ self.followers_url ] in
+  let inReplyTo =
+    Db.Status.(
+      in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s.uri))
+  in
+  let note =
+    make_ap_note ~id:s.uri ~typ:"Note" ~published ~to_ ~cc
+      ~attributedTo:self.uri ~content:s.text ~inReplyTo ()
+  in
+  make_ap_create ~context ~id:(s.uri ^/ "activity") ~typ:"Create"
+    ~actor:(`String self.uri) ~published ~to_ ~cc ~obj:note ()
+  |> Lwt.return
+
+let rec ap_create_note_to_model (req : ap_create) : Db.Status.t Lwt.t =
+  let note = req.obj in
+  let published, _, _ = Ptime.of_rfc3339 note.published |> Result.get_ok in
+  let%lwt in_reply_to_id =
+    let uri_to_status_id uri =
+      fetch_status ~uri >|= fun (s : Db.Status.t) -> Some s.id
+    in
+    match note.inReplyTo with
+    | `String uri -> uri_to_status_id uri
+    | `Assoc l -> (
+        match l |> List.assoc_opt "id" with
+        | Some (`String uri) -> uri_to_status_id uri
+        | _ -> Lwt.return_none)
+    | _ -> Lwt.return_none
+  in
+  let%lwt attributedTo = fetch_account (`Uri note.attributedTo) in
+  Db.Status.(
+    make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
+      ~updated_at:published ~account_id:attributedTo.id ?in_reply_to_id ()
+    |> save_one)
+
+and fetch_status ~uri =
+  match%lwt Db.Status.get_one ~uri () with
+  | s -> Lwt.return s
+  | exception Sql.NoRowFound ->
+      fetch_activity ~uri >|= ap_create_of_yojson >|= Result.get_ok
+      >>= ap_create_note_to_model >>= Db.Status.save_one
+
 (* Entity account *)
 type account = {
   id : string;
@@ -217,14 +265,28 @@ type status = {
   visibility : string;
   uri : string;
   content : string;
+  replies_count : int;
+  in_reply_to_id : int option;
+  in_reply_to_account_id : int option;
   account : account;
 }
 [@@deriving make, yojson]
 
 let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
   let open Lwt.Infix in
+  let%lwt in_reply_to_account_id =
+    match s.in_reply_to_id with
+    | None -> Lwt.return_none
+    | Some _ -> (
+        match%lwt Db.Status.get_one ~in_reply_to_id:s.in_reply_to_id () with
+        | exception Sql.NoRowFound ->
+            Httpq.Server.raise_error_response `Bad_request
+        | s -> Lwt.return_some s.account_id)
+  in
+  let%lwt replies_count = Db.Status.get_replies_count s.id in
   Db.Account.get_one ~id:s.account_id () >|= fun a ->
   let account = make_account_from_model a in
   make_status ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 s.created_at)
-    ~visibility ~uri:s.uri ~content:s.text ~account
+    ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
+    ?in_reply_to_id:s.in_reply_to_id ?in_reply_to_account_id ()

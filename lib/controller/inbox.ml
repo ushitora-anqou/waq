@@ -67,20 +67,8 @@ let kick_inbox_undo (req : ap_inbox) =
 
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =
-  let note = req.obj in
-  let published =
-    match Ptime.of_rfc3339 note.published with
-    | Error _ -> Httpq.Server.raise_error_response `Bad_request
-    | Ok (t, _, _) -> t
-  in
   Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
-  let%lwt attributedTo = fetch_account (`Uri note.attributedTo) in
-  let%lwt s =
-    Db.Status.(
-      make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
-        ~updated_at:published ~account_id:attributedTo.id
-      |> save_one)
-  in
+  let%lwt s = ap_create_note_to_model req in
   Service.Distribute.kick s;
   Lwt.return_unit
 

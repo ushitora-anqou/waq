@@ -66,6 +66,7 @@ module Status = struct
     text : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
+    in_reply_to_id : int option;
     account_id : int;
   }
   [@@sql.table_name "statuses"] [@@deriving make, sql]
@@ -73,6 +74,12 @@ module Status = struct
   let update_uri s =
     named_query_row "UPDATE statuses SET uri = :uri WHERE id = :id RETURNING *"
       s
+
+  let get_replies_count (id : int) : int Lwt.t =
+    do_query @@ fun c ->
+    Sql.query_row c "SELECT COUNT(*) FROM statuses WHERE in_reply_to_id = $1"
+      ~p:[ `Int id ]
+    >|= List.hd >|= snd >|= Sql.Value.expect_int
 end
 
 module Follow = struct
