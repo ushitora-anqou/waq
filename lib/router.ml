@@ -11,6 +11,7 @@ let cors =
     ]
 
 let routes_from_servers =
+  let open Router in
   Controller.
     [
       get "/.well-known/host-meta" Well_known_host_meta.get;
@@ -20,6 +21,7 @@ let routes_from_servers =
     ]
 
 let routes_from_clients =
+  let open Router in
   Controller.
     [
       scope "/api/v1" Api_v1.[
@@ -48,5 +50,5 @@ let routes_from_clients =
     ] [@ocamlformat "disable"]
 
 let handler =
-  middleware_logger @@ middleware_cors cors
-  @@ router (routes_from_servers @ routes_from_clients) default_handler
+  Logger.use @@ Cors.use cors
+  @@ Router.use (routes_from_servers @ routes_from_clients) default_handler
