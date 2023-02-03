@@ -127,7 +127,7 @@ module Make (D : Driver) = struct
     | _ -> failwithf "Expected only one row but got many"
 
   let resolve_named_sql =
-    let re = regex {|:([_a-zA-Z][_a-zA-Z0-9]*)|} in
+    let re = Re.(Pcre.re {|:([_a-zA-Z][_a-zA-Z0-9]*)|} |> compile) in
     fun p sql ->
       let names = ref [] in
       let sql =

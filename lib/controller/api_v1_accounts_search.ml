@@ -16,7 +16,7 @@ let parse_req req =
   let open Helper in
   let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
   let q = req |> query "q" in
-  let re = Regex.compile {|^@?([^@]+)(?:@([^@]+))?$|} in
+  let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
   match Regex.match_group re q with
   | Ok [ _; username; domain ] ->
       let domain = if domain = "" then None else Some domain in
