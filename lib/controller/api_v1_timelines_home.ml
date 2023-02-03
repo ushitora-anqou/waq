@@ -1,7 +1,7 @@
 open Activity
 
 let parse_req req =
-  let open Http.Server in
+  let open Httpq.Server in
   let open Helper in
   let%lwt self_id = Helper.authenticate_user req in
   let limit = req |> query ~default:"20" "limit" |> int_of_string in
@@ -20,4 +20,4 @@ let get req =
   let%lwt statuses = Db.home_timeline ~id:self_id ~limit ~max_id ~since_id in
   let%lwt statuses = Lwt_list.map_p conv statuses in
   `List statuses |> Yojson.Safe.to_string
-  |> Http.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

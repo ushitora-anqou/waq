@@ -9,4 +9,4 @@ let get _req =
 <XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
   <Link rel="lrdd" template="{{ url }}?resource={uri}"/>
 </XRD>|}
-  |> Http.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
+  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]

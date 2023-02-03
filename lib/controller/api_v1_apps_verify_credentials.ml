@@ -6,4 +6,4 @@ let get req =
     Db.OAuthApplication.get_one ~id:(Option.get token.application_id) ()
   in
   make_res ~name:app.name |> res_to_yojson |> Yojson.Safe.to_string
-  |> Http.Server.respond
+  |> Httpq.Server.respond

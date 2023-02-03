@@ -12,7 +12,7 @@ type entry = {
 type t = entry list [@@deriving yojson]
 
 let parse_req req =
-  let open Http.Server in
+  let open Httpq.Server in
   let open Helper in
   let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
   let q = req |> query "q" in
@@ -21,7 +21,7 @@ let parse_req req =
   | Ok [ _; username; domain ] ->
       let domain = if domain = "" then None else Some domain in
       (resolve, username, domain)
-  | _ -> Http.Server.raise_error_response `Bad_request
+  | _ -> Httpq.Server.raise_error_response `Bad_request
 
 let get req =
   let _resolve, username, domain = parse_req req in
@@ -37,5 +37,5 @@ let get req =
         ~display_name:acc.display_name
     in
     [ ent ] |> to_yojson |> Yojson.Safe.to_string
-    |> Http.Server.respond ~headers:[ Helper.content_type_app_json ]
-  with _ -> Http.Server.raise_error_response `Not_found
+    |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
+  with _ -> Httpq.Server.raise_error_response `Not_found

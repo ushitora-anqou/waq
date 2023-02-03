@@ -98,7 +98,7 @@ module Make (D : Driver) = struct
       | `Timestamp t -> Ptime.to_rfc3339 t
     in
     fun sql params ->
-      Log.debug (fun m ->
+      Logq.debug (fun m ->
           m "\o033[1;34m%s\o033[0m [%s]"
             (sql |> split_on_char '\n' |> List.map trim
             |> List.filter (( <> ) "")
@@ -213,17 +213,17 @@ module PgDriver = struct
 
   let rec finish_conn socket_fd connect_poll = function
     | Pg.Polling_failed ->
-        (*Log.debug (fun m -> m "Polling failed");*)
+        (*Logq.debug (fun m -> m "Polling failed");*)
         Lwt.return_unit
     | Polling_ok ->
-        (*Log.debug (fun m -> m "Polling ok");*)
+        (*Logq.debug (fun m -> m "Polling ok");*)
         Lwt.return_unit
     | Polling_reading ->
-        (*Log.debug (fun m -> m "Polling reading");*)
+        (*Logq.debug (fun m -> m "Polling reading");*)
         ignore_lwt @@ Lwt.choose [ Lwt_unix.wait_read socket_fd ];%lwt
         finish_conn socket_fd connect_poll (connect_poll ())
     | Polling_writing ->
-        (*Log.debug (fun m -> m "Polling writing");*)
+        (*Logq.debug (fun m -> m "Polling writing");*)
         ignore_lwt @@ Lwt.choose [ Lwt_unix.wait_write socket_fd ];%lwt
         finish_conn socket_fd connect_poll (connect_poll ())
 

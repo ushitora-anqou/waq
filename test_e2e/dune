@@ -5,6 +5,8 @@
  (libraries
   cohttp
   cohttp-lwt-unix
+  httpq
+  logq
   lwt
   lwt.unix
   waq

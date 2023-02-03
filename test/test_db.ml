@@ -61,7 +61,7 @@ let test_user _ _ =
   Lwt.return_unit
 
 let () =
-  Log.(add_reporter (make_reporter ~l:Debug ()));
+  Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.load_string {|db_url: "postgresql://anqou@localhost:5432/waq_dev"|};
   Lwt_main.run
   @@ Alcotest_lwt.run "db"

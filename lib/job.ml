@@ -8,13 +8,13 @@ let kick ~name (f : unit -> unit Lwt.t) =
   let rec loop i =
     try%lwt f ()
     with e ->
-      Log.warn (fun m -> m "Job failed: %s: %s" name (Printexc.to_string e));
+      Logq.warn (fun m -> m "Job failed: %s: %s" name (Printexc.to_string e));
       if i + 1 = num_repeats then (
-        Log.err (fun m -> m "Job killed: %s: Limit reached" name);
+        Logq.err (fun m -> m "Job killed: %s: Limit reached" name);
         Lwt.return_unit)
       else
         let dur = sleep_duration i in
-        Log.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
+        Logq.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
         Lwt_unix.sleep dur;%lwt
         loop (i + 1)
   in

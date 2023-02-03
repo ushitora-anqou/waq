@@ -1,5 +1,5 @@
 open Util
-module Uri = Http.Uri
+module Uri = Httpq.Uri
 
 let context = `String "https://www.w3.org/ns/activitystreams"
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
@@ -95,7 +95,7 @@ type ap_create = {
 (* Send GET /users/:name *)
 let get_uri href =
   let%lwt body =
-    Http.Client.fetch_exn
+    Httpq.Client.fetch_exn
       ~headers:[ (`Accept, "application/activity+json") ]
       href
   in
@@ -106,7 +106,7 @@ let get_uri href =
 let get_webfinger ~scheme ~domain ~username =
   (* FIXME: Check /.well-known/host-meta if necessary *)
   let%lwt body =
-    Http.Client.fetch_exn @@ scheme ^ ":/" ^/ domain
+    Httpq.Client.fetch_exn @@ scheme ^ ":/" ^/ domain
     ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
   in
   body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
@@ -153,7 +153,7 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
   let body = Yojson.Safe.to_string body in
   let sign =
     let priv_key =
-      src.private_key |> Option.get |> Http.Signature.decode_private_key
+      src.private_key |> Option.get |> Httpq.Signature.decode_private_key
     in
     let key_id = src.uri ^ "#main-key" in
     let signed_headers =
@@ -163,7 +163,7 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
   in
   let meth = `POST in
   let headers = [ (`Content_type, "application/activity+json") ] in
-  let%lwt res = Http.Client.fetch ~meth ~headers ~body ~sign dst.inbox_url in
+  let%lwt res = Httpq.Client.fetch ~meth ~headers ~body ~sign dst.inbox_url in
   Lwt.return
   @@
   match res with

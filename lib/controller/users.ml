@@ -2,7 +2,7 @@ open Activity
 
 (* Recv GET /users/:name *)
 let get req =
-  let username = req |> Http.Server.param ":name" in
+  let username = req |> Httpq.Server.param ":name" in
   try%lwt
     let%lwt a = Db.Account.get_one ~domain:None ~username () in
     let%lwt _ = Db.User.get_one ~account_id:a.id () in
@@ -16,10 +16,10 @@ let get req =
       ~name:a.display_name ~summary:"Summary is here" ~url:a.uri ~tag:[]
       ~publicKey ()
     |> ap_user_to_yojson |> Yojson.Safe.to_string
-    |> Http.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
+    |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
-    Log.debug (fun m ->
+    Logq.debug (fun m ->
         m "[get_users] Can't find user: %s: %s\n%s" username
           (Printexc.to_string e)
           (Printexc.get_backtrace ()));
-    Http.Server.raise_error_response `Not_found
+    Httpq.Server.raise_error_response `Not_found

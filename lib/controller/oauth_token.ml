@@ -9,15 +9,15 @@ type res = {
 [@@deriving make, yojson]
 
 let post req =
-  let grant_type = req |> Http.Server.query "grant_type" in
-  let code = req |> Http.Server.query "code" in
-  let client_id = req |> Http.Server.query "client_id" in
-  let client_secret = req |> Http.Server.query "client_secret" in
-  let redirect_uri = req |> Http.Server.query "redirect_uri" in
-  let scope = req |> Http.Server.query ~default:"read" "scope" in
+  let grant_type = req |> Httpq.Server.query "grant_type" in
+  let code = req |> Httpq.Server.query "code" in
+  let client_id = req |> Httpq.Server.query "client_id" in
+  let client_secret = req |> Httpq.Server.query "client_secret" in
+  let redirect_uri = req |> Httpq.Server.query "redirect_uri" in
+  let scope = req |> Httpq.Server.query ~default:"read" "scope" in
 
   if grant_type <> "authorization_code" then
-    Http.Server.raise_error_response `Bad_request;
+    Httpq.Server.raise_error_response `Bad_request;
 
   let%lwt grant = Oauth.authenticate_access_grant code in
   (* FIXME: Check if scope is correct *)
@@ -25,14 +25,14 @@ let post req =
     Db.OAuthApplication.get_one ~id:(Option.get grant.application_id) ()
   in
   if app.redirect_uri <> redirect_uri then
-    Http.Server.raise_error_response `Bad_request;
+    Httpq.Server.raise_error_response `Bad_request;
   if app.uid <> client_id || app.secret <> client_secret then
-    Http.Server.raise_error_response `Unauthorized;
+    Httpq.Server.raise_error_response `Unauthorized;
   if
     let open Ptime in
     grant.expires_in
     < (diff (now ()) (Option.get app.created_at) |> Span.to_int_s |> Option.get)
-  then Http.Server.raise_error_response `Bad_request;
+  then Httpq.Server.raise_error_response `Bad_request;
 
   let%lwt token =
     Oauth.generate_access_token ~scopes:scope
@@ -44,4 +44,4 @@ let post req =
     ~created_at:
       (token.created_at |> Ptime.to_span |> Ptime.Span.to_int_s |> Option.get)
   |> res_to_yojson |> Yojson.Safe.to_string
-  |> Http.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

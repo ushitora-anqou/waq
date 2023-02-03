@@ -1,5 +1,5 @@
 (library
- (name waq)
+ (name httpq)
  (preprocess
   (pps
    lwt_ppx
@@ -11,26 +11,17 @@
    ppx_deriving_yojson))
  (libraries
   base64
+  cohttp-lwt-unix
   cstruct
-  fpath
-  httpq
-  jingoo
   logq
   lwt
   lwt.unix
-  mirage-crypto-rng
-  mirage-crypto-rng.lwt
-  postgresql
-  ppx_deriving_yojson.runtime
   ptime
-  re
-  re.pcre
   result
+  sha
   unix
   uri
-  uuidm
-  yaml
-  yaml.unix
+  websocket
+  websocket-lwt-unix.cohttp
+  x509
   yojson))
-
-(include_subdirs qualified)

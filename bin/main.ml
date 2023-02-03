@@ -5,9 +5,9 @@ module C = Config
 let register_user ~username ~display_name ~email =
   let now = Ptime.now () in
   let created_at, updated_at = (now, now) in
-  let private_key, public_key = Http.Signature.generate_keypair () in
-  let public_key = Http.Signature.encode_public_key public_key in
-  let private_key = Http.Signature.encode_private_key private_key in
+  let private_key, public_key = Httpq.Signature.generate_keypair () in
+  let public_key = Httpq.Signature.encode_public_key public_key in
+  let private_key = Httpq.Signature.encode_private_key private_key in
   let uri = Activity.url [ "users"; username ] in
   let inbox_url = Activity.(uri ^/ "inbox") in
   let followers_url = Activity.(uri ^/ "followers") in
@@ -27,8 +27,8 @@ let register_user ~username ~display_name ~email =
 let server () =
   let _host, port = (C.listen_host (), C.listen_port ()) in
 
-  Http.Server.start_server ~port Router.handler @@ fun () ->
-  Log.info (fun m -> m "Listening on 127.0.0.1:%d" port);
+  Httpq.Server.start_server ~port Router.handler @@ fun () ->
+  Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
 
 let db_reset () =
@@ -70,7 +70,7 @@ let oauth_generate_access_token username =
   Lwt_main.run f
 
 let () =
-  Log.(add_reporter (make_reporter ~l:Debug ()));
+  Logq.(add_reporter (make_reporter ~l:Debug ()));
   C.load_file "config.yml";
   Crypto.initialize ();
   Db.initialize ();

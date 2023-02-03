@@ -1,8 +1,8 @@
 open Waq
-open Http
+open Httpq
 
 let test_parse_path () =
-  let open PathPattern in
+  let open Path_pattern in
   assert (of_string "" = []);
   assert (of_string "/foo/bar/2000" = [ L "foo"; L "bar"; L "2000" ]);
   assert (of_string "/foo/:bar/2000" = [ L "foo"; P ":bar"; L "2000" ]);
@@ -25,7 +25,7 @@ let test_build_signing_string () =
   let meth = `POST in
   let path = "/foo?param=value&pet=dog" in
   assert (
-    Http.Signature.build_signing_string ~signed_headers ~headers ~meth ~path
+    Signature.build_signing_string ~signed_headers ~headers ~meth ~path
     = String.trim
         {|
 (request-target): post /foo?param=value&pet=dog
@@ -67,9 +67,8 @@ QwIDAQAB
     Some
       {|{"@context":"https://www.w3.org/ns/activitystreams","id":"http://localhost:3000/388ac00f-5be9-43fd-b661-b5a6c39014a0","type":"Follow","actor":"http://localhost:3000/users/admin","object":"https://c5ab-220-153-158-42.ngrok.io/users/anqou"}|}
   in
-  let { Http.Signature.key_id; algorithm; headers = signed_headers; signature }
-      =
-    Http.Signature.parse_signature_header
+  let { Signature.key_id; algorithm; headers = signed_headers; signature } =
+    Signature.parse_signature_header
       {|keyId="http://localhost:3000/users/admin#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest content-type",signature="rBIJyKvBjWlEsfhrqsxfZBWg3Vqwck5MHl9ohlG33mb8kUiZcTx7j7NLljXj8KIW4Gli61Jxmyu1EynRbWmYcvEm2ONa38+GzW9Pqnlm3Bli7yNzp4ga3BC1hrWh6V4sc8c7nHJix8qXKirmfmwtk9VNCxkWvwVRwJY5KHO/6ANDft81njlegvbnRdptbnubNOh8cmfz0y8vWyAMxSCmbKbc6M80WECw4Z+uHRh1LpunLerwAaNQNNLJ+MwjzyPznRkcKwem/RpZaUgIFNxH7N7HH87jp/737xwDlwZZQsiONhvGfn88rNZyZVUSnuZtom4oJQqKho6mmwTr2QhwJA=="|}
   in
   assert (key_id = "http://localhost:3000/users/admin#main-key");
@@ -82,8 +81,8 @@ QwIDAQAB
     = "rBIJyKvBjWlEsfhrqsxfZBWg3Vqwck5MHl9ohlG33mb8kUiZcTx7j7NLljXj8KIW4Gli61Jxmyu1EynRbWmYcvEm2ONa38+GzW9Pqnlm3Bli7yNzp4ga3BC1hrWh6V4sc8c7nHJix8qXKirmfmwtk9VNCxkWvwVRwJY5KHO/6ANDft81njlegvbnRdptbnubNOh8cmfz0y8vWyAMxSCmbKbc6M80WECw4Z+uHRh1LpunLerwAaNQNNLJ+MwjzyPznRkcKwem/RpZaUgIFNxH7N7HH87jp/737xwDlwZZQsiONhvGfn88rNZyZVUSnuZtom4oJQqKho6mmwTr2QhwJA==");
   assert (
     Result.is_ok
-    @@ Http.Signature.verify ~pub_key ~algorithm ~signed_headers ~signature
-         ~headers ~meth ~path ~body);
+    @@ Signature.verify ~pub_key ~algorithm ~signed_headers ~signature ~headers
+         ~meth ~path ~body);
   ()
 
 let test_sign () =
@@ -157,8 +156,7 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
       {|{"@context":"https://www.w3.org/ns/activitystreams","id":"http://localhost:3000/388ac00f-5be9-43fd-b661-b5a6c39014a0","type":"Follow","actor":"http://localhost:3000/users/admin","object":"https://c5ab-220-153-158-42.ngrok.io/users/anqou"}|}
   in
   let new_headers =
-    Http.Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth ~path
-      ~body
+    Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth ~path ~body
   in
   assert (
     List.combine
@@ -167,18 +165,18 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
     |> List.for_all (fun ((k, v), (k', v')) ->
            k = k' && (k = `Signature || k = `Digest || v = v')));
   let {
-    Http.Signature.key_id = key_id';
+    Signature.key_id = key_id';
     algorithm;
     headers = signed_headers;
     signature;
   } =
-    List.assoc `Signature new_headers |> Http.Signature.parse_signature_header
+    List.assoc `Signature new_headers |> Signature.parse_signature_header
   in
   assert (key_id = key_id');
   assert (
     Result.is_ok
-    @@ Http.Signature.verify ~pub_key ~algorithm ~signed_headers ~signature
-         ~headers ~meth ~path ~body)
+    @@ Signature.verify ~pub_key ~algorithm ~signed_headers ~signature ~headers
+         ~meth ~path ~body)
 
 let test_url () =
   (* Thanks to: https://ja.wikipedia.org/wiki/Uniform_Resource_Identifier *)

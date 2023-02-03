@@ -1,10 +1,10 @@
 open Util [@@warning "-33"]
 
-let get = Http.Server.get
-let post = Http.Server.post
+let get = Httpq.Server.get
+let post = Httpq.Server.post
 
 let cors =
-  Http.Server.Cors.
+  Httpq.Server.Cors.
     [
       make "/.well-known/*" ~methods:[ `GET ] ();
       make "/users/:username" ~methods:[ `GET ] ();
@@ -41,6 +41,6 @@ let routes_from_clients =
   ]
 
 let handler =
-  let open Http.Server in
+  let open Httpq.Server in
   middleware_logger @@ middleware_cors cors
   @@ router (routes_from_servers @ routes_from_clients) default_handler

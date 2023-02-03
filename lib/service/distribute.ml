@@ -27,7 +27,7 @@ let kick (s : Db.Status.t) =
 
   (* Deliver to remote followers *)
   if is_status_from_remote && remote_followers <> [] then
-    Log.warn (fun m ->
+    Logq.warn (fun m ->
         m
           "Found a follow from a remote user to another remote one; possibly a \
            bug");

@@ -21,12 +21,12 @@ let migrate () =
   Db.do_query @@ fun c ->
   all
   |> Lwt_list.iter_s (fun (id, (module M : S)) ->
-         Log.info (fun m -> m "Migrate %d" id);
+         Logq.info (fun m -> m "Migrate %d" id);
          M.up c)
 
 let rollback () =
   Db.do_query @@ fun c ->
   all |> List.rev
   |> Lwt_list.iter_s (fun (id, (module M : S)) ->
-         Log.info (fun m -> m "Rollback %d" id);
+         Logq.info (fun m -> m "Rollback %d" id);
          M.down c)

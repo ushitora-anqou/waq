@@ -1,11 +1,10 @@
 open Lwt.Infix
-module Log = Waq.Log
-module Uri = Waq.Http.Uri
+module Uri = Httpq.Uri
 module Ptime = Waq.Util.Ptime
 
 let ignore_lwt = Waq.Util.ignore_lwt
-let fetch = Waq.Http.Client.fetch
-let fetch_exn = Waq.Http.Client.fetch_exn
+let fetch = Httpq.Client.fetch
+let fetch_exn = Httpq.Client.fetch_exn
 
 let expect_string = function
   | `String s -> s
@@ -93,7 +92,7 @@ let new_mastodon_session f =
   Fun.protect
     (fun () -> f token)
     ~finally:(fun () ->
-      Log.debug (fun m -> m "Killing mastodon processes");
+      Logq.debug (fun m -> m "Killing mastodon processes");
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
 
@@ -108,7 +107,7 @@ let mstdn url =
 let url = function `Waq -> waq | `Mstdn -> mstdn
 
 let pp_json (s : string) =
-  Log.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
+  Logq.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
 let lookup ~token kind ?domain ~username () =
@@ -454,26 +453,26 @@ let waq_scenario_3 waq_token =
 let scenarios_with_waq_and_mstdn () =
   [ (1, waq_mstdn_scenario_1); (2, waq_mstdn_scenario_2) ]
   |> List.iter @@ fun (i, scenario) ->
-     Log.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
+     Logq.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
      new_session @@ fun waq_token ->
-     Log.debug (fun m -> m "Access token for Waq: %s" waq_token);
+     Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
      new_mastodon_session @@ fun mstdn_token ->
-     Log.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
+     Logq.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
      Unix.sleep 10;
      Lwt_main.run @@ scenario waq_token mstdn_token
 
 let scenarios_with_waq () =
   [ (1, waq_scenario_1); (2, waq_scenario_2); (3, waq_scenario_3) ]
   |> List.iter @@ fun (i, scenario) ->
-     Log.debug (fun m -> m "===== Scenario waq-%d =====" i);
+     Logq.debug (fun m -> m "===== Scenario waq-%d =====" i);
      new_session @@ fun waq_token ->
-     Log.debug (fun m -> m "Access token for Waq: %s" waq_token);
+     Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
      Unix.sleep 1;
      Lwt_main.run @@ scenario waq_token
 
 let () =
   print_newline ();
-  Log.(add_reporter (make_reporter ~l:Debug ()));
+  Logq.(add_reporter (make_reporter ~l:Debug ()));
   scenarios_with_waq ();
   scenarios_with_waq_and_mstdn ();
   ()
