@@ -233,7 +233,7 @@ let middleware_cors (src : Cors.t list) (inner_handler : handler)
                  headers = (`Access_control_allow_origin, origin) :: res.headers;
                })
 
-(* Middlware Logq.er *)
+(* Middlware Logger *)
 let middleware_logger (inner_handler : handler) (req : request) : response Lwt.t
     =
   let (Request { uri; meth; _ }) = req in
