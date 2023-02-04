@@ -1,4 +1,4 @@
-open Activity
+open Entity
 open Util
 
 (* Recv POST /api/v1/statuses *)

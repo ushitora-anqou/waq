@@ -1,3 +1,4 @@
+open Util
 open Activity
 
 (* Recv GET /users/:name *)

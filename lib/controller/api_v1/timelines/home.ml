@@ -1,4 +1,4 @@
-open Activity
+open Entity
 
 let parse_req req =
   let open Httpq.Server in

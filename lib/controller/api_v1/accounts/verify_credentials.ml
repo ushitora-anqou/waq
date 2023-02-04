@@ -1,4 +1,4 @@
-open Activity
+open Entity
 
 let get req =
   let%lwt self_id = Helper.authenticate_user req in

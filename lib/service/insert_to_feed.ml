@@ -1,4 +1,4 @@
-open Activity
+open Entity
 
 type res = { stream : string list; event : string; payload : string }
 [@@deriving make, yojson]

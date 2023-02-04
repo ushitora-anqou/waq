@@ -29,3 +29,8 @@ module Ptime = struct
   let now () = Unix.gettimeofday () |> of_float_s |> Option.get
   let to_int : t -> int = to_span |.> Span.to_int_s |.> Option.get
 end
+
+let acct (username : string) (domain : string option) : string =
+  match domain with None -> username | Some domain -> username ^ "@" ^ domain
+
+let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2

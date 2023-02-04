@@ -9,8 +9,8 @@ let register_user ~username ~display_name ~email =
   let public_key = Httpq.Signature.encode_public_key public_key in
   let private_key = Httpq.Signature.encode_private_key private_key in
   let uri = Activity.url [ "users"; username ] in
-  let inbox_url = Activity.(uri ^/ "inbox") in
-  let followers_url = Activity.(uri ^/ "followers") in
+  let inbox_url = uri ^/ "inbox" in
+  let followers_url = uri ^/ "followers" in
   let%lwt a =
     Db.Account.(
       make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
