@@ -141,11 +141,19 @@ let unfollow ~token kind account_id =
     (url kind (Printf.sprintf "/api/v1/accounts/%s/unfollow" account_id))
   |> ignore_lwt
 
-let post ~token kind ?content () =
+type status = { id : string; uri : string } [@@deriving make]
+
+let post ~token kind ?content ?in_reply_to_id () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let%lwt r =
     let body =
-      `Assoc [ ("status", `String content) ] |> Yojson.Safe.to_string
+      let l = [ ("status", `String content) ] in
+      let l =
+        in_reply_to_id
+        |> Option.fold ~none:l ~some:(fun id ->
+               ("in_reply_to_id", `String id) :: l)
+      in
+      `Assoc l |> Yojson.Safe.to_string
     in
     let headers =
       [
@@ -157,7 +165,9 @@ let post ~token kind ?content () =
     fetch_exn ~headers ~meth:`POST ~body (url kind "/api/v1/statuses")
   in
   let l = Yojson.Safe.from_string r |> expect_assoc in
-  List.assoc "uri" l |> expect_string |> Lwt.return
+  let id = l |> List.assoc "id" |> expect_string in
+  let uri = l |> List.assoc "uri" |> expect_string in
+  make_status ~id ~uri |> Lwt.return
 
 let home_timeline ~token kind =
   let headers = [ (`Authorization, "Bearer " ^ token) ] in
@@ -259,12 +269,12 @@ let waq_mstdn_scenario_1 waq_token mstdn_token =
       Lwt_unix.sleep 1.0;%lwt
 
       (* Post by @admin@localhost:3000 *)
-      let%lwt uri = post `Mstdn ~token:mstdn_token () in
+      let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token () in
       uris := uri :: !uris;
       Lwt_unix.sleep 1.0;%lwt
 
       (* Post by me *)
-      let%lwt uri2 = post `Waq ~token:waq_token () in
+      let%lwt { uri = uri2; _ } = post `Waq ~token:waq_token () in
       uris := uri2 :: !uris;
       Lwt_unix.sleep 1.0;%lwt
 
@@ -313,11 +323,11 @@ let waq_mstdn_scenario_2 waq_token mstdn_token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @admin@localhost:3000 *)
-  let%lwt uri = post `Mstdn ~token:mstdn_token () in
+  let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by me *)
-  let%lwt uri2 = post `Waq ~token:waq_token () in
+  let%lwt { uri = uri2; _ } = post `Waq ~token:waq_token () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get home timeline of @admin@localhost:3000 and check *)
@@ -405,7 +415,7 @@ let waq_scenario_2 waq_token =
   let expected_uri = ref None in
   let mtx = Lwt_mutex.create () in
   websocket ~mtx (waq target) handler (fun _pushf ->
-      let%lwt uri = post `Waq ~token:waq_token () in
+      let%lwt { uri; _ } = post `Waq ~token:waq_token () in
       expected_uri := Some uri;
       set_current_state `Recv;
       Lwt.return_unit);%lwt
@@ -422,17 +432,27 @@ let waq_scenario_3 waq_token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @user2 *)
-  let%lwt uri = post `Waq ~token:waq_token' () in
+  let%lwt { uri; id } = post `Waq ~token:waq_token' () in
 
-  (* Post by me *)
-  let%lwt uri2 = post `Waq ~token:waq_token () in
+  (* Reply by me *)
+  let%lwt { uri = uri2; id = id2 } =
+    post `Waq ~token:waq_token ~in_reply_to_id:id ()
+  in
+
+  (* Reply again *)
+  let%lwt { uri = uri3; _ } =
+    post `Waq ~token:waq_token ~in_reply_to_id:id2 ()
+  in
 
   (* Get my home timeline and check *)
   (home_timeline `Waq ~token:waq_token >|= function
-   | [ `Assoc l2; `Assoc l ] ->
+   | [ `Assoc l3; `Assoc l2; `Assoc l ] ->
        (* Check if the timeline is correct *)
        assert (uri = (l |> List.assoc "uri" |> expect_string));
+       assert (id = (l2 |> List.assoc "in_reply_to_id" |> expect_string));
        assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+       assert (id2 = (l3 |> List.assoc "in_reply_to_id" |> expect_string));
+       assert (uri3 = (l3 |> List.assoc "uri" |> expect_string));
        ()
    | _ -> assert false);%lwt
 
@@ -442,9 +462,10 @@ let waq_scenario_3 waq_token =
 
   (* Get my home timeline and check again *)
   (home_timeline `Waq ~token:waq_token >|= function
-   | [ `Assoc l2 ] ->
+   | [ `Assoc l3; `Assoc l2 ] ->
        (* Check if the timeline is correct *)
        assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+       assert (uri3 = (l3 |> List.assoc "uri" |> expect_string));
        ()
    | _ -> assert false);%lwt
 

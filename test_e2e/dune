@@ -1,7 +1,7 @@
 (executable
  (name main)
  (preprocess
-  (pps lwt_ppx))
+  (pps lwt_ppx ppx_deriving.make))
  (libraries
   cohttp
   cohttp-lwt-unix

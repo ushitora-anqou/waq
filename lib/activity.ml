@@ -266,8 +266,8 @@ type status = {
   uri : string;
   content : string;
   replies_count : int;
-  in_reply_to_id : int option;
-  in_reply_to_account_id : int option;
+  in_reply_to_id : string option;
+  in_reply_to_account_id : string option;
   account : account;
 }
 [@@deriving make, yojson]
@@ -281,7 +281,7 @@ let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
         match%lwt Db.Status.get_one ~in_reply_to_id:s.in_reply_to_id () with
         | exception Sql.NoRowFound ->
             Httpq.Server.raise_error_response `Bad_request
-        | s -> Lwt.return_some s.account_id)
+        | s -> s.account_id |> string_of_int |> Lwt.return_some)
   in
   let%lwt replies_count = Db.Status.get_replies_count s.id in
   Db.Account.get_one ~id:s.account_id () >|= fun a ->
@@ -289,4 +289,5 @@ let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
   make_status ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 s.created_at)
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
-    ?in_reply_to_id:s.in_reply_to_id ?in_reply_to_account_id ()
+    ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
+    ?in_reply_to_account_id ()
