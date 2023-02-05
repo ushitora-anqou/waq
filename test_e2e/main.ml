@@ -154,6 +154,35 @@ let get_status kind status_id =
   let uri = l |> List.assoc "uri" |> expect_string in
   make_status ~id ~uri |> Lwt.return
 
+let get_status_context kind status_id =
+  let%lwt r =
+    fetch_exn
+      ~headers:[ (`Content_type, "application/json") ]
+      (url kind ("/api/v1/statuses/" ^ status_id ^ "/context"))
+  in
+  let l = Yojson.Safe.from_string r |> expect_assoc in
+  match l with
+  | [ ("ancestors", `List ancestors); ("descendants", `List descendants) ]
+  | [ ("descendants", `List descendants); ("ancestors", `List ancestors) ] ->
+      let ancestors =
+        ancestors
+        |> List.map (fun r ->
+               let l = expect_assoc r in
+               let id = l |> List.assoc "id" |> expect_string in
+               let uri = l |> List.assoc "uri" |> expect_string in
+               make_status ~id ~uri)
+      in
+      let descendants =
+        descendants
+        |> List.map (fun r ->
+               let l = expect_assoc r in
+               let id = l |> List.assoc "id" |> expect_string in
+               let uri = l |> List.assoc "uri" |> expect_string in
+               make_status ~id ~uri)
+      in
+      Lwt.return (ancestors, descendants)
+  | _ -> assert false
+
 let post ~token kind ?content ?in_reply_to_id () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let%lwt r =
@@ -548,6 +577,11 @@ let waq_scenario_3 waq_token =
   (* Check status itself *)
   let%lwt s = get_status `Waq id in
   assert (s.uri = uri);
+
+  (* Check the status's context *)
+  let%lwt ancestors, descendants = get_status_context `Waq id2 in
+  assert (ancestors |> List.map (fun r -> r.uri) = [ uri ]);
+  assert (descendants |> List.map (fun r -> r.uri) = [ uri3 ]);
 
   Lwt.return_unit
 

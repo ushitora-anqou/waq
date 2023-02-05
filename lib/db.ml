@@ -80,6 +80,28 @@ module Status = struct
     Sql.query_row c "SELECT COUNT(*) FROM statuses WHERE in_reply_to_id = $1"
       ~p:[ `Int id ]
     >|= List.hd >|= snd >|= Sql.Value.expect_int
+
+  let get_ancestors id : t list Lwt.t =
+    query
+      ~p:[ `Int id ]
+      {|
+WITH RECURSIVE t(id) AS (
+  SELECT in_reply_to_id FROM statuses WHERE id = $1
+  UNION
+  SELECT in_reply_to_id FROM statuses s, t WHERE s.id = t.id
+)
+SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
+
+  let get_descendants id : t list Lwt.t =
+    query
+      ~p:[ `Int id ]
+      {|
+WITH RECURSIVE t(id) AS (
+  SELECT id FROM statuses WHERE in_reply_to_id = $1
+  UNION
+  SELECT s.id FROM statuses s, t WHERE s.in_reply_to_id = t.id
+)
+SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
 end
 
 module Follow = struct

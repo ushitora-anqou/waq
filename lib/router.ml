@@ -30,6 +30,7 @@ let routes_from_clients =
         scope "/statuses" Statuses.[
           post "" Root.post;
           get "/:id" Root.get;
+          get "/:id/context" Context.get;
         ];
         scope "/accounts" Accounts.[
           post "/:id/follow" Follow.post;
