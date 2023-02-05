@@ -1,6 +1,16 @@
 open Entity
 open Util
 
+(* GET /api/v1/statuses *)
+let get req =
+  let status_id = req |> Httpq.Server.param ":id" |> int_of_string in
+  match%lwt Db.(Status.get_one ~id:status_id () |> maybe_no_row) with
+  | None -> Httpq.Server.raise_error_response `Not_found
+  | Some s ->
+      let%lwt s = make_status_from_model s in
+      s |> status_to_yojson |> Yojson.Safe.to_string
+      |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
+
 (* Recv POST /api/v1/statuses *)
 let post req =
   let%lwt self_id = Helper.authenticate_user req in

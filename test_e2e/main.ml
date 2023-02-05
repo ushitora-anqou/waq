@@ -143,6 +143,17 @@ let unfollow ~token kind account_id =
 
 type status = { id : string; uri : string } [@@deriving make]
 
+let get_status kind status_id =
+  let%lwt r =
+    fetch_exn
+      ~headers:[ (`Content_type, "application/json") ]
+      (url kind ("/api/v1/statuses/" ^ status_id))
+  in
+  let l = Yojson.Safe.from_string r |> expect_assoc in
+  let id = l |> List.assoc "id" |> expect_string in
+  let uri = l |> List.assoc "uri" |> expect_string in
+  make_status ~id ~uri |> Lwt.return
+
 let post ~token kind ?content ?in_reply_to_id () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let%lwt r =
@@ -533,6 +544,10 @@ let waq_scenario_3 waq_token =
        assert (uri3 = (l3 |> List.assoc "uri" |> expect_string));
        ()
    | _ -> assert false);%lwt
+
+  (* Check status itself *)
+  let%lwt s = get_status `Waq id in
+  assert (s.uri = uri);
 
   Lwt.return_unit
 
