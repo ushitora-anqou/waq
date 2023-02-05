@@ -8,7 +8,9 @@ let kick ~name (f : unit -> unit Lwt.t) =
   let rec loop i =
     try%lwt f ()
     with e ->
-      Logq.warn (fun m -> m "Job failed: %s: %s" name (Printexc.to_string e));
+      Logq.warn (fun m ->
+          m "Job failed: %s: %s: %s" name (Printexc.to_string e)
+            (Printexc.get_backtrace ()));
       if i + 1 = num_repeats then (
         Logq.err (fun m -> m "Job killed: %s: Limit reached" name);
         Lwt.return_unit)

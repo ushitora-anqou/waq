@@ -6,12 +6,9 @@ let kick ~(f : Db.Follow.t) ~(followee : Db.Account.t)
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let id = followee.uri ^ "#accepts/follows/" ^ string_of_int f.id in
   let obj =
-    make_ap_inbox_no_context ~id:f.uri ~typ:"Follow"
-      ~actor:(`String follower.uri) ~obj:(`String followee.uri)
-    |> ap_inbox_no_context_to_yojson
+    make_follow ~id:f.uri ~actor:follower.uri ~obj:followee.uri |> of_follow
   in
   let body =
-    make_ap_inbox ~context ~id ~typ:"Accept" ~actor:(`String followee.uri) ~obj
-    |> ap_inbox_to_yojson
+    make_accept ~id ~actor:(`String followee.uri) ~obj |> of_accept |> to_yojson
   in
   post_activity_to_inbox ~body ~src:followee ~dst:follower

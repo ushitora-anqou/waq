@@ -12,9 +12,7 @@ let request_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
 
   (* Post activity *)
   let body =
-    make_ap_inbox ~context ~id:uri ~typ:"Follow" ~actor:(`String self.uri)
-      ~obj:(`String acc.uri)
-    |> ap_inbox_to_yojson
+    make_follow ~id:uri ~actor:self.uri ~obj:acc.uri |> of_follow |> to_yojson
   in
   post_activity_to_inbox ~body ~src:self ~dst:acc
 

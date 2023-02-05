@@ -7,16 +7,13 @@ let get req =
   try%lwt
     let%lwt a = Db.Account.get_one ~domain:None ~username () in
     let%lwt _ = Db.User.get_one ~account_id:a.id () in
-    let publicKey =
-      make_ap_user_public_key ~id:(a.uri ^ "#main-key") ~owner:a.uri
-        ~publicKeyPem:a.public_key
-    in
-    make_ap_user ~context ~id:a.uri ~typ:"Person"
-      ~following:(a.uri ^/ "following") ~followers:a.followers_url
-      ~inbox:a.inbox_url ~outbox:(a.uri ^/ "outbox") ~preferredUsername:username
-      ~name:a.display_name ~summary:"Summary is here" ~url:a.uri ~tag:[]
-      ~publicKey ()
-    |> ap_user_to_yojson |> Yojson.Safe.to_string
+    make_person ~id:a.uri ~following:(a.uri ^/ "following")
+      ~followers:a.followers_url ~inbox:a.inbox_url ~outbox:(a.uri ^/ "outbox")
+      ~preferred_username:username ~name:a.display_name
+      ~summary:"Summary is here" ~url:a.uri ~tag:[]
+      ~public_key_id:(a.uri ^ "#main-key") ~public_key_owner:a.uri
+      ~public_key_pem:a.public_key
+    |> of_person |> to_yojson |> Yojson.Safe.to_string
     |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Logq.debug (fun m ->
