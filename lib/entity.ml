@@ -39,6 +39,14 @@ let make_credential_account_from_model (a : Db.Account.t) : credential_account =
     ~source
 
 (* Entity status *)
+type status_mention = {
+  id : string;
+  username : string;
+  url : string;
+  acct : string;
+}
+[@@deriving make, yojson]
+
 type status = {
   id : string;
   created_at : string;
@@ -49,6 +57,7 @@ type status = {
   in_reply_to_id : string option;
   in_reply_to_account_id : string option;
   account : account;
+  mentions : status_mention list;
 }
 [@@deriving make, yojson]
 
