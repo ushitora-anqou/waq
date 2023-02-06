@@ -317,7 +317,7 @@ let get_webfinger ~scheme ~domain ~username =
   body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
   |> Lwt.return
 
-let rec account_of_person' (r : ap_person) : Db.Account.t Lwt.t =
+let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   let domain = Uri.of_string r.id |> Uri.domain in
   let now = Ptime.now () in
   Db.Account.make ~username:r.preferred_username ~domain
@@ -326,15 +326,15 @@ let rec account_of_person' (r : ap_person) : Db.Account.t Lwt.t =
     ~updated_at:now ()
   |> Db.Account.save_one
 
-and account_of_person (r : ap_person) : Db.Account.t Lwt.t =
+and account_person (r : ap_person) : Db.Account.t Lwt.t =
   match%lwt Db.Account.get_one ~uri:r.id () with
   | acc -> Lwt.return acc
-  | exception Sql.NoRowFound -> account_of_person' r
+  | exception Sql.NoRowFound -> account_person' r
 
 and fetch_account ?(scheme = "https") by =
   let make_new_account (uri : string) =
     fetch_activity ~uri >|= of_yojson >|= get_person >|= Option.get
-    >>= account_of_person'
+    >>= account_person'
   in
   match by with
   | `Webfinger (domain, username) -> (

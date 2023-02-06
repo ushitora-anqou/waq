@@ -2,7 +2,7 @@ open Util
 open Activity
 
 (* Recv Follow in inbox *)
-let kick_inbox_follow (req : follow) =
+let kick_inbox_follow (req : ap_follow) =
   let src, dst =
     match (req.actor, req.obj) with
     | s, d when is_my_domain d -> (s, d)
@@ -31,7 +31,7 @@ let kick_inbox_follow (req : follow) =
       Lwt.return_unit
 
 (* Recv Accept in inbox *)
-let kick_inbox_accept (req : accept) =
+let kick_inbox_accept (req : ap_accept) =
   let uri =
     match req.obj with
     | Follow { id; _ } -> id
@@ -51,14 +51,14 @@ let kick_inbox_accept (req : accept) =
       |> ignore_lwt
 
 (* Recv Undo in inbox *)
-let kick_inbox_undo (req : undo) =
+let kick_inbox_undo (req : ap_undo) =
   match req.obj with
   | Follow { id; _ } ->
       Job.kick_lwt ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
   | _ -> Httpq.Server.raise_error_response `Bad_request
 
 (* Recv Create in inbox *)
-let kick_inbox_create (req : create) =
+let kick_inbox_create (req : ap_create) =
   let note =
     match req with
     | { obj = Note note; _ } -> note

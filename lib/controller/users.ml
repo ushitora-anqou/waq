@@ -13,7 +13,7 @@ let get req =
       ~summary:"Summary is here" ~url:a.uri ~tag:[]
       ~public_key_id:(a.uri ^ "#main-key") ~public_key_owner:a.uri
       ~public_key_pem:a.public_key
-    |> of_person |> to_yojson |> Yojson.Safe.to_string
+    |> person |> to_yojson |> Yojson.Safe.to_string
     |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Logq.debug (fun m ->
