@@ -437,6 +437,9 @@ let waq_mstdn_scenario_3 waq_token mstdn_token =
     | [ `Assoc l; `Assoc l2 ] ->
         assert (uri = (List.assoc "uri" l |> expect_string));
         assert (List.assoc "id" l2 = List.assoc "in_reply_to_id" l);
+        assert (
+          List.assoc "account" l2 |> expect_assoc |> List.assoc "id"
+          = List.assoc "in_reply_to_account_id" l);
         List.assoc "id" l |> expect_string
     | _ -> assert false
   in
@@ -452,6 +455,9 @@ let waq_mstdn_scenario_3 waq_token mstdn_token =
         (* Check if the timeline is correct *)
         assert (uri = (List.assoc "uri" l |> expect_string));
         assert (List.assoc "id" l2 = List.assoc "in_reply_to_id" l);
+        assert (
+          List.assoc "account" l2 |> expect_assoc |> List.assoc "id"
+          = List.assoc "in_reply_to_account_id" l);
         List.assoc "id" l |> expect_string
     | _ -> assert false
   in

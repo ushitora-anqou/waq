@@ -66,8 +66,8 @@ let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
   let%lwt in_reply_to_account_id =
     match s.in_reply_to_id with
     | None -> Lwt.return_none
-    | Some _ -> (
-        match%lwt Db.Status.get_one ~in_reply_to_id:s.in_reply_to_id () with
+    | Some id -> (
+        match%lwt Db.Status.get_one ~id () with
         | exception Sql.NoRowFound ->
             Httpq.Server.raise_error_response `Bad_request
         | s -> s.account_id |> string_of_int |> Lwt.return_some)
