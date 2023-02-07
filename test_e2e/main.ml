@@ -110,15 +110,28 @@ let pp_json (s : string) =
   Logq.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
+let do_fetch ?token ?(meth = `GET) ?(body = "") kind target =
+  let headers = [ (`Accept, "application/json") ] in
+  let headers =
+    match meth with
+    | `POST -> (`Content_type, "application/json") :: headers
+    | _ -> headers
+  in
+  let headers =
+    match token with
+    | Some token -> (`Authorization, "Bearer " ^ token) :: headers
+    | None -> headers
+  in
+  fetch_exn ~headers ~meth ~body (url kind target)
+
 let lookup ~token kind ?domain ~username () =
-  let headers = [ (`Authorization, "Bearer " ^ token) ] in
   let target =
     let src = "/api/v1/accounts/search?resolve=true&q=@" in
     match domain with
     | None -> src ^ username
     | Some domain -> src ^ username ^ "@" ^ domain
   in
-  let%lwt r = fetch_exn ~headers (url kind target) in
+  let%lwt r = do_fetch ~token kind target in
   let l =
     match Yojson.Safe.from_string r with
     | `List [ `Assoc l ] -> l
@@ -130,36 +143,25 @@ let lookup ~token kind ?domain ~username () =
       l |> List.assoc "acct" |> expect_string )
 
 let follow ~token kind account_id =
-  let headers = [ (`Authorization, "Bearer " ^ token) ] in
-  fetch_exn ~meth:`POST ~headers
-    (url kind (Printf.sprintf "/api/v1/accounts/%s/follow" account_id))
+  do_fetch ~meth:`POST ~token kind ("/api/v1/accounts/" ^ account_id ^ "/follow")
   |> ignore_lwt
 
 let unfollow ~token kind account_id =
-  let headers = [ (`Authorization, "Bearer " ^ token) ] in
-  fetch_exn ~meth:`POST ~headers
-    (url kind (Printf.sprintf "/api/v1/accounts/%s/unfollow" account_id))
+  do_fetch ~meth:`POST ~token kind
+    ("/api/v1/accounts/" ^ account_id ^ "/unfollow")
   |> ignore_lwt
 
 type status = { id : string; uri : string } [@@deriving make]
 
 let get_status kind status_id =
-  let%lwt r =
-    fetch_exn
-      ~headers:[ (`Content_type, "application/json") ]
-      (url kind ("/api/v1/statuses/" ^ status_id))
-  in
+  let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id) in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   let id = l |> List.assoc "id" |> expect_string in
   let uri = l |> List.assoc "uri" |> expect_string in
   make_status ~id ~uri |> Lwt.return
 
 let get_status_context kind status_id =
-  let%lwt r =
-    fetch_exn
-      ~headers:[ (`Content_type, "application/json") ]
-      (url kind ("/api/v1/statuses/" ^ status_id ^ "/context"))
-  in
+  let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id ^ "/context") in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   match l with
   | [ ("ancestors", `List ancestors); ("descendants", `List descendants) ]
@@ -195,14 +197,7 @@ let post ~token kind ?content ?in_reply_to_id () =
       in
       `Assoc l |> Yojson.Safe.to_string
     in
-    let headers =
-      [
-        (`Authorization, "Bearer " ^ token);
-        (`Accept, "application/json");
-        (`Content_type, "application/json");
-      ]
-    in
-    fetch_exn ~headers ~meth:`POST ~body (url kind "/api/v1/statuses")
+    do_fetch ~token ~meth:`POST ~body kind "/api/v1/statuses"
   in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   let id = l |> List.assoc "id" |> expect_string in
@@ -210,8 +205,7 @@ let post ~token kind ?content ?in_reply_to_id () =
   make_status ~id ~uri |> Lwt.return
 
 let home_timeline ~token kind =
-  let headers = [ (`Authorization, "Bearer " ^ token) ] in
-  fetch_exn ~headers (url kind "/api/v1/timelines/home") >|= fun r ->
+  do_fetch ~token kind "/api/v1/timelines/home" >|= fun r ->
   match Yojson.Safe.from_string r with `List l -> l | _ -> assert false
 
 let fetch_access_token ~username =
