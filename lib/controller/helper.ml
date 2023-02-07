@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 let content_type_app_xrd_xml =
   (`Content_type, "application/xrd+xml; charset=utf-8")
 
@@ -21,6 +23,9 @@ let authenticate_user (r : Httpq.Server.request) =
     token.resource_owner_id |> Option.get |> Lwt.return
   with _ -> Httpq.Server.raise_error_response `Unauthorized
 
+let may_authenticate_user r =
+  try%lwt authenticate_user r >|= Option.some with _ -> Lwt.return_none
+
 let int_of_string s =
   match int_of_string_opt s with
   | None -> Httpq.Server.raise_error_response `Bad_request
@@ -30,3 +35,7 @@ let bool_of_string s =
   match bool_of_string_opt s with
   | None -> Httpq.Server.raise_error_response `Bad_request
   | Some b -> b
+
+let respond_yojson y =
+  Yojson.Safe.to_string y
+  |> Httpq.Server.respond ~headers:[ content_type_app_json ]

@@ -8,10 +8,12 @@ CREATE TABLE statuses (
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   in_reply_to_id BIGINT,
+  reblog_of_id BIGINT,
   account_id BIGINT NOT NULL,
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (in_reply_to_id) REFERENCES statuses (id) ON DELETE SET NULL,
+  FOREIGN KEY (reblog_of_id) REFERENCES statuses (id) ON DELETE CASCADE,
   UNIQUE (uri)
 )|}
 

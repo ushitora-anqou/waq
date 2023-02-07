@@ -69,12 +69,20 @@ let kick_inbox_create (req : ap_create) =
   Service.Distribute.kick s;
   Lwt.return_unit
 
+(* Recv Announce in inbox *)
+let kick_inbox_announce (req : ap_announce) =
+  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  let%lwt s = status_of_announce req in
+  Service.Distribute.kick s;
+  Lwt.return_unit
+
 (* Recv POST /users/:name/inbox *)
 let post req =
   let body = Httpq.Server.body req in
   let j = Yojson.Safe.from_string body in
   (match of_yojson j with
   | Accept r -> kick_inbox_accept r
+  | Announce r -> kick_inbox_announce r
   | Follow r -> kick_inbox_follow r
   | Undo r -> kick_inbox_undo r
   | Create r -> kick_inbox_create r

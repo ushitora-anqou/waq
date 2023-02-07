@@ -1,13 +1,14 @@
 open Entity
 open Util
 
-(* GET /api/v1/statuses *)
+(* GET /api/v1/statuses/:id *)
 let get req =
   let status_id = req |> Httpq.Server.param ":id" |> int_of_string in
+  let%lwt self_id = Helper.may_authenticate_user req in
   match%lwt Db.(Status.get_one ~id:status_id () |> maybe_no_row) with
   | None -> Httpq.Server.raise_error_response `Not_found
   | Some s ->
-      let%lwt s = make_status_from_model s in
+      let%lwt s = make_status_from_model ?self_id s in
       s |> status_to_yojson |> Yojson.Safe.to_string
       |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
 
@@ -20,22 +21,16 @@ let post req =
   in
 
   let now = Ptime.now () in
-  let%lwt self = Db.Account.get_one ~id:self_id () in
   (* Insert status *)
   let%lwt s =
     Db.Status.(
-      make ~id:0 ~text:status ~uri:"" ~created_at:now ~updated_at:now
+      make ~id:0 ~text:status ~created_at:now ~updated_at:now
         ~account_id:self_id ?in_reply_to_id ()
-      |> save_one)
-  in
-  (* Update status URI using its ID *)
-  let%lwt s =
-    { s with uri = self.uri ^/ "statuses" ^/ string_of_int s.id }
-    |> Db.Status.update_uri
+      |> save_one_with_uri)
   in
   (* Deliver the status to others *)
   Service.Distribute.kick s;
   (* Return the result to the client *)
-  let%lwt s = make_status_from_model s in
+  let%lwt s = make_status_from_model ~self_id s in
   s |> status_to_yojson |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

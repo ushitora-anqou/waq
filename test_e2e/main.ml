@@ -2,6 +2,7 @@ open Lwt.Infix
 module Uri = Httpq.Uri
 module Ptime = Waq.Util.Ptime
 
+let ( |.> ) f g a = a |> f |> g
 let ignore_lwt = Waq.Util.ignore_lwt
 let fetch = Httpq.Client.fetch
 let fetch_exn = Httpq.Client.fetch_exn
@@ -16,55 +17,6 @@ let expect_assoc = function
 
 let with_lock mtx f =
   match mtx with None -> f () | Some mtx -> Lwt_mutex.with_lock mtx f
-
-let websocket ?mtx uri handler f =
-  let open Websocket_lwt_unix in
-  let uri = Uri.of_string uri in
-  let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
-  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
-  let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
-  let%lwt conn = connect ~ctx client uri in
-  let close_sent = ref false in
-  let pushf msg =
-    match msg with
-    | Some content -> write conn (Websocket.Frame.create ~content ())
-    | None ->
-        write conn (Websocket.Frame.create ~opcode:Close ());%lwt
-        Lwt.return (close_sent := true)
-  in
-  let rec react () =
-    match%lwt read conn with
-    | { Websocket.Frame.opcode = Ping; _ } ->
-        write conn (Websocket.Frame.create ~opcode:Pong ());%lwt
-        react ()
-    | { opcode = Pong; _ } -> react ()
-    | { opcode = Text; content; _ } | { opcode = Binary; content; _ } ->
-        with_lock mtx (fun () -> handler content pushf);%lwt
-        react ()
-    | { opcode = Close; content; _ } ->
-        if !close_sent then Lwt.return_unit
-        else if String.length content >= 2 then
-          write conn
-            (Websocket.Frame.create ~opcode:Close
-               ~content:(String.sub content 0 2) ())
-        else write conn (Websocket.Frame.close 1000);%lwt
-        close_transport conn
-    | _ -> close_transport conn
-  in
-  Lwt.join [ with_lock mtx (fun () -> f pushf); react () ]
-
-let websocket_handler_state_machine ~states ~init () =
-  let current = ref init in
-  let set_current v = current := v in
-  let handler content pushf =
-    let real_handler = states |> List.assoc !current in
-    let%lwt next_state =
-      real_handler (content |> Yojson.Safe.from_string |> expect_assoc) pushf
-    in
-    set_current next_state;
-    Lwt.return_unit
-  in
-  (set_current, handler)
 
 let new_session f =
   let path =
@@ -151,14 +103,18 @@ let unfollow ~token kind account_id =
     ("/api/v1/accounts/" ^ account_id ^ "/unfollow")
   |> ignore_lwt
 
-type status = { id : string; uri : string } [@@deriving make]
+type status = {
+  id : string;
+  uri : string;
+  reblog : status option;
+  reblogged : bool;
+  reblogs_count : int;
+}
+[@@deriving yojson { strict = false }]
 
-let get_status kind status_id =
-  let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id) in
-  let l = Yojson.Safe.from_string r |> expect_assoc in
-  let id = l |> List.assoc "id" |> expect_string in
-  let uri = l |> List.assoc "uri" |> expect_string in
-  make_status ~id ~uri |> Lwt.return
+let get_status kind ?token status_id =
+  do_fetch ?token kind ("/api/v1/statuses/" ^ status_id)
+  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
 let get_status_context kind status_id =
   let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id ^ "/context") in
@@ -167,42 +123,31 @@ let get_status_context kind status_id =
   | [ ("ancestors", `List ancestors); ("descendants", `List descendants) ]
   | [ ("descendants", `List descendants); ("ancestors", `List ancestors) ] ->
       let ancestors =
-        ancestors
-        |> List.map (fun r ->
-               let l = expect_assoc r in
-               let id = l |> List.assoc "id" |> expect_string in
-               let uri = l |> List.assoc "uri" |> expect_string in
-               make_status ~id ~uri)
+        ancestors |> List.map (status_of_yojson |.> Result.get_ok)
       in
       let descendants =
-        descendants
-        |> List.map (fun r ->
-               let l = expect_assoc r in
-               let id = l |> List.assoc "id" |> expect_string in
-               let uri = l |> List.assoc "uri" |> expect_string in
-               make_status ~id ~uri)
+        descendants |> List.map (status_of_yojson |.> Result.get_ok)
       in
       Lwt.return (ancestors, descendants)
   | _ -> assert false
 
 let post ~token kind ?content ?in_reply_to_id () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
-  let%lwt r =
-    let body =
-      let l = [ ("status", `String content) ] in
-      let l =
-        in_reply_to_id
-        |> Option.fold ~none:l ~some:(fun id ->
-               ("in_reply_to_id", `String id) :: l)
-      in
-      `Assoc l |> Yojson.Safe.to_string
+  let body =
+    let l = [ ("status", `String content) ] in
+    let l =
+      in_reply_to_id
+      |> Option.fold ~none:l ~some:(fun id ->
+             ("in_reply_to_id", `String id) :: l)
     in
-    do_fetch ~token ~meth:`POST ~body kind "/api/v1/statuses"
+    `Assoc l |> Yojson.Safe.to_string
   in
-  let l = Yojson.Safe.from_string r |> expect_assoc in
-  let id = l |> List.assoc "id" |> expect_string in
-  let uri = l |> List.assoc "uri" |> expect_string in
-  make_status ~id ~uri |> Lwt.return
+  do_fetch ~token ~meth:`POST ~body kind "/api/v1/statuses"
+  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+
+let reblog ~token kind ~id =
+  do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/reblog")
+  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
 let home_timeline ~token kind =
   do_fetch ~token kind "/api/v1/timelines/home" >|= fun r ->
@@ -266,6 +211,62 @@ let fetch_access_token ~username =
   | `Assoc l -> l |> List.assoc "access_token" |> expect_string |> Lwt.return
   | _ -> assert false
 
+let websocket ?mtx ~token kind ?target handler f =
+  let open Websocket_lwt_unix in
+  let target =
+    match target with
+    | Some target -> target
+    | None ->
+        Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" token
+  in
+  let uri = Uri.of_string (url kind target) in
+  let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
+  let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
+  let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
+  let%lwt conn = connect ~ctx client uri in
+  let close_sent = ref false in
+  let pushf msg =
+    match msg with
+    | Some content -> write conn (Websocket.Frame.create ~content ())
+    | None when !close_sent -> Lwt.return_unit
+    | None ->
+        write conn (Websocket.Frame.create ~opcode:Close ());%lwt
+        Lwt.return (close_sent := true)
+  in
+  let rec react () =
+    match%lwt read conn with
+    | { Websocket.Frame.opcode = Ping; _ } ->
+        write conn (Websocket.Frame.create ~opcode:Pong ());%lwt
+        react ()
+    | { opcode = Pong; _ } -> react ()
+    | { opcode = Text; content; _ } | { opcode = Binary; content; _ } ->
+        with_lock mtx (fun () -> handler content pushf);%lwt
+        react ()
+    | { opcode = Close; content; _ } ->
+        if !close_sent then Lwt.return_unit
+        else if String.length content >= 2 then
+          write conn
+            (Websocket.Frame.create ~opcode:Close
+               ~content:(String.sub content 0 2) ())
+        else write conn (Websocket.Frame.close 1000);%lwt
+        close_transport conn
+    | _ -> close_transport conn
+  in
+  Lwt.join [ with_lock mtx (fun () -> f pushf); react () ]
+
+let websocket_handler_state_machine ~states ~init () =
+  let current = ref init in
+  let set_current v = current := v in
+  let handler content pushf =
+    let real_handler = states |> List.assoc !current in
+    let%lwt next_state =
+      real_handler (content |> Yojson.Safe.from_string |> expect_assoc) pushf
+    in
+    set_current next_state;
+    Lwt.return_unit
+  in
+  (set_current, handler)
+
 let waq_mstdn_scenario_1 waq_token mstdn_token =
   (* Connect WebSocket *)
   let ws_statuses = ref [] in
@@ -285,11 +286,8 @@ let waq_mstdn_scenario_1 waq_token mstdn_token =
         ]
       ()
   in
-  let target =
-    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
-  in
   let uris = ref [] in
-  websocket (waq target) handler (fun pushf ->
+  websocket `Waq ~token:waq_token handler (fun pushf ->
       (* Lookup @admin@localhost:3000 *)
       let%lwt admin_id, username, acct =
         lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000"
@@ -458,6 +456,70 @@ let waq_mstdn_scenario_3 waq_token mstdn_token =
 
   Lwt.return_unit
 
+let waq_mstdn_scenario_4 waq_token mstdn_token =
+  (* Lookup me from localhost:3000 *)
+  let%lwt aid, _, _ =
+    lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
+      ()
+  in
+
+  (* Follow me from @admin@localhost:3000 *)
+  follow `Mstdn ~token:mstdn_token aid;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by user2 *)
+  let%lwt waq_token' = fetch_access_token ~username:"user2" in
+  let%lwt { id; uri; _ } = post `Waq ~token:waq_token' () in
+
+  (* Reblog by me (user1) *)
+  let%lwt _ = reblog `Waq ~token:waq_token ~id in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get home timeline of @admin@localhost:3000 *)
+  let%lwt _ =
+    home_timeline `Mstdn ~token:mstdn_token >|= function
+    | [ `Assoc l ] ->
+        (* Check if the timeline is correct *)
+        let reblog_uri =
+          l |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
+          |> expect_string
+        in
+        assert (uri = reblog_uri)
+    | _ -> assert false
+  in
+
+  Lwt.return_unit
+
+let waq_mstdn_scenario_5 waq_token mstdn_token =
+  (* Lookup @admin@localhost:3000 *)
+  let%lwt admin_id, _username, _acct =
+    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
+  in
+
+  (* Follow @admin@localhost:3000 *)
+  follow `Waq ~token:waq_token admin_id;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post and reblog by @admin@localhost:3000 *)
+  let%lwt { id; uri; _ } = post `Mstdn ~token:mstdn_token () in
+  Lwt_unix.sleep 1.0;%lwt
+  let%lwt _ = reblog `Mstdn ~token:mstdn_token ~id in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get my home timeline and check *)
+  (home_timeline `Waq ~token:waq_token >|= function
+   | [ `Assoc l1; `Assoc l2 ] ->
+       (* Check if the timeline is correct *)
+       assert (uri = (l2 |> List.assoc "uri" |> expect_string));
+       assert (
+         uri
+         = (l1 |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
+          |> expect_string));
+       ()
+   | _ -> assert false);%lwt
+
+  Lwt.return_unit
+
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
 
@@ -490,10 +552,6 @@ let waq_scenario_1 _waq_token =
   Lwt.return_unit
 
 let waq_scenario_2 waq_token =
-  let target =
-    Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" waq_token
-  in
-
   let got_uri = ref None in
   let set_current_state, handler =
     websocket_handler_state_machine ~init:`Init
@@ -519,7 +577,7 @@ let waq_scenario_2 waq_token =
 
   let expected_uri = ref None in
   let mtx = Lwt_mutex.create () in
-  websocket ~mtx (waq target) handler (fun _pushf ->
+  websocket ~mtx `Waq ~token:waq_token handler (fun _pushf ->
       let%lwt { uri; _ } = post `Waq ~token:waq_token () in
       expected_uri := Some uri;
       set_current_state `Recv;
@@ -537,10 +595,10 @@ let waq_scenario_3 waq_token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @user2 *)
-  let%lwt { uri; id } = post `Waq ~token:waq_token' () in
+  let%lwt { uri; id; _ } = post `Waq ~token:waq_token' () in
 
   (* Reply by me *)
-  let%lwt { uri = uri2; id = id2 } =
+  let%lwt { uri = uri2; id = id2; _ } =
     post `Waq ~token:waq_token ~in_reply_to_id:id ()
   in
 
@@ -585,11 +643,69 @@ let waq_scenario_3 waq_token =
 
   Lwt.return_unit
 
+let waq_scenario_4 token =
+  let ws_recv_ids = ref [] in
+  let _, handler =
+    websocket_handler_state_machine ~init:`Recv
+      ~states:
+        [
+          ( `Recv,
+            fun l _pushf ->
+              assert (List.assoc "stream" l = `List [ `String "user" ]);
+              assert (List.assoc "event" l |> expect_string = "update");
+              let payload = List.assoc "payload" l |> expect_string in
+              let s =
+                payload |> Yojson.Safe.from_string |> status_of_yojson
+                |> Result.get_ok
+              in
+              ws_recv_ids := s.id :: !ws_recv_ids;
+              Lwt.return `Recv );
+        ]
+      ()
+  in
+
+  let expected_ids = ref [] in
+  websocket `Waq ~token handler (fun pushf ->
+      let%lwt {
+            id = id1;
+            reblog = None;
+            reblogged = false;
+            reblogs_count = 0;
+            _;
+          } =
+        post `Waq ~token ~content:"Hello world" ()
+      in
+      let%lwt {
+            id = id2;
+            reblogged = true;
+            reblog = Some { id = id1'; reblogged = true; reblog = None; _ };
+            _;
+          } =
+        reblog `Waq ~token ~id:id1
+      in
+      let%lwt { id = id2'; reblog = Some { id = id1''; _ }; _ } =
+        reblog `Waq ~token ~id:id1
+      in
+      let%lwt { id = id2''; reblog = Some { id = id1'''; _ }; _ } =
+        reblog `Waq ~token ~id:id2
+      in
+      assert (id1 = id1' && id1 = id1'' && id1 = id1''');
+      assert (id2 = id2' && id2 = id2'');
+      expected_ids := [ id1; id2 ];
+
+      pushf None);%lwt
+
+  assert (List.sort compare !expected_ids = List.sort compare !ws_recv_ids);
+  Lwt.return_unit
+  [@@warning "-8"]
+
 let scenarios_with_waq_and_mstdn () =
   [
     (1, waq_mstdn_scenario_1);
     (2, waq_mstdn_scenario_2);
     (3, waq_mstdn_scenario_3);
+    (4, waq_mstdn_scenario_4);
+    (5, waq_mstdn_scenario_5);
   ]
   |> List.iter @@ fun (i, scenario) ->
      Logq.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
@@ -601,7 +717,12 @@ let scenarios_with_waq_and_mstdn () =
      Lwt_main.run @@ scenario waq_token mstdn_token
 
 let scenarios_with_waq () =
-  [ (1, waq_scenario_1); (2, waq_scenario_2); (3, waq_scenario_3) ]
+  [
+    (1, waq_scenario_1);
+    (2, waq_scenario_2);
+    (3, waq_scenario_3);
+    (4, waq_scenario_4);
+  ]
   |> List.iter @@ fun (i, scenario) ->
      Logq.debug (fun m -> m "===== Scenario waq-%d =====" i);
      new_session @@ fun waq_token ->

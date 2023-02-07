@@ -15,7 +15,7 @@ let get req =
 
   let conv (s : Db.Status.t) =
     let open Lwt.Infix in
-    make_status_from_model s >|= status_to_yojson
+    make_status_from_model ~self_id s >|= status_to_yojson
   in
   let%lwt statuses = Db.home_timeline ~id:self_id ~limit ~max_id ~since_id in
   let%lwt statuses = Lwt_list.map_p conv statuses in

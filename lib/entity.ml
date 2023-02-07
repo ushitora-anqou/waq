@@ -58,11 +58,16 @@ type status = {
   in_reply_to_account_id : string option;
   account : account;
   mentions : status_mention list;
+  reblog : status option;
+  reblogs_count : int;
+  reblogged : bool;
 }
 [@@deriving make, yojson]
 
-let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
+let rec make_status_from_model ?(visibility = "public") ?self_id
+    (s : Db.Status.t) : status Lwt.t =
   let open Lwt.Infix in
+  let make_status_from_model = make_status_from_model ~visibility ?self_id in
   let%lwt in_reply_to_account_id =
     match s.in_reply_to_id with
     | None -> Lwt.return_none
@@ -72,6 +77,23 @@ let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
             Httpq.Server.raise_error_response `Bad_request
         | s -> s.account_id |> string_of_int |> Lwt.return_some)
   in
+  let%lwt reblog, reblogs_count =
+    match s.reblog_of_id with
+    | None -> Lwt.return (None, 0)
+    | Some id ->
+        let%lwt count = Db.Status.get_reblogs_count id in
+        let%lwt reblog = Db.Status.get_one ~id () >>= make_status_from_model in
+        Lwt.return (Some reblog, count)
+  in
+  let%lwt reblogged =
+    match self_id with
+    | None -> Lwt.return_false
+    | Some account_id when reblog <> None ->
+        Lwt.return (s.account_id = account_id)
+    | Some account_id ->
+        Db.Status.get_many ~account_id ~reblog_of_id:(Some s.id) ()
+        >|= ( <> ) []
+  in
   let%lwt replies_count = Db.Status.get_replies_count s.id in
   Db.Account.get_one ~id:s.account_id () >|= fun a ->
   let account = make_account_from_model a in
@@ -79,4 +101,4 @@ let make_status_from_model ?(visibility = "public") (s : Db.Status.t) =
     ~created_at:(Ptime.to_rfc3339 s.created_at)
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
     ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
-    ?in_reply_to_account_id ()
+    ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ()

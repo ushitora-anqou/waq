@@ -19,9 +19,9 @@ let routes_from_servers =
       scope "/users/:name"
         Users.
           [
-            get "/" Root.get;
+            get "" Root.get;
             post "/inbox" Inbox.post;
-            (*get "/statuses/:id" Statuses.get;*)
+            get "/statuses/:id" Statuses.get;
           ];
     ]
 
@@ -36,6 +36,7 @@ let routes_from_clients =
           post "" Root.post;
           get "/:id" Root.get;
           get "/:id/context" Context.get;
+          post "/:id/reblog" Reblog.post;
         ];
         scope "/accounts" Accounts.[
           post "/:id/follow" Follow.post;

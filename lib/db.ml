@@ -62,18 +62,29 @@ end
 module Status = struct
   type t = {
     id : int; [@sql.auto_increment]
-    uri : string;
+    uri : string; [@default ""]
     text : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
     in_reply_to_id : int option;
+    reblog_of_id : int option;
     account_id : int;
   }
   [@@sql.table_name "statuses"] [@@deriving make, sql]
 
-  let update_uri s =
+  let save_one_with_uri s =
+    let%lwt s = save_one s in
+    let%lwt self = Account.get_one ~id:s.account_id () in
+    let uri = self.uri ^/ "statuses" ^/ string_of_int s.id in
+    let s = { s with uri } in
     named_query_row "UPDATE statuses SET uri = :uri WHERE id = :id RETURNING *"
       s
+
+  let get_reblogs_count (id : int) : int Lwt.t =
+    do_query @@ fun c ->
+    Sql.query_row c "SELECT COUNT(*) FROM statuses WHERE reblog_of_id = $1"
+      ~p:[ `Int id ]
+    >|= List.hd >|= snd >|= Sql.Value.expect_int
 
   let get_replies_count (id : int) : int Lwt.t =
     do_query @@ fun c ->
