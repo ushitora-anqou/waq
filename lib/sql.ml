@@ -121,10 +121,7 @@ module Make (D : Driver) = struct
   let query_row ?(p = []) (c : connection) (sql : string) :
       single_query_result Lwt.t =
     let%lwt res = query c sql ~p in
-    match res with
-    | [ row ] -> Lwt.return row
-    | [] -> raise NoRowFound
-    | _ -> failwithf "Expected only one row but got many"
+    match res with row :: _ -> Lwt.return row | [] -> raise NoRowFound
 
   let resolve_named_sql =
     let re = Re.(Pcre.re {|:([_a-zA-Z][_a-zA-Z0-9]*)|} |> compile) in
