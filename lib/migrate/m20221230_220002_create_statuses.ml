@@ -11,7 +11,8 @@ CREATE TABLE statuses (
   account_id BIGINT NOT NULL,
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
-  FOREIGN KEY (in_reply_to_id) REFERENCES statuses (id) ON DELETE SET NULL
+  FOREIGN KEY (in_reply_to_id) REFERENCES statuses (id) ON DELETE SET NULL,
+  UNIQUE (uri)
 )|}
 
 let down c = Sql.execute c {|DROP TABLE statuses|}
