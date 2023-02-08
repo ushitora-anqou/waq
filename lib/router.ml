@@ -16,8 +16,13 @@ let routes_from_servers =
     [
       get "/.well-known/host-meta" Well_known_host_meta.get;
       get "/.well-known/webfinger" Well_known_webfinger.get;
-      get "/users/:name" Users.get;
-      post "/users/:name/inbox" Inbox.post;
+      scope "/users/:name"
+        Users.
+          [
+            get "/" Root.get;
+            post "/inbox" Inbox.post;
+            (*get "/statuses/:id" Statuses.get;*)
+          ];
     ]
 
 let routes_from_clients =
