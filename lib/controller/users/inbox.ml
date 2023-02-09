@@ -76,6 +76,13 @@ let kick_inbox_announce (req : ap_announce) =
   Service.Distribute.kick s;
   Lwt.return_unit
 
+(* Recv Like in inbox *)
+let kick_inbox_like (req : ap_like) =
+  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  let%lwt _fav = favourite_of_like req in
+  (* FIXME: Send notification *)
+  Lwt.return_unit
+
 (* Recv POST /users/:name/inbox *)
 let post req =
   let body = Httpq.Server.body req in
@@ -86,6 +93,7 @@ let post req =
   | Follow r -> kick_inbox_follow r
   | Undo r -> kick_inbox_undo r
   | Create r -> kick_inbox_create r
+  | Like r -> kick_inbox_like r
   | _ | (exception _) ->
       Logq.warn (fun m -> m "Ignoring inbox message:\n%s" body);
       Lwt.return_unit);%lwt

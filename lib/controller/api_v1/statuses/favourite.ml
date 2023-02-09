@@ -14,13 +14,19 @@ let post req =
   in
 
   (match%lwt Db.Favourite.get_one ~status_id ~account_id () with
-  | _ -> Lwt.return_unit
+  | _ -> (* Already favourited *) Lwt.return_unit
   | exception Sql.NoRowFound ->
       let now = Ptime.now () in
-      Db.Favourite.(
-        make ~id:0 ~created_at:now ~updated_at:now ~account_id ~status_id
-        |> save_one)
-      |> ignore_lwt);%lwt
+      let%lwt fav =
+        Db.Favourite.(
+          make ~id:0 ~created_at:now ~updated_at:now ~account_id ~status_id
+          |> save_one)
+      in
+      let%lwt activity = Activity.(like_of_favourite fav >|= like) in
+      let%lwt src = Db.Account.get_one ~id:account_id () in
+      let%lwt dst = Db.Account.get_one ~id:status.account_id () in
+      Service.Delivery.kick ~activity ~src ~dst;
+      Lwt.return_unit);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson

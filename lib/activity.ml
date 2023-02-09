@@ -75,11 +75,14 @@ and ap_announce = {
   obj : string;
 }
 
+and ap_like = { id : string; actor : string; obj : string }
+
 and t =
   | Accept of ap_accept
   | Announce of ap_announce
   | Create of ap_create
   | Follow of ap_follow
+  | Like of ap_like
   | Note of ap_note
   | Person of ap_person
   | Undo of ap_undo
@@ -91,6 +94,7 @@ let get_accept = function Accept r -> Some r | _ -> None
 let get_announce = function Announce r -> Some r | _ -> None
 let get_create = function Create r -> Some r | _ -> None
 let get_follow = function Follow r -> Some r | _ -> None
+let get_like = function Like r -> Some r | _ -> None
 let get_note = function Note r -> Some r | _ -> None
 let get_person = function Person r -> Some r | _ -> None
 let get_undo = function Undo r -> Some r | _ -> None
@@ -102,9 +106,11 @@ let follow r = Follow r
 let note r = Note r
 let person r = Person r
 let undo r = Undo r
+let like r = Like r
 let make_follow ~id ~actor ~obj : ap_follow = { id; actor; obj }
 let make_accept ~id ~actor ~obj : ap_accept = { id; actor; obj }
 let make_undo ~id ~actor ~obj : ap_undo = { id; actor; obj }
+let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
@@ -214,6 +220,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let cc = list Cc |> List.map expect_string in
       let obj = get Object |> of_yojson in
       make_create ~id ~actor:(get Actor) ~published ~to_ ~cc ~obj |> create
+  | "Like" -> make_like ~id ~actor:(string Actor) ~obj:(string Object) |> like
   | "Note" ->
       let published = string Published in
       let to_ = list To |> List.map expect_string in
@@ -283,6 +290,13 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
         [
           (Id, `String r.id);
           (Type, `String "Follow");
+          (Actor, `String r.actor);
+          (Object, `String r.obj);
+        ]
+    | Like r ->
+        [
+          (Id, `String r.id);
+          (Type, `String "Like");
           (Actor, `String r.actor);
           (Object, `String r.obj);
         ]
@@ -516,3 +530,25 @@ let announce_of_status (s : Db.Status.t) : ap_announce Lwt.t =
   let obj = reblog.uri in
 
   make_announce ~id ~actor ~published ~to_ ~cc ~obj |> Lwt.return
+
+let like_of_favourite (f : Db.Favourite.t) : ap_like Lwt.t =
+  let%lwt acct = Db.Account.get_one ~id:f.account_id () in
+  let%lwt status = Db.Status.get_one ~id:f.status_id () in
+
+  let id = acct.uri ^ "#likes/" ^ string_of_int f.id in
+  let actor = acct.uri in
+  let obj = status.uri in
+
+  make_like ~id ~actor ~obj |> Lwt.return
+
+let favourite_of_like (l : ap_like) : Db.Favourite.t Lwt.t =
+  let%lwt acct = Db.Account.get_one ~uri:l.actor () in
+  let%lwt status = Db.Status.get_one ~uri:l.obj () in
+  let now = Ptime.now () in
+  let open Db.Favourite in
+  match%lwt get_one ~account_id:acct.id ~status_id:status.id () with
+  | fav -> Lwt.return fav
+  | exception Sql.NoRowFound ->
+      make ~id:0 ~created_at:now ~updated_at:now ~account_id:acct.id
+        ~status_id:status.id
+      |> save_one

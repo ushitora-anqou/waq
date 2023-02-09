@@ -525,6 +525,61 @@ let waq_mstdn_scenario_5 waq_token mstdn_token =
 
   Lwt.return_unit
 
+let waq_mstdn_scenario_6_fav waq_token mstdn_token =
+  (* Lookup @admin@localhost:3000 *)
+  let%lwt admin_id, _username, _acct =
+    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
+  in
+  (* Follow @admin@localhost:3000 *)
+  follow `Waq ~token:waq_token admin_id;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by @admin@localhost:3000 *)
+  let%lwt _ = post `Mstdn ~token:mstdn_token () in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get id of the post *)
+  let%lwt id =
+    home_timeline `Waq ~token:waq_token >|= function
+    | [ `Assoc l ] -> List.assoc "id" l |> expect_string
+    | _ -> assert false
+  in
+
+  (* Favourite the post by me *)
+  let%lwt s = fav `Waq ~token:waq_token ~id in
+  assert s.favourited;
+  let%lwt s = get_status `Waq ~token:waq_token id in
+  assert s.favourited;
+
+  Lwt.return_unit
+
+let waq_mstdn_scenario_7_fav waq_token mstdn_token =
+  (* Lookup me from localhost:3000 *)
+  let%lwt aid, _, _ =
+    lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
+      ()
+  in
+  (* Follow me from @admin@localhost:3000 *)
+  follow `Mstdn ~token:mstdn_token aid;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Post by me *)
+  let%lwt _ = post `Waq ~token:waq_token () in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Get id of the post *)
+  let%lwt id =
+    home_timeline `Mstdn ~token:mstdn_token >|= function
+    | [ `Assoc l ] -> List.assoc "id" l |> expect_string
+    | _ -> assert false
+  in
+
+  (* Favourite the post by @admin@localhost:3000 *)
+  let%lwt _ = fav `Mstdn ~token:mstdn_token ~id in
+
+  (* FIXME: Check if the post is favourited *)
+  Lwt.return_unit
+
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
 
@@ -717,6 +772,8 @@ let scenarios_with_waq_and_mstdn () =
     (3, waq_mstdn_scenario_3);
     (4, waq_mstdn_scenario_4);
     (5, waq_mstdn_scenario_5);
+    (6, waq_mstdn_scenario_6_fav);
+    (7, waq_mstdn_scenario_7_fav);
   ]
   |> List.iter @@ fun (i, scenario) ->
      Logq.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
