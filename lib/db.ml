@@ -179,6 +179,17 @@ module OAuthAccessToken = struct
   [@@sql.table_name "oauth_access_tokens"] [@@deriving make, sql]
 end
 
+module Favourite = struct
+  type t = {
+    id : int; [@sql.auto_increment]
+    created_at : Ptime.t;
+    updated_at : Ptime.t;
+    account_id : int;
+    status_id : int;
+  }
+  [@@sql.table_name "favourites"] [@@deriving make, sql]
+end
+
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =
   Status.query
     {|

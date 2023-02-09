@@ -109,6 +109,7 @@ type status = {
   reblog : status option;
   reblogged : bool;
   reblogs_count : int;
+  favourited : bool;
 }
 [@@deriving yojson { strict = false }]
 
@@ -147,6 +148,10 @@ let post ~token kind ?content ?in_reply_to_id () =
 
 let reblog ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/reblog")
+  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+
+let fav ~token kind ~id =
+  do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/favourite")
   >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
 let home_timeline ~token kind =
@@ -699,6 +704,12 @@ let waq_scenario_4 token =
   Lwt.return_unit
   [@@warning "-8"]
 
+let waq_scenario_5_fav token =
+  let%lwt { id; _ } = post `Waq ~token () in
+  let%lwt { favourited; _ } = fav ~token `Waq ~id in
+  assert favourited;
+  Lwt.return_unit
+
 let scenarios_with_waq_and_mstdn () =
   [
     (1, waq_mstdn_scenario_1);
@@ -722,6 +733,7 @@ let scenarios_with_waq () =
     (2, waq_scenario_2);
     (3, waq_scenario_3);
     (4, waq_scenario_4);
+    (5, waq_scenario_5_fav);
   ]
   |> List.iter @@ fun (i, scenario) ->
      Logq.debug (fun m -> m "===== Scenario waq-%d =====" i);

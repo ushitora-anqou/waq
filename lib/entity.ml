@@ -61,6 +61,7 @@ type status = {
   reblog : status option;
   reblogs_count : int;
   reblogged : bool;
+  favourited : bool;
 }
 [@@deriving make, yojson]
 
@@ -94,6 +95,12 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
         Db.Status.get_many ~account_id ~reblog_of_id:(Some s.id) ()
         >|= ( <> ) []
   in
+  let%lwt favourited =
+    match self_id with
+    | None -> Lwt.return_false
+    | Some account_id ->
+        Db.Favourite.get_many ~account_id ~status_id:s.id () >|= ( <> ) []
+  in
   let%lwt replies_count = Db.Status.get_replies_count s.id in
   Db.Account.get_one ~id:s.account_id () >|= fun a ->
   let account = make_account_from_model a in
@@ -101,4 +108,4 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
     ~created_at:(Ptime.to_rfc3339 s.created_at)
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
     ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
-    ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ()
+    ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ~favourited ()
