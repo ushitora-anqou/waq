@@ -206,3 +206,12 @@ ORDER BY created_at DESC LIMIT $2|}
         `Int (Option.value ~default:0 since_id);
         `Int (Option.value ~default:0 max_id);
       ]
+
+let get_favourited_by ~status_id =
+  Account.query
+    {|
+SELECT a.* FROM accounts a
+INNER JOIN favourites f ON a.id = f.account_id
+WHERE f.status_id = $1
+  |}
+    ~p:[ `Int status_id ]

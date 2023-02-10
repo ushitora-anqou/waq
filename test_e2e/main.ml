@@ -154,6 +154,13 @@ let fav ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/favourite")
   >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
+let get_favourited_by ~token kind ~id =
+  do_fetch ~token ~meth:`GET kind ("/api/v1/statuses/" ^ id ^ "/favourited_by")
+  >|= Yojson.Safe.from_string
+  >|= function
+  | `List accts -> accts
+  | _ -> assert false
+
 let home_timeline ~token kind =
   do_fetch ~token kind "/api/v1/timelines/home" >|= fun r ->
   match Yojson.Safe.from_string r with `List l -> l | _ -> assert false
@@ -534,6 +541,9 @@ let waq_mstdn_scenario_6_fav waq_token mstdn_token =
   follow `Waq ~token:waq_token admin_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
+  (* Get my id *)
+  let%lwt self_id, _, _ = lookup `Waq ~token:waq_token ~username:"user1" () in
+
   (* Post by @admin@localhost:3000 *)
   let%lwt _ = post `Mstdn ~token:mstdn_token () in
   Lwt_unix.sleep 1.0;%lwt
@@ -551,13 +561,22 @@ let waq_mstdn_scenario_6_fav waq_token mstdn_token =
   let%lwt s = get_status `Waq ~token:waq_token id in
   assert s.favourited;
 
-  Lwt.return_unit
+  (* Check if the post is favourited *)
+  match%lwt get_favourited_by `Waq ~token:waq_token ~id with
+  | [ `Assoc l ] ->
+      assert (l |> List.assoc "id" |> expect_string = self_id);
+      Lwt.return_unit
+  | _ -> Lwt.return_unit
 
 let waq_mstdn_scenario_7_fav waq_token mstdn_token =
   (* Lookup me from localhost:3000 *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
       ()
+  in
+  (* Lookup @admin@localhost:3000 *)
+  let%lwt admin_id, _username, _acct =
+    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
   in
   (* Follow me from @admin@localhost:3000 *)
   follow `Mstdn ~token:mstdn_token aid;%lwt
@@ -577,8 +596,12 @@ let waq_mstdn_scenario_7_fav waq_token mstdn_token =
   (* Favourite the post by @admin@localhost:3000 *)
   let%lwt _ = fav `Mstdn ~token:mstdn_token ~id in
 
-  (* FIXME: Check if the post is favourited *)
-  Lwt.return_unit
+  (* Check if the post is favourited *)
+  match%lwt get_favourited_by `Waq ~token:waq_token ~id with
+  | [ `Assoc l ] ->
+      assert (l |> List.assoc "id" |> expect_string = admin_id);
+      Lwt.return_unit
+  | _ -> Lwt.return_unit
 
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in

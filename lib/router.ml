@@ -38,6 +38,7 @@ let routes_from_clients =
           get "/:id/context" Context.get;
           post "/:id/reblog" Reblog.post;
           post "/:id/favourite" Favourite.post;
+          get "/:id/favourited_by" Favourited_by.get;
         ];
         scope "/accounts" Accounts.[
           post "/:id/follow" Follow.post;
