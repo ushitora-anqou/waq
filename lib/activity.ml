@@ -541,7 +541,8 @@ let like_of_favourite (f : Db.Favourite.t) : ap_like Lwt.t =
 
   make_like ~id ~actor ~obj |> Lwt.return
 
-let favourite_of_like (l : ap_like) : Db.Favourite.t Lwt.t =
+let favourite_of_like ?(must_already_exist = false) (l : ap_like) :
+    Db.Favourite.t Lwt.t =
   let%lwt acct = Db.Account.get_one ~uri:l.actor () in
   let%lwt status = Db.Status.get_one ~uri:l.obj () in
   let now = Ptime.now () in
@@ -549,6 +550,17 @@ let favourite_of_like (l : ap_like) : Db.Favourite.t Lwt.t =
   match%lwt get_one ~account_id:acct.id ~status_id:status.id () with
   | fav -> Lwt.return fav
   | exception Sql.NoRowFound ->
-      make ~id:0 ~created_at:now ~updated_at:now ~account_id:acct.id
-        ~status_id:status.id
-      |> save_one
+      if must_already_exist then
+        failwith "favourite_of_like: must_already_exist failed"
+      else
+        make ~id:0 ~created_at:now ~updated_at:now ~account_id:acct.id
+          ~status_id:status.id
+        |> save_one
+
+let to_undo ~actor =
+  let actor = `String actor in
+  function
+  | Like v as a ->
+      let id = v.id ^/ "undo" in
+      make_undo ~id ~actor ~obj:a
+  | _ -> assert false

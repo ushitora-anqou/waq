@@ -57,6 +57,9 @@ module Account = struct
     updated_at : Ptime.t;
   }
   [@@sql.table_name "accounts"] [@@deriving make, sql]
+
+  let is_local ~id : bool Lwt.t = get_one ~id () >|= fun a -> a.domain = None
+  let is_remote ~id : bool Lwt.t = is_local ~id >|= fun b -> not b
 end
 
 module Status = struct

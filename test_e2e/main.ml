@@ -128,6 +128,8 @@ let unfollow ~token kind account_id =
     ("/api/v1/accounts/" ^ account_id ^ "/unfollow")
   |> ignore_lwt
 
+type account = { id : string } [@@deriving yojson { strict = false }]
+
 type status = {
   id : string;
   uri : string;
@@ -135,6 +137,7 @@ type status = {
   reblogged : bool;
   reblogs_count : int;
   favourited : bool;
+  account : account;
 }
 [@@deriving yojson { strict = false }]
 
@@ -179,12 +182,14 @@ let fav ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/favourite")
   >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
+let unfav ~token kind ~id =
+  do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/unfavourite")
+  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+
 let get_favourited_by ~token kind ~id =
   do_fetch ~token ~meth:`GET kind ("/api/v1/statuses/" ^ id ^ "/favourited_by")
-  >|= Yojson.Safe.from_string
-  >|= function
-  | `List accts -> accts
-  | _ -> assert false
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (account_of_yojson |.> Result.get_ok)
 
 let home_timeline ~token kind =
   do_fetch ~token kind "/api/v1/timelines/home" >|= fun r ->
@@ -566,11 +571,13 @@ let waq_mstdn_scenario_6_fav waq_token mstdn_token =
   follow `Waq ~token:waq_token admin_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Get my id *)
-  let%lwt self_id, _, _ = lookup `Waq ~token:waq_token ~username:"user1" () in
+  (* Get user1's id on localhost:3000 *)
+  let%lwt mstdn_user1_id, _, _ =
+    lookup `Mstdn ~token:mstdn_token ~username:"user1" ()
+  in
 
   (* Post by @admin@localhost:3000 *)
-  let%lwt _ = post `Mstdn ~token:mstdn_token () in
+  let%lwt { id = mstdn_post_id; _ } = post `Mstdn ~token:mstdn_token () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get id of the post *)
@@ -582,16 +589,31 @@ let waq_mstdn_scenario_6_fav waq_token mstdn_token =
 
   (* Favourite the post by me *)
   let%lwt s = fav `Waq ~token:waq_token ~id in
+  Lwt_unix.sleep 1.0;%lwt
   assert s.favourited;
   let%lwt s = get_status `Waq ~token:waq_token id in
   assert s.favourited;
 
-  (* Check if the post is favourited *)
-  match%lwt get_favourited_by `Waq ~token:waq_token ~id with
-  | [ `Assoc l ] ->
-      assert (l |> List.assoc "id" |> expect_string = self_id);
+  (* Check if the post is favourited in localhost:3000 *)
+  (match%lwt get_favourited_by `Mstdn ~token:mstdn_token ~id:mstdn_post_id with
+  | [ a ] ->
+      assert (a.id = mstdn_user1_id);
       Lwt.return_unit
-  | _ -> Lwt.return_unit
+  | _ -> assert false);%lwt
+
+  (* Unfavourite the post *)
+  let%lwt s = unfav `Waq ~token:waq_token ~id in
+  Lwt_unix.sleep 1.0;%lwt
+  assert (not s.favourited);
+  let%lwt s = get_status `Waq ~token:waq_token id in
+  assert (not s.favourited);
+
+  (* Check if the post is unfavourited *)
+  (match%lwt get_favourited_by `Mstdn ~token:mstdn_token ~id:mstdn_post_id with
+  | [] -> Lwt.return_unit
+  | _ -> assert false);%lwt
+
+  Lwt.return_unit
 
 let waq_mstdn_scenario_7_fav waq_token mstdn_token =
   (* Lookup me from localhost:3000 *)
@@ -608,25 +630,37 @@ let waq_mstdn_scenario_7_fav waq_token mstdn_token =
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by me *)
-  let%lwt _ = post `Waq ~token:waq_token () in
+  let%lwt { id = waq_status_id; _ } = post `Waq ~token:waq_token () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Get id of the post *)
-  let%lwt id =
+  let%lwt mstdn_status_id =
     home_timeline `Mstdn ~token:mstdn_token >|= function
     | [ `Assoc l ] -> List.assoc "id" l |> expect_string
     | _ -> assert false
   in
 
   (* Favourite the post by @admin@localhost:3000 *)
-  let%lwt _ = fav `Mstdn ~token:mstdn_token ~id in
+  let%lwt _ = fav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
+  Lwt_unix.sleep 1.0;%lwt
 
   (* Check if the post is favourited *)
-  match%lwt get_favourited_by `Waq ~token:waq_token ~id with
-  | [ `Assoc l ] ->
-      assert (l |> List.assoc "id" |> expect_string = admin_id);
+  (match%lwt get_favourited_by `Waq ~token:waq_token ~id:waq_status_id with
+  | [ a ] ->
+      assert (a.id = admin_id);
       Lwt.return_unit
-  | _ -> Lwt.return_unit
+  | _ -> assert false);%lwt
+
+  (* Unfavourite the post *)
+  let%lwt _ = unfav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Check if the post is unfavourited *)
+  (match%lwt get_favourited_by `Waq ~token:waq_token ~id:waq_status_id with
+  | [] -> Lwt.return_unit
+  | _ -> assert false);%lwt
+
+  Lwt.return_unit
 
 let waq_mstdn_scenario_8_lookup waq_token _mstdn_token =
   (* Lookup @admin@localhost:3000 *)
@@ -828,9 +862,19 @@ let waq_scenario_4 token =
   [@@warning "-8"]
 
 let waq_scenario_5_fav token =
-  let%lwt { id; _ } = post `Waq ~token () in
-  let%lwt { favourited; _ } = fav ~token `Waq ~id in
+  let%lwt { id; account; _ } = post `Waq ~token () in
+  let%lwt { favourited; _ } = fav `Waq ~token ~id in
   assert favourited;
+  (match%lwt get_favourited_by `Waq ~token ~id with
+  | [ a ] ->
+      assert (a.id = account.id);
+      Lwt.return_unit
+  | _ -> assert false);%lwt
+  let%lwt { favourited; _ } = unfav `Waq ~token ~id in
+  assert (not favourited);
+  (match%lwt get_favourited_by `Waq ~token ~id with
+  | [] -> Lwt.return_unit
+  | _ -> assert false);%lwt
   Lwt.return_unit
 
 let scenarios_with_waq_and_mstdn () =

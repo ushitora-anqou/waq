@@ -1,4 +1,3 @@
-open Util
 open Helper
 open Entity
 open Lwt.Infix
@@ -14,18 +13,16 @@ let post req =
   in
 
   (match%lwt Db.Favourite.get_one ~status_id ~account_id () with
-  | _ -> (* Already favourited *) Lwt.return_unit
-  | exception Sql.NoRowFound ->
-      let now = Ptime.now () in
-      let%lwt fav =
-        Db.Favourite.(
-          make ~id:0 ~created_at:now ~updated_at:now ~account_id ~status_id
-          |> save_one)
-      in
+  | exception Sql.NoRowFound -> (* Already unfavourited *) Lwt.return_unit
+  | fav ->
+      Db.Favourite.delete ~id:fav.id ();%lwt
       if%lwt Db.Account.is_remote ~id:status.account_id then (
-        let%lwt activity = Activity.(like_of_favourite fav >|= like) in
         let%lwt src = Db.Account.get_one ~id:account_id () in
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in
+        let%lwt activity =
+          Activity.(
+            like_of_favourite fav >|= like >|= to_undo ~actor:src.uri >|= undo)
+        in
         Service.Delivery.kick ~activity ~src ~dst;
         Lwt.return_unit));%lwt
 
