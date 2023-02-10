@@ -54,6 +54,9 @@ let routes_from_clients =
           get "/verify_credentials" Verify_credentials.get;
         ];
       ];
+      scope "/api/v2" Api_v2.[
+        get "/search" Search.get;
+      ];
       scope "/oauth" Oauth.[
         get "/authorize" Authorize.get;
         post "/authorize" Authorize.post;

@@ -15,6 +15,10 @@ let expect_assoc = function
   | `Assoc l -> l
   | _ -> failwith "Expected assoc, got something different"
 
+let expect_list = function
+  | `List l -> l
+  | _ -> failwith "Expected list, got something different"
+
 let with_lock mtx f =
   match mtx with None -> f () | Some mtx -> Lwt_mutex.with_lock mtx f
 
@@ -76,7 +80,7 @@ let do_fetch ?token ?(meth = `GET) ?(body = "") kind target =
   in
   fetch_exn ~headers ~meth ~body (url kind target)
 
-let lookup ~token kind ?domain ~username () =
+let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
   let target =
     let src = "/api/v1/accounts/search?resolve=true&q=@" in
     match domain with
@@ -87,6 +91,27 @@ let lookup ~token kind ?domain ~username () =
   let l =
     match Yojson.Safe.from_string r with
     | `List [ `Assoc l ] -> l
+    | _ -> assert false
+  in
+  Lwt.return
+    ( l |> List.assoc "id" |> expect_string,
+      l |> List.assoc "username" |> expect_string,
+      l |> List.assoc "acct" |> expect_string )
+
+let lookup ~token kind ?domain ~username () =
+  let target =
+    let src = "/api/v2/search?resolve=true&q=@" in
+    match domain with
+    | None -> src ^ username
+    | Some domain -> src ^ username ^ "@" ^ domain
+  in
+  let%lwt r = do_fetch ~token kind target in
+  let l =
+    match Yojson.Safe.from_string r with
+    | `Assoc l -> (
+        match l |> List.assoc "accounts" |> expect_list with
+        | [ `Assoc l ] -> l
+        | _ -> assert false)
     | _ -> assert false
   in
   Lwt.return
@@ -603,6 +628,26 @@ let waq_mstdn_scenario_7_fav waq_token mstdn_token =
       Lwt.return_unit
   | _ -> Lwt.return_unit
 
+let waq_mstdn_scenario_8_lookup waq_token _mstdn_token =
+  (* Lookup @admin@localhost:3000 *)
+  let%lwt res1 =
+    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
+  in
+  let%lwt res2 =
+    lookup_via_v1_accounts_search `Waq ~token:waq_token ~username:"admin"
+      ~domain:"localhost:3000" ()
+  in
+  assert (res1 = res2);
+
+  (* Lookup me from localhost:3000 *)
+  let%lwt res1 = lookup `Waq ~token:waq_token ~username:"user1" () in
+  let%lwt res2 =
+    lookup_via_v1_accounts_search `Waq ~token:waq_token ~username:"user1" ()
+  in
+  assert (res1 = res2);
+
+  Lwt.return_unit
+
 let waq_scenario_1 _waq_token =
   let%lwt access_token = fetch_access_token ~username:"user1" in
 
@@ -797,6 +842,7 @@ let scenarios_with_waq_and_mstdn () =
     (5, waq_mstdn_scenario_5);
     (6, waq_mstdn_scenario_6_fav);
     (7, waq_mstdn_scenario_7_fav);
+    (8, waq_mstdn_scenario_8_lookup);
   ]
   |> List.iter @@ fun (i, scenario) ->
      Logq.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
