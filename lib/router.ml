@@ -46,6 +46,7 @@ let routes_from_clients =
           post "/:id/unfollow" Unfollow.post;
           get "/search" Search.get;
           get "/verify_credentials" Verify_credentials.get;
+          get "/lookup" Lookup.get;
         ];
         scope "/timelines" Timelines.[
           get "/home" Home.get;

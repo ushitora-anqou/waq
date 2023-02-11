@@ -94,6 +94,31 @@ let do_fetch ?token ?(meth = `GET) ?(body = "") kind target =
   in
   fetch_exn ~headers ~meth ~body (url kind target)
 
+type account = { id : string; username : string; acct : string }
+[@@deriving yojson { strict = false }]
+
+type status = {
+  id : string;
+  uri : string;
+  reblog : status option;
+  reblogged : bool;
+  reblogs_count : int;
+  favourited : bool;
+  account : account;
+}
+[@@deriving yojson { strict = false }]
+
+let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
+  let target =
+    let src = "/api/v1/accounts/lookup?acct=" in
+    match domain with
+    | None -> src ^ username
+    | Some domain -> src ^ username ^ "@" ^ domain
+  in
+  let%lwt r = do_fetch ~token kind target in
+  let a = r |> Yojson.Safe.from_string |> account_of_yojson |> Result.get_ok in
+  Lwt.return (a.id, a.username, a.acct)
+
 let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
   let target =
     let src = "/api/v1/accounts/search?resolve=true&q=@" in
@@ -141,19 +166,6 @@ let unfollow ~token kind account_id =
   do_fetch ~meth:`POST ~token kind
     ("/api/v1/accounts/" ^ account_id ^ "/unfollow")
   |> ignore_lwt
-
-type account = { id : string } [@@deriving yojson { strict = false }]
-
-type status = {
-  id : string;
-  uri : string;
-  reblog : status option;
-  reblogged : bool;
-  reblogs_count : int;
-  favourited : bool;
-  account : account;
-}
-[@@deriving yojson { strict = false }]
 
 let get_status kind ?token status_id =
   do_fetch ?token kind ("/api/v1/statuses/" ^ status_id)

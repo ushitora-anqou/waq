@@ -39,3 +39,11 @@ let bool_of_string s =
 let respond_yojson y =
   Yojson.Safe.to_string y
   |> Httpq.Server.respond ~headers:[ content_type_app_json ]
+
+let parse_webfinger_address q =
+  let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
+  match Regex.match_group re q with
+  | Ok [ _; username; domain ] ->
+      let domain = if domain = "" then None else Some domain in
+      (username, domain)
+  | _ -> Httpq.Server.raise_error_response `Bad_request

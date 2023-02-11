@@ -15,13 +15,8 @@ let parse_req req =
   let open Httpq.Server in
   let open Helper in
   let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
-  let q = req |> query "q" in
-  let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
-  match Regex.match_group re q with
-  | Ok [ _; username; domain ] ->
-      let domain = if domain = "" then None else Some domain in
-      (resolve, username, domain)
-  | _ -> Httpq.Server.raise_error_response `Bad_request
+  let username, domain = req |> query "q" |> parse_webfinger_address in
+  (resolve, username, domain)
 
 let get req =
   let _resolve, username, domain = parse_req req in
