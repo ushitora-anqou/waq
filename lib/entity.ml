@@ -1,19 +1,60 @@
 open Util
+open Lwt.Infix
 
 (* Entity account *)
+type emoji = {
+  shortcode : string;
+  url : string;
+  static_url : string;
+  visible_in_picker : bool;
+}
+[@@deriving make, yojson]
+
+type field = { name : string; value : string; verified_at : string option }
+[@@deriving make, yojson]
+
 type account = {
   id : string;
   username : string;
   acct : string;
+  url : string;
   display_name : string;
+  note : string;
+  avatar : string;
+  avatar_static : string;
+  header : string;
+  header_static : string;
+  locked : bool;
+  fields : field list;
+  emojis : emoji list;
+  bot : bool;
+  group : bool;
+  discoverable : bool option;
   created_at : string;
+  last_status_at : string option;
+  statuses_count : int;
+  followers_count : int;
+  following_count : int;
 }
 [@@deriving make, yojson]
 
-let make_account_from_model (a : Db.Account.t) =
+let make_account_from_model (a : Db.Account.t) : account Lwt.t =
+  let avatar = "" in
+  let header = "" in
+  let%lwt last_status_at =
+    Db.get_last_status_at ~account_id:a.id >|= Option.map Ptime.to_rfc3339
+  in
+  let%lwt statuses_count = Db.count_statuses ~account_id:a.id in
+  let%lwt followers_count = Db.count_followers ~account_id:a.id in
+  let%lwt following_count = Db.count_following ~account_id:a.id in
   make_account ~id:(string_of_int a.id) ~username:a.username
-    ~acct:(acct a.username a.domain) ~display_name:a.display_name
+    ~acct:(acct a.username a.domain) ~url:a.uri ~display_name:a.display_name
+    ~note:"" ~avatar ~avatar_static:avatar ~header ~header_static:header
+    ~locked:false ~fields:[] ~emojis:[] ~bot:false ~group:false
+    ~discoverable:true
     ~created_at:(Ptime.to_rfc3339 a.created_at)
+    ?last_status_at ~statuses_count ~followers_count ~following_count ()
+  |> Lwt.return
 
 (* Entity CredentialAccount *)
 type credential_account_source = { privacy : string; sensitive : bool }
@@ -102,13 +143,14 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
         Db.Favourite.get_many ~account_id ~status_id:s.id () >|= ( <> ) []
   in
   let%lwt replies_count = Db.Status.get_replies_count s.id in
-  Db.Account.get_one ~id:s.account_id () >|= fun a ->
-  let account = make_account_from_model a in
+  let%lwt a = Db.Account.get_one ~id:s.account_id () in
+  let%lwt account = make_account_from_model a in
   make_status ~id:(string_of_int s.id)
     ~created_at:(Ptime.to_rfc3339 s.created_at)
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
     ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
     ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ~favourited ()
+  |> Lwt.return
 
 (* Entity relationship *)
 type relationship = {

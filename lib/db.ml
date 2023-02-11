@@ -223,3 +223,29 @@ INNER JOIN favourites f ON a.id = f.account_id
 WHERE f.status_id = $1
   |}
     ~p:[ `Int status_id ]
+
+let count_statuses ~account_id : int Lwt.t =
+  do_query @@ fun c ->
+  Sql.query_row c {|SELECT COUNT(*) FROM statuses WHERE account_id = $1|}
+    ~p:[ `Int account_id ]
+  >|= List.hd >|= snd >|= Sql.Value.expect_int
+
+let get_last_status_at ~account_id : Ptime.t option Lwt.t =
+  Status.query
+    {|SELECT * FROM statuses WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1 |}
+    ~p:[ `Int account_id ]
+  >|= function
+  | [ s ] -> Some s.created_at
+  | _ -> None
+
+let count_followers ~account_id : int Lwt.t =
+  do_query @@ fun c ->
+  Sql.query_row c {|SELECT COUNT(*) FROM follows WHERE target_account_id = $1|}
+    ~p:[ `Int account_id ]
+  >|= List.hd >|= snd >|= Sql.Value.expect_int
+
+let count_following ~account_id : int Lwt.t =
+  do_query @@ fun c ->
+  Sql.query_row c {|SELECT COUNT(*) FROM follows WHERE account_id = $1|}
+    ~p:[ `Int account_id ]
+  >|= List.hd >|= snd >|= Sql.Value.expect_int

@@ -12,19 +12,21 @@ type t = {
 let parse_query_accounts q =
   let accts = [] in
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
-  match Regex.match_group re q with
-  | Ok [ _; username; "" ] ->
-      Activity.fetch_account (`Webfinger (None, username)) >|= fun a ->
-      a :: accts
-  | Ok [ _; username; domain ] ->
-      Activity.fetch_account (`Webfinger (Some domain, username)) >|= fun a ->
-      a :: accts
-  | _ -> Lwt.return accts
+  try%lwt
+    match Regex.match_group re q with
+    | Ok [ _; username; "" ] ->
+        Activity.fetch_account (`Webfinger (None, username)) >|= fun a ->
+        a :: accts
+    | Ok [ _; username; domain ] ->
+        Activity.fetch_account (`Webfinger (Some domain, username)) >|= fun a ->
+        a :: accts
+    | _ -> Lwt.return accts
+  with _ -> Lwt.return accts
 
 let parse_query q =
   (* FIXME: Support more kinds of queries *)
   let%lwt accounts =
-    parse_query_accounts q >|= List.map make_account_from_model
+    parse_query_accounts q >>= Lwt_list.map_p make_account_from_model
   in
   let statuses = [] in
   let hashtags = [] in
