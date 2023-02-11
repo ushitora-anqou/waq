@@ -123,7 +123,11 @@ let start_server ?(port = 8080) (handler : handler) k : unit =
   (* Invoke the handler *)
   match%lwt
     try%lwt handler req
-    with ErrorResponse { status; body } -> respond ~status body
+    with ErrorResponse { status; body } ->
+      Logq.debug (fun m ->
+          m "Error response raised: %s\n%s" (Status.to_string status)
+            (Printexc.get_backtrace ()));
+      respond ~status body
   with
   | BareResponse resp -> Lwt.return resp
   | Response { status; headers; body } ->
