@@ -2,6 +2,8 @@ type t = {
   listen : string; [@default ""]
   server_name : string; [@default ""]
   db_url : string; [@default ""]
+  avatar_url : string; [@default ""]
+  header_url : string; [@default ""]
 }
 [@@deriving make, yaml]
 
@@ -20,3 +22,5 @@ let is_my_domain s =
   s = !c.server_name
 
 let db_url () = !c.db_url
+let avatar_url () = !c.avatar_url
+let header_url () = !c.header_url

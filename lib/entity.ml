@@ -39,8 +39,8 @@ type account = {
 [@@deriving make, yojson]
 
 let make_account_from_model (a : Db.Account.t) : account Lwt.t =
-  let avatar = "" in
-  let header = "" in
+  let avatar = Config.avatar_url () in
+  let header = Config.header_url () in
   let%lwt last_status_at =
     Db.get_last_status_at ~account_id:a.id >|= Option.map Ptime.to_rfc3339
   in
