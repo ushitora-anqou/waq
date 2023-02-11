@@ -1,5 +1,17 @@
 open Common
 
+let expect_followers account_id expected_follower_ids =
+  let%lwt l = get_followers `Waq account_id in
+  let got = l |> List.map (fun (a : account) -> a.id) in
+  assert (got = expected_follower_ids);
+  Lwt.return_unit
+
+let expect_following account_id expected_follower_ids =
+  let%lwt l = get_following `Waq account_id in
+  let got = l |> List.map (fun (a : account) -> a.id) in
+  assert (got = expected_follower_ids);
+  Lwt.return_unit
+
 let f =
   make_waq_scenario @@ fun token ->
   let%lwt token' = fetch_access_token ~username:"user2" in
@@ -8,6 +20,8 @@ let f =
 
   (* user1: Follow @user2 *)
   follow `Waq ~token user2_id;%lwt
+  expect_followers user2_id [ user1_id ];%lwt
+  expect_following user1_id [ user2_id ];%lwt
 
   (* user1: check relationship *)
   (match%lwt get_relationships `Waq ~token [ user2_id ] with
@@ -28,6 +42,8 @@ let f =
 
   (* user2: follow @user1 *)
   follow `Waq ~token:token' user1_id;%lwt
+  expect_followers user1_id [ user2_id ];%lwt
+  expect_following user2_id [ user1_id ];%lwt
 
   (* user1: check relationship *)
   (match%lwt get_relationships `Waq ~token [ user2_id ] with
@@ -48,6 +64,8 @@ let f =
 
   (* user1: Unfollow @user2 *)
   unfollow `Waq ~token user2_id;%lwt
+  expect_followers user2_id [];%lwt
+  expect_following user1_id [];%lwt
 
   (* user1: check relationship *)
   (match%lwt get_relationships `Waq ~token [ user2_id ] with
@@ -68,6 +86,8 @@ let f =
 
   (* user2: Unfollow @user1 *)
   unfollow `Waq ~token:token' user1_id;%lwt
+  expect_followers user1_id [];%lwt
+  expect_following user2_id [];%lwt
 
   (* user1: check relationship *)
   (match%lwt get_relationships `Waq ~token [ user2_id ] with

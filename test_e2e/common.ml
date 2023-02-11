@@ -182,6 +182,16 @@ let get_relationships ~token kind account_ids =
   >|= Yojson.Safe.from_string >|= expect_list
   >|= List.map (relationship_of_yojson |.> Result.get_ok)
 
+let get_followers ?token kind account_id =
+  do_fetch ?token kind ("/api/v1/accounts/" ^ account_id ^ "/followers")
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (account_of_yojson |.> Result.get_ok)
+
+let get_following ?token kind account_id =
+  do_fetch ?token kind ("/api/v1/accounts/" ^ account_id ^ "/following")
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (account_of_yojson |.> Result.get_ok)
+
 let follow ~token kind account_id =
   do_fetch ~meth:`POST ~token kind ("/api/v1/accounts/" ^ account_id ^ "/follow")
   |> ignore_lwt

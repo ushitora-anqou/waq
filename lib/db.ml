@@ -279,3 +279,45 @@ let count_following ~account_id : int Lwt.t =
   Sql.query_row c {|SELECT COUNT(*) FROM follows WHERE account_id = $1|}
     ~p:[ `Int account_id ]
   >|= List.hd >|= snd >|= Sql.Value.expect_int
+
+let get_followers ~id ~self_id:_ ~max_id ~since_id ~limit : Account.t list Lwt.t
+    =
+  do_query @@ fun c ->
+  Sql.named_query c
+    {|
+SELECT a.* FROM accounts a
+INNER JOIN follows f ON a.id = f.account_id
+WHERE f.target_account_id = :id
+AND (:since_id = 0 OR f.id >= :since_id)
+AND (:max_id = 0 OR f.id <= :max_id)
+ORDER BY f.created_at DESC
+LIMIT :limit|}
+    ~p:
+      [
+        ("id", `Int id);
+        ("limit", `Int limit);
+        ("since_id", `Int (Option.value ~default:0 since_id));
+        ("max_id", `Int (Option.value ~default:0 max_id));
+      ]
+  >|= List.map Account.pack
+
+let get_following ~id ~self_id:_ ~max_id ~since_id ~limit : Account.t list Lwt.t
+    =
+  do_query @@ fun c ->
+  Sql.named_query c
+    {|
+SELECT a.* FROM accounts a
+INNER JOIN follows f ON a.id = f.target_account_id
+WHERE f.account_id = :id
+AND (:since_id = 0 OR f.id >= :since_id)
+AND (:max_id = 0 OR f.id <= :max_id)
+ORDER BY f.created_at DESC
+LIMIT :limit|}
+    ~p:
+      [
+        ("id", `Int id);
+        ("limit", `Int limit);
+        ("since_id", `Int (Option.value ~default:0 since_id));
+        ("max_id", `Int (Option.value ~default:0 max_id));
+      ]
+  >|= List.map Account.pack

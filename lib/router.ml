@@ -45,6 +45,8 @@ let routes_from_clients =
           get "/:id/statuses" Statuses.get;
           post "/:id/follow" Follow.post;
           post "/:id/unfollow" Unfollow.post;
+          get "/:id/followers" Following.get_followers;
+          get "/:id/following" Following.get_following;
           get "/search" Search.get;
           get "/verify_credentials" Verify_credentials.get;
           get "/lookup" Lookup.get;
