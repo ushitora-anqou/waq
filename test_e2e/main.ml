@@ -52,6 +52,20 @@ let new_mastodon_session f =
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
 
+let make_waq_and_mstdn_scenario handler () : unit =
+  new_session @@ fun waq_token ->
+  Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
+  new_mastodon_session @@ fun mstdn_token ->
+  Logq.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
+  Unix.sleep 10;
+  Lwt_main.run @@ handler waq_token mstdn_token
+
+let make_waq_scenario handler () : unit =
+  new_session @@ fun waq_token ->
+  Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
+  Unix.sleep 1;
+  Lwt_main.run @@ handler waq_token
+
 let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
 let waq url = waq_server_name ^ url
@@ -309,7 +323,8 @@ let websocket_handler_state_machine ~states ~init () =
   in
   (set_current, handler)
 
-let waq_mstdn_scenario_1 waq_token mstdn_token =
+let waq_mstdn_scenario_1 =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Connect WebSocket *)
   let ws_statuses = ref [] in
   let _set_current_state, handler =
@@ -385,7 +400,8 @@ let waq_mstdn_scenario_1 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_2 waq_token mstdn_token =
+let waq_mstdn_scenario_2 =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup me from localhost:3000 *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
@@ -427,7 +443,8 @@ let waq_mstdn_scenario_2 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_3 waq_token mstdn_token =
+let waq_mstdn_scenario_3 =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup me from localhost:3000 *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
@@ -498,7 +515,8 @@ let waq_mstdn_scenario_3 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_4 waq_token mstdn_token =
+let waq_mstdn_scenario_4 =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup me from localhost:3000 *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
@@ -532,7 +550,8 @@ let waq_mstdn_scenario_4 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_5 waq_token mstdn_token =
+let waq_mstdn_scenario_5 =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup @admin@localhost:3000 *)
   let%lwt admin_id, _username, _acct =
     lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
@@ -562,7 +581,8 @@ let waq_mstdn_scenario_5 waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_6_fav waq_token mstdn_token =
+let waq_mstdn_scenario_6_fav =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup @admin@localhost:3000 *)
   let%lwt admin_id, _username, _acct =
     lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
@@ -615,7 +635,8 @@ let waq_mstdn_scenario_6_fav waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_7_fav waq_token mstdn_token =
+let waq_mstdn_scenario_7_fav =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   (* Lookup me from localhost:3000 *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
@@ -662,7 +683,8 @@ let waq_mstdn_scenario_7_fav waq_token mstdn_token =
 
   Lwt.return_unit
 
-let waq_mstdn_scenario_8_lookup waq_token _mstdn_token =
+let waq_mstdn_scenario_8_lookup =
+  make_waq_and_mstdn_scenario @@ fun waq_token _mstdn_token ->
   (* Lookup @admin@localhost:3000 *)
   let%lwt res1 =
     lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
@@ -682,7 +704,8 @@ let waq_mstdn_scenario_8_lookup waq_token _mstdn_token =
 
   Lwt.return_unit
 
-let waq_scenario_1 _waq_token =
+let waq_scenario_1 =
+  make_waq_scenario @@ fun _waq_token ->
   let%lwt access_token = fetch_access_token ~username:"user1" in
 
   let%lwt r =
@@ -713,7 +736,8 @@ let waq_scenario_1 _waq_token =
 
   Lwt.return_unit
 
-let waq_scenario_2 waq_token =
+let waq_scenario_2 =
+  make_waq_scenario @@ fun waq_token ->
   let got_uri = ref None in
   let set_current_state, handler =
     websocket_handler_state_machine ~init:`Init
@@ -748,7 +772,8 @@ let waq_scenario_2 waq_token =
   assert (Option.get !got_uri = Option.get !expected_uri);
   Lwt.return_unit
 
-let waq_scenario_3 waq_token =
+let waq_scenario_3 =
+  make_waq_scenario @@ fun waq_token ->
   let%lwt waq_token' = fetch_access_token ~username:"user2" in
 
   (* Look up & Follow @user2 *)
@@ -805,7 +830,8 @@ let waq_scenario_3 waq_token =
 
   Lwt.return_unit
 
-let waq_scenario_4 token =
+let waq_scenario_4 =
+  make_waq_scenario @@ fun token ->
   let ws_recv_ids = ref [] in
   let _, handler =
     websocket_handler_state_machine ~init:`Recv
@@ -861,7 +887,8 @@ let waq_scenario_4 token =
   Lwt.return_unit
   [@@warning "-8"]
 
-let waq_scenario_5_fav token =
+let waq_scenario_5_fav =
+  make_waq_scenario @@ fun token ->
   let%lwt { id; account; _ } = post `Waq ~token () in
   let%lwt { favourited; _ } = fav `Waq ~token ~id in
   assert favourited;
@@ -877,44 +904,47 @@ let waq_scenario_5_fav token =
   | _ -> assert false);%lwt
   Lwt.return_unit
 
-let scenarios_with_waq_and_mstdn () =
+let all_tests =
   [
-    (1, waq_mstdn_scenario_1);
-    (2, waq_mstdn_scenario_2);
-    (3, waq_mstdn_scenario_3);
-    (4, waq_mstdn_scenario_4);
-    (5, waq_mstdn_scenario_5);
-    (6, waq_mstdn_scenario_6_fav);
-    (7, waq_mstdn_scenario_7_fav);
-    (8, waq_mstdn_scenario_8_lookup);
+    ("waq-mstdn-1", waq_mstdn_scenario_1);
+    ("waq-mstdn-2", waq_mstdn_scenario_2);
+    ("waq-mstdn-3", waq_mstdn_scenario_3);
+    ("waq-mstdn-4", waq_mstdn_scenario_4);
+    ("waq-mstdn-5", waq_mstdn_scenario_5);
+    ("waq-mstdn-6", waq_mstdn_scenario_6_fav);
+    ("waq-mstdn-7", waq_mstdn_scenario_7_fav);
+    ("waq-mstdn-8", waq_mstdn_scenario_8_lookup);
+    ("waq-1", waq_scenario_1);
+    ("waq-2", waq_scenario_2);
+    ("waq-3", waq_scenario_3);
+    ("waq-4", waq_scenario_4);
+    ("waq-5", waq_scenario_5_fav);
   ]
-  |> List.iter @@ fun (i, scenario) ->
-     Logq.debug (fun m -> m "===== Scenario waq-mstdn-%d =====" i);
-     new_session @@ fun waq_token ->
-     Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
-     new_mastodon_session @@ fun mstdn_token ->
-     Logq.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
-     Unix.sleep 10;
-     Lwt_main.run @@ scenario waq_token mstdn_token
 
-let scenarios_with_waq () =
-  [
-    (1, waq_scenario_1);
-    (2, waq_scenario_2);
-    (3, waq_scenario_3);
-    (4, waq_scenario_4);
-    (5, waq_scenario_5_fav);
-  ]
-  |> List.iter @@ fun (i, scenario) ->
-     Logq.debug (fun m -> m "===== Scenario waq-%d =====" i);
-     new_session @@ fun waq_token ->
-     Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
-     Unix.sleep 1;
-     Lwt_main.run @@ scenario waq_token
+let execute_one_test (name, f) =
+  Logq.debug (fun m -> m "===== Testcase %s =====" name);
+  f ()
 
 let () =
   print_newline ();
   Logq.(add_reporter (make_reporter ~l:Debug ()));
-  scenarios_with_waq ();
-  scenarios_with_waq_and_mstdn ();
-  ()
+
+  let shuffle d =
+    (* Thanks to: https://stackoverflow.com/a/15095713 *)
+    let nd = List.map (fun c -> (Random.bits (), c)) d in
+    let sond = List.sort compare nd in
+    List.map snd sond
+  in
+  let chosen_tests =
+    match Sys.argv with
+    | [| _ |] -> shuffle all_tests
+    | _ ->
+        Sys.argv |> Array.to_list |> List.tl
+        |> List.map (fun name -> (name, List.assoc name all_tests))
+  in
+
+  Logs.info (fun m ->
+      chosen_tests |> List.map fst |> String.concat " "
+      |> m "[e2e] Chosen tests: %s");
+
+  chosen_tests |> List.iter execute_one_test
