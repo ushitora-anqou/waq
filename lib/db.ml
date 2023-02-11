@@ -215,6 +215,36 @@ ORDER BY created_at DESC LIMIT $2|}
         `Int (Option.value ~default:0 max_id);
       ]
 
+let account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies :
+    Status.t list Lwt.t =
+  let where =
+    [
+      "account_id = :id";
+      ":since_id = 0 OR id >= :since_id";
+      ":max_id = 0 OR id <= :max_id";
+    ]
+  in
+  let where =
+    if exclude_replies then "in_reply_to_id IS NULL" :: where else where
+  in
+  let sql =
+    where
+    |> List.map (fun x -> "(" ^ x ^ ")")
+    |> String.concat " AND "
+    |> Printf.sprintf
+         {|SELECT * FROM statuses WHERE %s ORDER BY created_at DESC LIMIT :limit|}
+  in
+  do_query @@ fun c ->
+  Sql.named_query c sql
+    ~p:
+      [
+        ("id", `Int id);
+        ("limit", `Int limit);
+        ("since_id", `Int (Option.value ~default:0 since_id));
+        ("max_id", `Int (Option.value ~default:0 max_id));
+      ]
+  >|= List.map Status.pack
+
 let get_favourited_by ~status_id =
   Account.query
     {|

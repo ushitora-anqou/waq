@@ -65,4 +65,14 @@ let f =
   assert (ancestors |> List.map (fun r -> r.uri) = [ uri ]);
   assert (descendants |> List.map (fun r -> r.uri) = [ uri3 ]);
 
+  (* Check account's statuses *)
+  let%lwt statuses = get_account_statuses `Waq user1_id in
+  assert ([ uri3; uri2 ] = (statuses |> List.map (fun s -> s.uri)));
+  let%lwt statuses = get_account_statuses `Waq ~exclude_replies:true user1_id in
+  assert (statuses = []);
+  let%lwt statuses = get_account_statuses `Waq user2_id in
+  assert ([ uri ] = (statuses |> List.map (fun s -> s.uri)));
+  let%lwt statuses = get_account_statuses `Waq ~exclude_replies:true user2_id in
+  assert ([ uri ] = (statuses |> List.map (fun s -> s.uri)));
+
   Lwt.return_unit

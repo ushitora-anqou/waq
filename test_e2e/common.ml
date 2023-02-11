@@ -195,6 +195,13 @@ let get_status kind ?token status_id =
   do_fetch ?token kind ("/api/v1/statuses/" ^ status_id)
   >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
 
+let get_account_statuses kind ?token ?(exclude_replies = false) account_id =
+  do_fetch ?token kind
+    ("/api/v1/accounts/" ^ account_id ^ "/statuses?exclude_replies="
+    ^ string_of_bool exclude_replies)
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (status_of_yojson |.> Result.get_ok)
+
 let get_status_context kind status_id =
   let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id ^ "/context") in
   let l = Yojson.Safe.from_string r |> expect_assoc in
