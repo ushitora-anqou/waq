@@ -47,6 +47,7 @@ let routes_from_clients =
           get "/search" Search.get;
           get "/verify_credentials" Verify_credentials.get;
           get "/lookup" Lookup.get;
+          get "/relationships" Relationships.get;
         ];
         scope "/timelines" Timelines.[
           get "/home" Home.get;

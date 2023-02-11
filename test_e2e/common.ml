@@ -108,6 +108,9 @@ type status = {
 }
 [@@deriving yojson { strict = false }]
 
+type relationship = { id : string; following : bool; followed_by : bool }
+[@@deriving yojson { strict = false }]
+
 let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let target =
     let src = "/api/v1/accounts/lookup?acct=" in
@@ -157,6 +160,15 @@ let lookup ~token kind ?domain ~username () =
     ( l |> List.assoc "id" |> expect_string,
       l |> List.assoc "username" |> expect_string,
       l |> List.assoc "acct" |> expect_string )
+
+let get_relationships ~token kind account_ids =
+  let target =
+    "/api/v1/accounts/relationships?"
+    ^ (account_ids |> List.map (fun id -> "id[]=" ^ id) |> String.concat "&")
+  in
+  do_fetch ~token kind target
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (relationship_of_yojson |.> Result.get_ok)
 
 let follow ~token kind account_id =
   do_fetch ~meth:`POST ~token kind ("/api/v1/accounts/" ^ account_id ^ "/follow")

@@ -128,6 +128,11 @@ module Follow = struct
     uri : string;
   }
   [@@sql.table_name "follows"] [@@deriving make, sql]
+
+  let does_follow ~account_id ~target_account_id : bool Lwt.t =
+    match%lwt get_one ~account_id ~target_account_id () with
+    | _ -> Lwt.return_true
+    | exception Sql.NoRowFound -> Lwt.return_false
 end
 
 module FollowRequest = struct

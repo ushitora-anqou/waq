@@ -109,3 +109,35 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
     ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
     ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ~favourited ()
+
+(* Entity relationship *)
+type relationship = {
+  id : string;
+  following : bool;
+  showing_reblogs : bool;
+  notifying : bool;
+  followed_by : bool;
+  blocking : bool;
+  blocked_by : bool;
+  muting : bool;
+  muting_notifications : bool;
+  requested : bool;
+  domain_blocking : bool;
+  endorsed : bool;
+  note : string;
+}
+[@@deriving make, yojson { strict = false }]
+
+let make_relationship_from_model (self : Db.Account.t) (acct : Db.Account.t) =
+  let id = acct.id |> string_of_int in
+  let%lwt following =
+    Db.Follow.does_follow ~account_id:self.id ~target_account_id:acct.id
+  in
+  let%lwt followed_by =
+    Db.Follow.does_follow ~target_account_id:self.id ~account_id:acct.id
+  in
+  make_relationship ~id ~following ~followed_by ~showing_reblogs:true
+    ~notifying:false ~blocking:false ~blocked_by:false ~muting:false
+    ~muting_notifications:false ~requested:false ~domain_blocking:false
+    ~endorsed:false ~note:""
+  |> Lwt.return

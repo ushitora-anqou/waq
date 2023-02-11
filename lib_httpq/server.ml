@@ -37,6 +37,17 @@ let respond ?(status = `OK) ?(headers = []) (body : string) =
 let body = function Request { raw_body; _ } -> raw_body
 let param name = function Request { param; _ } -> List.assoc name param
 
+let query_many_opt name : request -> string list option = function
+  | Request { query; _ } ->
+      (* FIXME: parse body *)
+      List.assoc_opt name query
+
+let query_many ?default name req =
+  match query_many_opt name req with
+  | Some r -> r
+  | None when default <> None -> Option.get default
+  | None -> raise_error_response `Bad_request
+
 let query ?default name = function
   | Request { body; query; _ } -> (
       try
