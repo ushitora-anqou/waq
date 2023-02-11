@@ -94,7 +94,15 @@ let do_fetch ?token ?(meth = `GET) ?(body = "") kind target =
   in
   fetch_exn ~headers ~meth ~body (url kind target)
 
-type account = { id : string; username : string; acct : string }
+type account = {
+  id : string;
+  username : string;
+  acct : string;
+  last_status_at : string option;
+  statuses_count : int;
+  followers_count : int;
+  following_count : int;
+}
 [@@deriving yojson { strict = false }]
 
 type status = {
@@ -160,6 +168,10 @@ let lookup ~token kind ?domain ~username () =
     ( l |> List.assoc "id" |> expect_string,
       l |> List.assoc "username" |> expect_string,
       l |> List.assoc "acct" |> expect_string )
+
+let get_account kind id =
+  do_fetch kind ("/api/v1/accounts/" ^ id)
+  >|= Yojson.Safe.from_string >|= account_of_yojson >|= Result.get_ok
 
 let get_relationships ~token kind account_ids =
   let target =

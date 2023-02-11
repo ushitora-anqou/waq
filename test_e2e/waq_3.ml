@@ -3,19 +3,28 @@ open Common
 let f =
   make_waq_scenario @@ fun waq_token ->
   let%lwt waq_token' = fetch_access_token ~username:"user2" in
-
-  (* Look up & Follow @user2 *)
+  let%lwt user1_id, _, _ = lookup `Waq ~token:waq_token ~username:"user1" () in
   let%lwt user2_id, _, _ = lookup `Waq ~token:waq_token ~username:"user2" () in
+
+  (* Follow @user2 *)
   follow `Waq ~token:waq_token user2_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
   (* Post by @user2 *)
   let%lwt { uri; id; _ } = post `Waq ~token:waq_token' () in
 
+  (* check accounts *)
+  let%lwt a = get_account `Waq user2_id in
+  assert (a.statuses_count = 1);
+
   (* Reply by me *)
   let%lwt { uri = uri2; id = id2; _ } =
     post `Waq ~token:waq_token ~in_reply_to_id:id ()
   in
+
+  (* check accounts *)
+  let%lwt a = get_account `Waq user1_id in
+  assert (a.statuses_count = 1);
 
   (* Reply again *)
   let%lwt { uri = uri3; _ } =
