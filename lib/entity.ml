@@ -61,23 +61,25 @@ type credential_account_source = { privacy : string; sensitive : bool }
 [@@deriving make, yojson]
 
 type credential_account = {
-  id : string;
-  username : string;
-  acct : string;
-  display_name : string;
-  created_at : string;
+  account : account;
   source : credential_account_source;
 }
-[@@deriving make, yojson]
+[@@deriving make]
 
-let make_credential_account_from_model (a : Db.Account.t) : credential_account =
+let credential_account_to_yojson (ca : credential_account) : Yojson.Safe.t =
+  let a = account_to_yojson ca.account in
+  let source = credential_account_source_to_yojson ca.source in
+  match a with
+  | `Assoc l -> `Assoc (("source", source) :: l)
+  | _ -> assert false
+
+let make_credential_account_from_model (a : Db.Account.t) :
+    credential_account Lwt.t =
+  let%lwt account = make_account_from_model a in
   let source =
     make_credential_account_source ~privacy:"public" ~sensitive:false
   in
-  make_credential_account ~id:(string_of_int a.id) ~username:a.username
-    ~acct:(acct a.username a.domain) ~display_name:a.display_name
-    ~created_at:(Ptime.to_rfc3339 a.created_at)
-    ~source
+  make_credential_account ~account ~source |> Lwt.return
 
 (* Entity status *)
 type status_mention = {
