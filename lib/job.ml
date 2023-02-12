@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 let kick ~name (f : unit -> unit Lwt.t) =
   Lwt.async @@ fun () ->
   let num_repeats = 3 in
@@ -5,8 +7,13 @@ let kick ~name (f : unit -> unit Lwt.t) =
     (* Thanks to: https://github.com/mperham/sidekiq/wiki/Error-Handling *)
     (i * i * i * i) + 15 + (Random.int 10 * (i + 1)) |> float_of_int
   in
+  let timeout_seconds = 25.0 in
   let rec loop i =
-    try%lwt f ()
+    try%lwt
+      let timeout = Lwt_unix.sleep timeout_seconds in
+      let task_done = ref false in
+      Lwt.pick [ timeout; (f () >|= fun () -> task_done := true) ] >|= fun () ->
+      if not !task_done then failwith "Timeout"
     with e ->
       Logq.warn (fun m ->
           m "Job failed: %s: %s: %s" name (Printexc.to_string e)
