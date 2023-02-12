@@ -183,3 +183,38 @@ let make_relationship_from_model (self : Db.Account.t) (acct : Db.Account.t) =
     ~muting_notifications:false ~requested:false ~domain_blocking:false
     ~endorsed:false ~note:""
   |> Lwt.return
+
+(* Entity notification *)
+type notification = {
+  id : string;
+  typ : string;
+  created_at : string;
+  account : account;
+  status : status option;
+}
+[@@deriving make]
+
+let notification_to_yojson (r : notification) : Yojson.Safe.t =
+  let l =
+    [
+      ("id", `String r.id);
+      ("type", `String r.typ);
+      ("created_at", `String r.created_at);
+      ("account", account_to_yojson r.account);
+    ]
+  in
+  let l =
+    r.status
+    |> Option.fold ~none:l ~some:(fun s -> ("status", status_to_yojson s) :: l)
+  in
+  `Assoc l
+
+let make_notification_from_model (m : Db.Notification.t) : notification Lwt.t =
+  let%lwt account =
+    Db.Account.get_one ~id:m.from_account_id () >>= make_account_from_model
+  in
+  let status = None in
+  make_notification ~id:(string_of_int m.id) ~typ:(Option.get m.typ)
+    ~created_at:(Ptime.to_rfc3339 m.created_at)
+    ~account ?status ()
+  |> Lwt.return

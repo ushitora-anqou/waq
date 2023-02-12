@@ -32,6 +32,9 @@ let routes_from_clients =
       scope "/api/v1" Api_v1.[
         get "/streaming" Streaming.get;
         get "/instance" Instance.get;
+        scope "/notifications" Notifications.[
+          get "" Root.get;
+        ];
         scope "/statuses" Statuses.[
           post "" Root.post;
           get "/:id" Root.get;

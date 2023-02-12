@@ -198,6 +198,20 @@ module Favourite = struct
   [@@sql.table_name "favourites"] [@@deriving make, sql]
 end
 
+module Notification = struct
+  type t = {
+    id : int; [@sql.auto_increment]
+    activity_id : int;
+    activity_type : string;
+    created_at : Ptime.t;
+    updated_at : Ptime.t;
+    account_id : int;
+    from_account_id : int;
+    typ : string option; [@sql.column_name "type"]
+  }
+  [@@sql.table_name "notifications"] [@@deriving make, sql]
+end
+
 let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =
   Status.query
     {|
@@ -321,3 +335,23 @@ LIMIT :limit|}
         ("max_id", `Int (Option.value ~default:0 max_id));
       ]
   >|= List.map Account.pack
+
+let get_notifications ~account_id ~max_id ~since_id ~limit :
+    Notification.t list Lwt.t =
+  do_query @@ fun c ->
+  Sql.named_query c
+    {|
+SELECT n.* FROM notifications n
+WHERE n.account_id = :account_id
+AND (:since_id = 0 OR n.id >= :since_id)
+AND (:max_id = 0 OR n.id <= :max_id)
+ORDER BY n.created_at DESC
+LIMIT :limit|}
+    ~p:
+      [
+        ("account_id", `Int account_id);
+        ("limit", `Int limit);
+        ("since_id", `Int (Option.value ~default:0 since_id));
+        ("max_id", `Int (Option.value ~default:0 max_id));
+      ]
+  >|= List.map Notification.pack

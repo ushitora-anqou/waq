@@ -15,6 +15,7 @@ let all : (int * (module S)) list =
       (20230121_195201, (module M20230121_195201_create_oauth_access_tokens));
       (20230122_183000, (module M20230122_183000_create_oauth_access_grants));
       (20230209_204400, (module M20230209_204400_create_favourites));
+      (20230212_175600, (module M20230212_175600_create_notifications));
     ]
 
 let migrate () =

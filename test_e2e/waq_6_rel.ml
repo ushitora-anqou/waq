@@ -46,6 +46,13 @@ let f =
   assert (a.followers_count = 1);
   assert (a.following_count = 0);
 
+  (* check notifications *)
+  (match%lwt get_notifications `Waq ~token:token' with
+  | [ { typ = "follow"; account = a; _ } ] ->
+      assert (a.id = user1_id);
+      Lwt.return_unit
+  | _ -> assert false);%lwt
+
   (* user2: follow @user1 *)
   follow `Waq ~token:token' user1_id;%lwt
   expect_followers user1_id [ user2_id ];%lwt
@@ -67,6 +74,13 @@ let f =
   let%lwt a = get_account `Waq user2_id in
   assert (a.followers_count = 1);
   assert (a.following_count = 1);
+
+  (* check notifications *)
+  (match%lwt get_notifications `Waq ~token with
+  | [ { typ = "follow"; account = a; _ } ] ->
+      assert (a.id = user2_id);
+      Lwt.return_unit
+  | _ -> assert false);%lwt
 
   (* user1: Unfollow @user2 *)
   unfollow `Waq ~token user2_id;%lwt

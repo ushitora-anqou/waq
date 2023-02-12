@@ -119,6 +119,14 @@ type status = {
 type relationship = { id : string; following : bool; followed_by : bool }
 [@@deriving yojson { strict = false }]
 
+type notification = {
+  id : string;
+  typ : string; [@key "type"]
+  created_at : string;
+  account : account;
+}
+[@@deriving yojson { strict = false }]
+
 let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let target =
     let src = "/api/v1/accounts/lookup?acct=" in
@@ -191,6 +199,11 @@ let get_following ?token kind account_id =
   do_fetch ?token kind ("/api/v1/accounts/" ^ account_id ^ "/following")
   >|= Yojson.Safe.from_string >|= expect_list
   >|= List.map (account_of_yojson |.> Result.get_ok)
+
+let get_notifications ?token kind =
+  do_fetch ?token kind "/api/v1/notifications"
+  >|= Yojson.Safe.from_string >|= expect_list
+  >|= List.map (notification_of_yojson |.> Result.get_ok)
 
 let follow ~token kind account_id =
   do_fetch ~meth:`POST ~token kind ("/api/v1/accounts/" ^ account_id ^ "/follow")

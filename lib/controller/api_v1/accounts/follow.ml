@@ -24,11 +24,18 @@ let direct_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
   assert (acc.domain = None);
 
   (* Insert follow *)
-  Db.Follow.(
-    make ~id:0 ~created_at:now ~updated_at:now ~account_id:self.id
-      ~target_account_id:acc.id ~uri
-    |> save_one)
-  |> ignore_lwt
+  let%lwt f =
+    Db.Follow.(
+      make ~id:0 ~created_at:now ~updated_at:now ~account_id:self.id
+        ~target_account_id:acc.id ~uri
+      |> save_one)
+  in
+
+  (* Notify *)
+  Service.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow" ~dst:acc
+    ~src:self ~typ:"follow";
+
+  Lwt.return_unit
 
 let follow_not_possible ~(src : Db.Account.t) ~(dst : Db.Account.t) : bool Lwt.t
     =
