@@ -11,6 +11,11 @@ module Attrs = struct
     Attribute.declare "sql.auto_increment" Attribute.Context.label_declaration
       Ast_pattern.(pstr nil)
       ()
+
+  let column_name =
+    Attribute.declare "sql.column_name" Attribute.Context.label_declaration
+      Ast_pattern.(pstr (pstr_eval (estring __) nil ^:: nil))
+      Fun.id
 end
 
 let core_type_mapper = function
@@ -21,6 +26,10 @@ let core_type_mapper = function
   | [%type: Ptime.t] -> `Ptime
   | [%type: Ptime.t option] -> `PtimeOption
   | _ -> assert false
+
+let column_name_of_label (f : label_declaration) =
+  let name = Attribute.get Attrs.column_name f in
+  name |> Option.value ~default:f.pld_name.txt
 
 let accessor_impl ptype_name (ld : label_declaration) =
   let loc = ld.pld_loc in
@@ -37,7 +46,7 @@ let pack_impl loc (fields : label_declaration list) =
     fields
     |> List.map (fun f ->
            let fname = f.pld_name.txt in
-           let e_fname = estring ~loc fname in
+           let e_fname = column_name_of_label f |> estring ~loc in
            ( (* label *) { loc; txt = lident fname },
              (* field *)
              match core_type_mapper f.pld_type with
@@ -80,7 +89,7 @@ let unpack_impl loc (fields : label_declaration list) =
     fields
     |> List.map (fun f ->
            let field_name = f.pld_name.txt (* e.g., id *) in
-           let key = estring ~loc field_name (* e.g., "id" *) in
+           let key = column_name_of_label f |> estring ~loc in
            let value =
              (* e.g., x.id *)
              pexp_field ~loc [%expr x] { loc; txt = lident field_name }
@@ -124,8 +133,9 @@ let save_one_impl loc (fields : label_declaration list) (td : type_declaration)
      let columns =
        fields
        |> List.filter_map (fun f ->
-              match Attribute.get Attrs.auto_increment f with
-              | None -> Some f.pld_name.txt
+              let auto_increment = Attribute.get Attrs.auto_increment f in
+              match auto_increment with
+              | None -> Some (column_name_of_label f)
               | Some _ -> None)
      in
      let sql =
@@ -172,6 +182,7 @@ let general_where_impl kind loc (fields : label_declaration list)
      let parts =
        fields
        |> List.map @@ fun f ->
+          let column_name = column_name_of_label f in
           let name = f.pld_name.txt in
           let varname = varnames |> List.assoc name in
           [%expr
@@ -185,9 +196,10 @@ let general_where_impl kind loc (fields : label_declaration list)
                 ( [%e
                     match core_type_mapper f.pld_type with
                     | `Int | `String | `Ptime ->
-                        estring ~loc (name ^ " = :" ^ name)
+                        estring ~loc (column_name ^ " = :" ^ name)
                     | `IntOption | `StringOption | `PtimeOption ->
-                        estring ~loc (name ^ " IS NOT DISTINCT FROM :" ^ name)]
+                        estring ~loc
+                          (column_name ^ " IS NOT DISTINCT FROM :" ^ name)]
                   :: query,
                   ( [%e estring ~loc name],
                     [%e wrap_value_with_type loc f.pld_type [%expr x]] )
