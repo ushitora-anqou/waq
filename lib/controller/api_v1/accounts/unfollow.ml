@@ -1,6 +1,21 @@
 open Entity
 open Lwt.Infix
 open Helper
+open Util
+
+let service (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
+  Db.Follow.delete ~uri:f.uri () >|= fun () ->
+  if Option.is_some acc.domain then
+    (* Remote account *)
+    let open Activity in
+    let obj = make_follow ~id:f.uri ~actor:self.uri ~obj:acc.uri |> follow in
+    let activity =
+      make_undo
+        ~id:(self.uri ^ "#follows" ^/ string_of_int f.id ^/ "undo")
+        ~actor:(`String self.uri) ~obj
+      |> undo
+    in
+    Service.Delivery.kick ~activity ~src:self ~dst:acc
 
 (* Recv POST /api/v1/accounts/:id/unfollow *)
 let post req =
@@ -18,7 +33,7 @@ let post req =
       |> maybe_no_row)
   in
   (* If valid, send Undo of Follow to the server *)
-  if f <> None then Service.Unfollow.kick self acc (Option.get f);
+  if%lwt Lwt.return (f <> None) then service self acc (Option.get f);%lwt
 
   (* Return the result to the client *)
   make_relationship_from_model self acc

@@ -563,4 +563,7 @@ let to_undo ~actor =
   | Like v as a ->
       let id = v.id ^/ "undo" in
       make_undo ~id ~actor ~obj:a
+  | Follow _ ->
+      (* Undo Follow is not straightforward and should be handled separately in each case *)
+      assert false
   | _ -> assert false
