@@ -30,37 +30,48 @@ let direct_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
     |> save_one)
   |> ignore_lwt
 
-let service (self : Db.Account.t) (acc : Db.Account.t) : unit Lwt.t =
-  (* NOTE: Assume there is no follow_request nor follow of (self_id, id) *)
-  let now = Ptime.now () in
-  let uri = self.uri ^/ Uuidm.(v `V4 |> to_string) in
-  match acc.domain with
-  | None (* local *) -> direct_follow ~now ~uri self acc
-  | Some _ (* remote *) -> request_follow ~now ~uri self acc
+let follow_not_possible ~(src : Db.Account.t) ~(dst : Db.Account.t) : bool Lwt.t
+    =
+  Lwt.return (src.id = dst.id)
+
+let already_followed ~(src : Db.Account.t) ~(dst : Db.Account.t) : bool Lwt.t =
+  match%lwt
+    Db.Follow.get_one ~account_id:src.id ~target_account_id:dst.id ()
+  with
+  | _ -> Lwt.return_true
+  | exception Sql.NoRowFound -> Lwt.return_false
+
+let already_follow_requested ~(src : Db.Account.t) ~(dst : Db.Account.t) :
+    bool Lwt.t =
+  match%lwt
+    Db.FollowRequest.get_one ~account_id:src.id ~target_account_id:dst.id ()
+  with
+  | _ -> Lwt.return_true
+  | exception Sql.NoRowFound -> Lwt.return_false
+
+let service ~(src : Db.Account.t) ~(dst : Db.Account.t) : unit Lwt.t =
+  if%lwt follow_not_possible ~src ~dst then
+    Httpq.Server.raise_error_response `Forbidden
+  else
+    if%lwt already_followed ~src ~dst then Lwt.return_unit
+    else
+      if%lwt already_follow_requested ~src ~dst then Lwt.return_unit
+      else
+        let now = Ptime.now () in
+        let uri = src.uri ^/ Uuidm.(v `V4 |> to_string) in
+        match dst.domain with
+        | None (* local *) -> direct_follow ~now ~uri src dst
+        | Some _ (* remote *) -> request_follow ~now ~uri src dst
 
 (* Recv POST /api/v1/accounts/:id/follow *)
 let post req =
   let%lwt self_id = authenticate_user req in
-  let id = req |> Httpq.Server.param ":id" |> int_of_string in
+  let acct_id = req |> Httpq.Server.param ":id" |> int_of_string in
 
-  (* Check if accounts are valid *)
   let%lwt self = Db.Account.get_one ~id:self_id () in
-  let%lwt acc = Db.Account.get_one ~id () in
-
-  (* Check if already followed or follow-requested *)
-  let%lwt f =
-    Db.(
-      Follow.get_one ~account_id:self_id ~target_account_id:id ()
-      |> maybe_no_row)
-  in
-  let%lwt frq =
-    Db.(
-      FollowRequest.get_one ~account_id:self_id ~target_account_id:id ()
-      |> maybe_no_row)
-  in
-  (* If valid, follow them *)
-  if%lwt Lwt.return (f = None && frq = None) then service self acc;%lwt
+  let%lwt acct = Db.Account.get_one ~id:acct_id () in
+  service ~src:self ~dst:acct;%lwt
 
   (* Return the result to the client *)
-  make_relationship_from_model self acc
+  make_relationship_from_model self acct
   >|= relationship_to_yojson >>= respond_yojson

@@ -58,8 +58,11 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
         m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
     Lwt.return_error ()
 
+exception FetchFailure of (Status.t * (string * string) list * string) option
+
 let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None)
     (url : string) : string Lwt.t =
   match%lwt fetch ~headers ~meth ~body ~sign url with
   | Ok (`OK, _, body) -> Lwt.return body
-  | _ -> failwith "fetch_exn failed"
+  | Ok r -> raise (FetchFailure (Some r))
+  | _ -> raise (FetchFailure None)

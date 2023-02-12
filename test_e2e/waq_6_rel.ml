@@ -18,6 +18,12 @@ let f =
   let%lwt user1_id, _, _ = lookup `Waq ~token:token' ~username:"user1" () in
   let%lwt user2_id, _, _ = lookup `Waq ~token ~username:"user2" () in
 
+  (* user1: Try to follow myself, which should be forbidden *)
+  (try%lwt
+     follow `Waq ~token user1_id;%lwt
+     assert false
+   with Httpq.Client.FetchFailure (Some (`Forbidden, _, _)) -> Lwt.return_unit);%lwt
+
   (* user1: Follow @user2 *)
   follow `Waq ~token user2_id;%lwt
   expect_followers user2_id [ user1_id ];%lwt
