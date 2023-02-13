@@ -1,8 +1,5 @@
 open Entity
 
-type res = { stream : string list; event : string; payload : string }
-[@@deriving make, yojson]
-
 let kick ~status_id ~account_id ~user_id ~stream =
   let open Lwt.Infix in
   Job.kick ~name:__FUNCTION__ @@ fun () ->
@@ -13,6 +10,5 @@ let kick ~status_id ~account_id ~user_id ~stream =
     >>= make_status_from_model ~self_id:account_id
     >|= status_to_yojson >|= Yojson.Safe.to_string
   in
-  make_res ~stream:[ "user" ] ~event:"update" ~payload ()
-  |> res_to_yojson |> Yojson.Safe.to_string |> Streaming.push key;
+  Streaming.push ~key ~event:"update" ~payload ();
   Lwt.return_unit

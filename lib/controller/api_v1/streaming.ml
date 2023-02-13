@@ -24,7 +24,9 @@ let get req =
   let rec loop () =
     match%lwt Httpq.Server.ws_recv c with
     | None -> Lwt.return_unit (* Closed *)
-    | Some _ -> loop () (* FIXME *)
+    | Some e ->
+        Logq.warn (fun m -> m "Unhandled websocket event: %s" e);
+        loop () (* FIXME *)
   in
   Lwt.finalize loop (fun () ->
       Lwt.return @@ Streaming.remove key (`WebSocket c))

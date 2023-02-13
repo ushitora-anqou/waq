@@ -24,10 +24,22 @@ let remove (k : key) (conn : connection) =
   | None -> invalid_arg "Streaming.remove: key not found"
   | Some s -> s |> ConnectionSet.remove conn |> Hashtbl.replace connections k
 
-let push (k : key) msg =
-  match Hashtbl.find_opt connections k with
+let push ~(key : key) ~(event : string) ?payload () =
+  match Hashtbl.find_opt connections key with
   | None -> () (* Just ignore *)
   | Some s ->
       s
       |> ConnectionSet.iter (function `WebSocket conn ->
-             Httpq.Server.ws_send conn msg)
+             let _, stream = key in
+             let stream = match stream with `User -> "user" in
+             let l =
+               [
+                 ("stream", `List [ `String stream ]); ("event", `String event);
+               ]
+             in
+             let l =
+               payload
+               |> Option.fold ~none:l ~some:(fun payload ->
+                      ("payload", `String payload) :: l)
+             in
+             `Assoc l |> Yojson.Safe.to_string |> Httpq.Server.ws_send conn)
