@@ -20,7 +20,7 @@ let get req =
 
   Httpq.Server.websocket req @@ fun c ->
   let key = Streaming.make_key ~user_id ~stream in
-  Streaming.(add key (`WebSocket c));
+  let conn_id = Streaming.(add key (`WebSocket c)) in
   let rec loop () =
     match%lwt Httpq.Server.ws_recv c with
     | None -> Lwt.return_unit (* Closed *)
@@ -28,5 +28,4 @@ let get req =
         Logq.warn (fun m -> m "Unhandled websocket event: %s" e);
         loop () (* FIXME *)
   in
-  Lwt.finalize loop (fun () ->
-      Lwt.return @@ Streaming.remove key (`WebSocket c))
+  Lwt.finalize loop (fun () -> Lwt.return @@ Streaming.remove key conn_id)

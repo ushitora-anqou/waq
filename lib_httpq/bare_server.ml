@@ -78,6 +78,7 @@ let websocket (req : Request.t) f =
         f conn
       with e ->
         Logq.err (fun m ->
-            m "Websocket: thread error: %s" (Printexc.to_string e));
+            m "Websocket: thread error: %s\n%s" (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
         Lwt.return_unit);
   Lwt.return resp
