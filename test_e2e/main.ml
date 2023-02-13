@@ -41,7 +41,7 @@ let () =
         |> List.map (fun name -> (name, List.assoc name all_tests))
   in
 
-  Logs.info (fun m ->
+  Logq.info (fun m ->
       chosen_tests |> List.map fst |> String.concat " "
       |> m "[e2e] Chosen tests: %s");
 
