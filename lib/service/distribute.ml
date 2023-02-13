@@ -2,17 +2,17 @@ open Lwt.Infix
 open Util
 
 let deliver_to_local ~(followers : Db.User.t list) ~(status : Db.Status.t) :
-    unit =
+    unit Lwt.t =
   followers
-  |> List.iter (fun (u : Db.User.t) ->
+  |> Lwt_list.iter_p (fun (u : Db.User.t) ->
          Insert_to_feed.kick ~account_id:u.account_id ~status_id:status.id
            ~user_id:u.id ~stream:`User)
 
 let deliver_to_remote ~(followers : Db.Account.t list) ~(status : Db.Status.t) :
-    unit =
+    unit Lwt.t =
   (* FIXME: use sharedInbox *)
   followers
-  |> List.iter (fun (a : Db.Account.t) ->
+  |> Lwt_list.iter_p (fun (a : Db.Account.t) ->
          match status.reblog_of_id with
          | None -> Create_note.kick a.id status
          | Some _ -> Announce.kick a status)
@@ -39,8 +39,7 @@ let kick (s : Db.Status.t) =
     let%lwt u = Db.User.get_one ~account_id:a.id () in
     (* Local: Send the status to self *)
     Insert_to_feed.kick ~account_id:a.id ~status_id:s.id ~user_id:u.id
-      ~stream:`User;
-    Lwt.return_unit);%lwt
+      ~stream:`User);%lwt
 
   (* Deliver to remote followers *)
   if is_status_from_remote && remote_followers <> [] then
@@ -48,9 +47,9 @@ let kick (s : Db.Status.t) =
         m
           "Found a follow from a remote user to another remote one; possibly a \
            bug");
-  deliver_to_remote ~followers:remote_followers ~status:s;
+  deliver_to_remote ~followers:remote_followers ~status:s;%lwt
 
   (* Deliver to local followers *)
-  deliver_to_local ~followers:local_followers ~status:s;
+  deliver_to_local ~followers:local_followers ~status:s;%lwt
 
   Lwt.return_unit

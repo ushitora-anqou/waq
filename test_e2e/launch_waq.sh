@@ -15,7 +15,7 @@ killtree() {
 dune exec bin/main.exe db:reset >/dev/null 2>/dev/null
 dune exec bin/main.exe oauth:generate_access_token user1
 #dune exec bin/main.exe >/dev/null 2>/dev/null &
-dune exec bin/main.exe &
+WAQ_DEBUG_JOB_KICK_BLOCK=true dune exec bin/main.exe &
 waq_pid=$!
 
 cleanup() {

@@ -12,7 +12,7 @@ let kick_inbox_follow (req : ap_follow) =
   match%lwt Db.Account.get_one ~uri:dst () with
   | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Bad_request
   | dst ->
-      Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+      Job.kick ~name:__FUNCTION__ @@ fun () ->
       let%lwt f =
         match%lwt
           Db.Follow.get_one ~account_id:src.id ~target_account_id:dst.id ()
@@ -27,8 +27,7 @@ let kick_inbox_follow (req : ap_follow) =
               |> save_one)
       in
       (* Send 'Accept' *)
-      Service.Accept.kick ~f ~followee:dst ~follower:src;
-      Lwt.return_unit
+      Service.Accept.kick ~f ~followee:dst ~follower:src
 
 (* Recv Accept in inbox *)
 let kick_inbox_accept (req : ap_accept) =
@@ -40,7 +39,7 @@ let kick_inbox_accept (req : ap_accept) =
   match%lwt Db.FollowRequest.get_one ~uri () with
   | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Bad_request
   | r ->
-      Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+      Job.kick ~name:__FUNCTION__ @@ fun () ->
       let now = Ptime.now () in
       Db.FollowRequest.delete ~id:r.id () |> ignore_lwt;%lwt
       Db.Follow.(
@@ -51,7 +50,7 @@ let kick_inbox_accept (req : ap_accept) =
       |> ignore_lwt
 
 let kick_inbox_undo_like (l : ap_like) =
-  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt { id; _ } = favourite_of_like ~must_already_exist:true l in
   Db.Favourite.delete ~id ()
 
@@ -59,7 +58,7 @@ let kick_inbox_undo_like (l : ap_like) =
 let kick_inbox_undo (req : ap_undo) =
   match req.obj with
   | Follow { id; _ } ->
-      Job.kick_lwt ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
+      Job.kick ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
   | Like l -> kick_inbox_undo_like l
   | _ -> Httpq.Server.raise_error_response `Bad_request
 
@@ -70,21 +69,19 @@ let kick_inbox_create (req : ap_create) =
     | { obj = Note note; _ } -> note
     | _ -> Httpq.Server.raise_error_response `Bad_request
   in
-  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_note note in
-  Service.Distribute.kick s;
-  Lwt.return_unit
+  Service.Distribute.kick s
 
 (* Recv Announce in inbox *)
 let kick_inbox_announce (req : ap_announce) =
-  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_announce req in
-  Service.Distribute.kick s;
-  Lwt.return_unit
+  Service.Distribute.kick s
 
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =
-  Job.kick_lwt ~name:__FUNCTION__ @@ fun () ->
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt _fav = favourite_of_like req in
   (* FIXME: Send notification *)
   Lwt.return_unit

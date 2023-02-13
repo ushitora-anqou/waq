@@ -15,7 +15,7 @@ let request_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
   (* Post activity *)
   let open Activity in
   let activity = make_follow ~id:uri ~actor:self.uri ~obj:acc.uri |> follow in
-  Service.Delivery.kick ~activity ~src:self ~dst:acc;
+  Service.Delivery.kick ~activity ~src:self ~dst:acc;%lwt
 
   Lwt.return_unit
 
@@ -33,7 +33,7 @@ let direct_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
 
   (* Notify *)
   Service.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow" ~dst:acc
-    ~src:self ~typ:"follow";
+    ~src:self ~typ:"follow";%lwt
 
   Lwt.return_unit
 

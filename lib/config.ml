@@ -24,3 +24,8 @@ let is_my_domain s =
 let db_url () = !c.db_url
 let avatar_url () = !c.avatar_url
 let header_url () = !c.header_url
+
+let debug_job_kick_block () =
+  Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
+  |> Option.map bool_of_string
+  |> Option.value ~default:false

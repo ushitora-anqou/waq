@@ -29,7 +29,7 @@ let post req =
               ~account_id:self_id ~reblog_of_id:status.id ()
             |> save_one_with_uri)
         in
-        Service.Distribute.kick s;
+        Service.Distribute.kick s;%lwt
         Lwt.return s
   in
   make_status_from_model ~self_id s

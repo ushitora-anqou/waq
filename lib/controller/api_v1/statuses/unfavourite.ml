@@ -16,15 +16,14 @@ let post req =
   | exception Sql.NoRowFound -> (* Already unfavourited *) Lwt.return_unit
   | fav ->
       Db.Favourite.delete ~id:fav.id ();%lwt
-      if%lwt Db.Account.is_remote ~id:status.account_id then (
+      if%lwt Db.Account.is_remote ~id:status.account_id then
         let%lwt src = Db.Account.get_one ~id:account_id () in
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in
         let%lwt activity =
           Activity.(
             like_of_favourite fav >|= like >|= to_undo ~actor:src.uri >|= undo)
         in
-        Service.Delivery.kick ~activity ~src ~dst;
-        Lwt.return_unit));%lwt
+        Service.Delivery.kick ~activity ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson
