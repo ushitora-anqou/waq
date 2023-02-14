@@ -21,11 +21,17 @@ let kick_inbox_follow (req : ap_follow) =
         | exception Sql.NoRowFound ->
             (* Insert to table 'follows' *)
             let now = Ptime.now () in
-            Db.Follow.(
-              make ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
-                ~target_account_id:dst.id ~uri:req.id
-              |> save_one)
+            let%lwt f =
+              Db.Follow.(
+                make ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
+                  ~target_account_id:dst.id ~uri:req.id
+                |> save_one)
+            in
+            Service.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow"
+              ~src ~dst ~typ:"follow";%lwt
+            Lwt.return f
       in
+
       (* Send 'Accept' *)
       Service.Accept.kick ~f ~followee:dst ~follower:src
 

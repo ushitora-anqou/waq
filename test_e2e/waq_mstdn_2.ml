@@ -12,6 +12,17 @@ let f =
   follow `Mstdn ~token:mstdn_token aid;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
+  (* Check notifications *)
+  (match%lwt get_notifications `Waq ~token:waq_token with
+  | [ { typ = "follow"; account = a; _ } ] ->
+      let%lwt id, _, _ =
+        lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000"
+          ()
+      in
+      assert (a.id = id);
+      Lwt.return_unit
+  | _ -> assert false);%lwt
+
   (* Post by @admin@localhost:3000 *)
   let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token () in
   Lwt_unix.sleep 1.0;%lwt
