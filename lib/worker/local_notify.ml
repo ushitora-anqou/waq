@@ -21,7 +21,7 @@ let kick ~(activity_id : int) ~(activity_type : string) ~(dst : Db.Account.t)
         |> save_one
       in
       let%lwt payload =
-        Entity.make_notification_from_model n
+        Entity.make_notification_from_model ~self_id:u.id n
         >|= Entity.notification_to_yojson >|= Yojson.Safe.to_string
       in
       Streaming.(

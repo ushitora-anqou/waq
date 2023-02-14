@@ -22,7 +22,7 @@ let get req =
   let%lwt { self_id; max_id; since_id; limit } = parse_req req in
 
   Db.get_notifications ~account_id:self_id ~max_id ~since_id ~limit
-  >>= Lwt_list.map_p Entity.make_notification_from_model
+  >>= Lwt_list.map_p (Entity.make_notification_from_model ~self_id)
   >|= List.map notification_to_yojson
   >|= (fun l -> `List l)
   >>= respond_yojson

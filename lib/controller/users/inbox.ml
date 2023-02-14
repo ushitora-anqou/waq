@@ -83,7 +83,12 @@ let kick_inbox_create (req : ap_create) =
 let kick_inbox_announce (req : ap_announce) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_announce req in
-  Worker.Distribute.kick s
+  Worker.Distribute.kick s;%lwt
+  let%lwt src = Db.Account.get_one ~id:s.account_id () in
+  let%lwt s' = Db.Status.get_one ~id:(Option.get s.reblog_of_id) () in
+  let%lwt dst = Db.Account.get_one ~id:s'.account_id () in
+  Worker.Local_notify.kick ~activity_id:s.id ~activity_type:"Status"
+    ~typ:"reblog" ~src ~dst
 
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =

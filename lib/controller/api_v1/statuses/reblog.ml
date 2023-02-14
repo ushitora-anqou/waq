@@ -30,6 +30,10 @@ let post req =
             |> save_one_with_uri)
         in
         Worker.Distribute.kick s;%lwt
+        let%lwt src = Db.Account.get_one ~id:s.account_id () in
+        let%lwt dst = Db.Account.get_one ~id:status.account_id () in
+        Worker.Local_notify.kick ~activity_id:s.id ~activity_type:"Status"
+          ~typ:"reblog" ~src ~dst;%lwt
         Lwt.return s
   in
   make_status_from_model ~self_id s

@@ -12,19 +12,6 @@ let expect_following account_id expected_follower_ids =
   assert (got = expected_follower_ids);
   Lwt.return_unit
 
-let websocket_stack kind ~token ?num_msgs f =
-  let recv_msgs = ref [] in
-  let handler content pushf =
-    recv_msgs := content :: !recv_msgs;
-    match num_msgs with
-    | Some num_msgs when List.length !recv_msgs = num_msgs -> pushf None
-    | _ -> Lwt.return_unit
-  in
-  websocket kind ~token handler (fun pushf ->
-      f pushf;%lwt
-      match num_msgs with None -> pushf None | Some _ -> Lwt.return_unit)
-  >|= fun () -> !recv_msgs
-
 let f =
   make_waq_scenario @@ fun token ->
   (* Connect WebSocket *)
