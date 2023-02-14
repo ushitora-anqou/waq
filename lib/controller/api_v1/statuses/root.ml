@@ -29,7 +29,7 @@ let post req =
       |> save_one_with_uri)
   in
   (* Deliver the status to others *)
-  Service.Distribute.kick s;%lwt
+  Worker.Distribute.kick s;%lwt
   (* Return the result to the client *)
   let%lwt s = make_status_from_model ~self_id s in
   s |> status_to_yojson |> Yojson.Safe.to_string

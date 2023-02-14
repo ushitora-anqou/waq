@@ -26,7 +26,7 @@ let post req =
         let%lwt activity = Activity.(like_of_favourite fav >|= like) in
         let%lwt src = Db.Account.get_one ~id:account_id () in
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in
-        Service.Delivery.kick ~activity ~src ~dst);%lwt
+        Worker.Delivery.kick ~activity ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson

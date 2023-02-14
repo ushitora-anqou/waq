@@ -17,7 +17,7 @@ let service (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
           ~actor:(`String self.uri) ~obj
         |> undo
       in
-      Service.Delivery.kick ~activity ~src:self ~dst:acc
+      Worker.Delivery.kick ~activity ~src:self ~dst:acc
 
 (* Recv POST /api/v1/accounts/:id/unfollow *)
 let post req =

@@ -23,7 +23,7 @@ let post req =
           Activity.(
             like_of_favourite fav >|= like >|= to_undo ~actor:src.uri >|= undo)
         in
-        Service.Delivery.kick ~activity ~src ~dst);%lwt
+        Worker.Delivery.kick ~activity ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson

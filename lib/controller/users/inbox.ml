@@ -27,13 +27,13 @@ let kick_inbox_follow (req : ap_follow) =
                   ~target_account_id:dst.id ~uri:req.id
                 |> save_one)
             in
-            Service.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow"
+            Worker.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow"
               ~src ~dst ~typ:"follow";%lwt
             Lwt.return f
       in
 
       (* Send 'Accept' *)
-      Service.Accept.kick ~f ~followee:dst ~follower:src
+      Worker.Accept.kick ~f ~followee:dst ~follower:src
 
 (* Recv Accept in inbox *)
 let kick_inbox_accept (req : ap_accept) =
@@ -77,13 +77,13 @@ let kick_inbox_create (req : ap_create) =
   in
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_note note in
-  Service.Distribute.kick s
+  Worker.Distribute.kick s
 
 (* Recv Announce in inbox *)
 let kick_inbox_announce (req : ap_announce) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_announce req in
-  Service.Distribute.kick s
+  Worker.Distribute.kick s
 
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =
