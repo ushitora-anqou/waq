@@ -498,12 +498,11 @@ and status_of_announce (ann : ap_announce) : Db.Status.t Lwt.t =
 and fetch_status ~uri =
   match%lwt Db.Status.get_one ~uri () with
   | s -> Lwt.return s
-  | exception Sql.NoRowFound ->
-      (match%lwt fetch_activity ~uri >|= of_yojson with
+  | exception Sql.NoRowFound -> (
+      match%lwt fetch_activity ~uri >|= of_yojson with
       | Note note -> status_of_note' note
       | Announce ann -> status_of_announce' ann
       | _ -> failwith "fetch_status failed: fetched activity is invalid")
-      >>= Db.Status.save_one
 
 let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
   let%lwt self = Db.Account.get_one ~id:s.account_id () in
