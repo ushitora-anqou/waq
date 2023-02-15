@@ -17,6 +17,7 @@ let all_tests =
     ("waq-4", Waq_4_reblog.f);
     ("waq-5", Waq_5_fav.f);
     ("waq-6", Waq_6_rel.f);
+    ("waq-7", Waq_7_reblog.f);
   ]
 
 let execute_one_test (name, f) =

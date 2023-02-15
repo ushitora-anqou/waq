@@ -124,8 +124,20 @@ type notification = {
   typ : string; [@key "type"]
   created_at : string;
   account : account;
+  status : status option;
 }
-[@@deriving yojson { strict = false }]
+[@@deriving make]
+
+let notification_of_yojson (y : Yojson.Safe.t) : (notification, unit) result =
+  let l = expect_assoc y in
+  let id = List.assoc "id" l |> expect_string in
+  let typ = List.assoc "type" l |> expect_string in
+  let created_at = List.assoc "created_at" l |> expect_string in
+  let account = List.assoc "account" l |> account_of_yojson |> Result.get_ok in
+  let status =
+    List.assoc_opt "status" l |> Option.map (status_of_yojson |.> Result.get_ok)
+  in
+  make_notification ~id ~typ ~created_at ~account ?status () |> Result.ok
 
 let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let target =
