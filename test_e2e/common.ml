@@ -6,6 +6,7 @@ let ( |.> ) f g a = a |> f |> g
 let ignore_lwt = Waq.Util.ignore_lwt
 let fetch = Httpq.Client.fetch
 let fetch_exn = Httpq.Client.fetch_exn
+let ( ^/ ) a b = a ^ "/" ^ b
 
 let expect_string = function
   | `String s -> s
@@ -168,26 +169,27 @@ let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
       l |> List.assoc "username" |> expect_string,
       l |> List.assoc "acct" |> expect_string )
 
-let lookup ~token kind ?domain ~username () =
-  let target =
-    let src = "/api/v2/search?resolve=true&q=@" in
-    match domain with
-    | None -> src ^ username
-    | Some domain -> src ^ username ^ "@" ^ domain
-  in
-  let%lwt r = do_fetch ~token kind target in
-  let l =
-    match Yojson.Safe.from_string r with
-    | `Assoc l -> (
-        match l |> List.assoc "accounts" |> expect_list with
-        | [ `Assoc l ] -> l
-        | _ -> assert false)
-    | _ -> assert false
-  in
+let search ~token kind q =
+  let queries = [ ("resolve", [ "true" ]); ("q", [ q ]) ] in
+  let u = Uri.of_string "/api/v2/search" in
+  let u = Uri.add_query_params u queries in
+  let%lwt r = do_fetch ~token kind (Uri.to_string u) in
+  let l = Yojson.Safe.from_string r |> expect_assoc in
   Lwt.return
-    ( l |> List.assoc "id" |> expect_string,
-      l |> List.assoc "username" |> expect_string,
-      l |> List.assoc "acct" |> expect_string )
+    ( List.assoc "accounts" l |> expect_list
+      |> List.map (account_of_yojson |.> Result.get_ok),
+      List.assoc "statuses" l |> expect_list
+      |> List.map (status_of_yojson |.> Result.get_ok),
+      List.assoc "hashtags" l |> expect_list )
+
+let lookup ~token kind ?domain ~username () =
+  search ~token kind
+    (domain
+    |> Option.fold ~none:("@" ^ username) ~some:(fun domain ->
+           "@" ^ username ^ "@" ^ domain))
+  >|= function
+  | [ acct ], _, _ -> (acct.id, acct.username, acct.acct)
+  | _ -> assert false
 
 let get_account kind id =
   do_fetch kind ("/api/v1/accounts/" ^ id)

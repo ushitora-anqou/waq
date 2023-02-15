@@ -34,3 +34,9 @@ let acct (username : string) (domain : string option) : string =
   match domain with None -> username | Some domain -> username ^ "@" ^ domain
 
 let ( ^/ ) s1 s2 = s1 ^ "/" ^ s2
+
+module List = struct
+  include List
+
+  let singleton x = [ x ]
+end

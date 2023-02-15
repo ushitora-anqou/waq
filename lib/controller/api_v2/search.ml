@@ -1,6 +1,7 @@
 open Entity
 open Helper
 open Lwt.Infix
+open Util
 
 type t = {
   accounts : account list;
@@ -23,12 +24,28 @@ let parse_query_accounts q =
     | _ -> Lwt.return accts
   with _ -> Lwt.return accts
 
+let parse_query_uri q =
+  let try_fetch_account uri =
+    match%lwt Activity.fetch_account (`Uri uri) with
+    | exception _ -> Lwt.return_none
+    | a -> Lwt.return_some a
+  in
+  let try_fetch_status uri =
+    match%lwt Activity.fetch_status ~uri with
+    | exception _ -> Lwt.return_none
+    | s -> Lwt.return_some s
+  in
+  let list_of_option x = x |> Option.fold ~none:[] ~some:List.singleton in
+  let%lwt a_opt = try_fetch_account q in
+  let%lwt s_opt = try_fetch_status q in
+  Lwt.return (list_of_option a_opt, list_of_option s_opt)
+
 let parse_query q =
   (* FIXME: Support more kinds of queries *)
-  let%lwt accounts =
-    parse_query_accounts q >>= Lwt_list.map_p make_account_from_model
-  in
-  let statuses = [] in
+  let%lwt a1, s1 = parse_query_uri q in
+  let%lwt a2 = parse_query_accounts q in
+  let%lwt accounts = a1 @ a2 |> Lwt_list.map_p make_account_from_model in
+  let%lwt statuses = s1 |> Lwt_list.map_p make_status_from_model in
   let hashtags = [] in
   make ~accounts ~statuses ~hashtags () |> Lwt.return
 
