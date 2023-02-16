@@ -40,3 +40,9 @@ module List = struct
 
   let singleton x = [ x ]
 end
+
+module Lwt_option = struct
+  let map f = function
+    | None -> Lwt.return_none
+    | Some v -> Lwt.map Option.some (f v)
+end

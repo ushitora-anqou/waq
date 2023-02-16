@@ -93,8 +93,12 @@ let kick_inbox_announce (req : ap_announce) =
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt _fav = favourite_of_like req in
-  (* FIXME: Send notification *)
+  let%lwt f = favourite_of_like req in
+  let%lwt src = Db.Account.get_one ~id:f.account_id () in
+  let%lwt s = Db.Status.get_one ~id:f.status_id () in
+  let%lwt dst = Db.Account.get_one ~id:s.account_id () in
+  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:"Favourite"
+    ~typ:"favourite" ~src ~dst;%lwt
   Lwt.return_unit
 
 (* Recv POST /users/:name/inbox *)

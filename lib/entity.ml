@@ -217,12 +217,15 @@ let make_notification_from_model ?self_id (m : Db.Notification.t) :
     Db.Account.get_one ~id:m.from_account_id () >>= make_account_from_model
   in
   let%lwt status =
-    match (m.activity_type, m.typ) with
+    (match (m.activity_type, m.typ) with
     | "Status", Some "reblog" ->
-        let%lwt s = Db.Status.get_one ~id:m.activity_id () in
-        make_status_from_model ?self_id s >|= Option.some
+        Db.Status.get_one ~id:m.activity_id () >|= Option.some
+    | "Favourite", Some "favourite" ->
+        let%lwt f = Db.Favourite.get_one ~id:m.activity_id () in
+        Db.Status.get_one ~id:f.status_id () >|= Option.some
     | "Follow", Some "follow" -> Lwt.return_none
-    | _ -> assert false
+    | _ -> assert false)
+    >>= Lwt_option.map (make_status_from_model ?self_id)
   in
   make_notification ~id:(string_of_int m.id) ~typ:(Option.get m.typ)
     ~created_at:(Ptime.to_rfc3339 m.created_at)

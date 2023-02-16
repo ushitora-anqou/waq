@@ -22,11 +22,16 @@ let post req =
           make ~id:0 ~created_at:now ~updated_at:now ~account_id ~status_id
           |> save_one)
       in
-      if%lwt Db.Account.is_remote ~id:status.account_id then
-        let%lwt activity = Activity.(like_of_favourite fav >|= like) in
+      if%lwt Lwt.return (account_id = status.account_id) then Lwt.return_unit
+      else
         let%lwt src = Db.Account.get_one ~id:account_id () in
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in
-        Worker.Delivery.kick ~activity ~src ~dst);%lwt
+        if%lwt Db.Account.is_remote ~id:status.account_id then
+          let%lwt activity = Activity.(like_of_favourite fav >|= like) in
+          Worker.Delivery.kick ~activity ~src ~dst
+        else
+          Worker.Local_notify.kick ~activity_id:fav.id
+            ~activity_type:"Favourite" ~typ:"favourite" ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson

@@ -37,6 +37,23 @@ let f =
       Lwt.return_unit
   | _ -> assert false);%lwt
 
+  (* Check notification *)
+  (match%lwt get_notifications `Waq ~token:waq_token with
+  | [
+   {
+     typ = "favourite";
+     account = { id = account_id; _ };
+     status = Some { id = status_id; _ };
+     _;
+   };
+   { typ = "follow"; account = { id = account_id'; _ }; _ };
+  ] ->
+      assert (account_id = admin_id);
+      assert (status_id = waq_status_id);
+      assert (account_id' = admin_id);
+      Lwt.return_unit
+  | _ -> assert false);%lwt
+
   (* Unfavourite the post *)
   let%lwt _ = unfav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
   Lwt_unix.sleep 1.0;%lwt
