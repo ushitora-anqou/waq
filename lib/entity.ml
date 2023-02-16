@@ -122,13 +122,13 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
             Httpq.Server.raise_error_response `Bad_request
         | s -> s.account_id |> string_of_int |> Lwt.return_some)
   in
-  let%lwt reblog, reblogs_count =
-    match s.reblog_of_id with
-    | None -> Lwt.return (None, 0)
-    | Some id ->
-        let%lwt count = Db.Status.get_reblogs_count id in
-        let%lwt reblog = Db.Status.get_one ~id () >>= make_status_from_model in
-        Lwt.return (Some reblog, count)
+  let%lwt reblog =
+    s.reblog_of_id
+    |> Lwt_option.map (fun id ->
+           Db.Status.get_one ~id () >>= make_status_from_model)
+  in
+  let%lwt reblogs_count =
+    s.reblog_of_id |> Option.value ~default:s.id |> Db.Status.get_reblogs_count
   in
   let%lwt reblogged =
     match self_id with

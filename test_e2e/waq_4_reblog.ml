@@ -20,12 +20,14 @@ let f =
     let%lwt { id = id2'; reblog = Some { id = id1''; _ }; _ } =
       reblog `Waq ~token ~id:id1
     in
-    let%lwt { id = id2''; reblog = Some { id = id1'''; _ }; reblogs_count; _ } =
+    let%lwt { id = id2''; reblog = Some { id = id1'''; _ }; _ } =
       reblog `Waq ~token ~id:id2
     in
     assert (id1 = id1' && id1 = id1'' && id1 = id1''');
     assert (id2 = id2' && id2 = id2'');
     expected_ids := [ id1; id2 ];
+
+    let%lwt { reblogs_count; _ } = get_status `Waq ~token id1 in
     assert (reblogs_count = 1);
 
     Lwt.return_unit
