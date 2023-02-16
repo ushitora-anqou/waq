@@ -196,6 +196,12 @@ module Favourite = struct
     status_id : int;
   }
   [@@sql.table_name "favourites"] [@@deriving make, sql]
+
+  let get_favourites_count ~status_id =
+    do_query @@ fun c ->
+    Sql.query_row c {|SELECT COUNT(*) FROM favourites WHERE status_id = $1|}
+      ~p:[ `Int status_id ]
+    >|= List.hd >|= snd >|= Sql.Value.expect_int
 end
 
 module Notification = struct

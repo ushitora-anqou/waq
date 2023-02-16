@@ -114,6 +114,7 @@ type status = {
   reblogs_count : int;
   favourited : bool;
   account : account;
+  favourites_count : int;
 }
 [@@deriving yojson { strict = false }]
 

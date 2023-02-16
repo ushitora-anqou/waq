@@ -105,6 +105,7 @@ type status = {
   reblogs_count : int;
   reblogged : bool;
   favourited : bool;
+  favourites_count : int;
 }
 [@@deriving make, yojson]
 
@@ -144,6 +145,9 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
     | Some account_id ->
         Db.Favourite.get_many ~account_id ~status_id:s.id () >|= ( <> ) []
   in
+  let%lwt favourites_count =
+    Db.Favourite.get_favourites_count ~status_id:s.id
+  in
   let%lwt replies_count = Db.Status.get_replies_count s.id in
   let%lwt a = Db.Account.get_one ~id:s.account_id () in
   let%lwt account = make_account_from_model a in
@@ -151,7 +155,8 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
     ~created_at:(Ptime.to_rfc3339 s.created_at)
     ~visibility ~uri:s.uri ~content:s.text ~account ~replies_count
     ?in_reply_to_id:(s.in_reply_to_id |> Option.map string_of_int)
-    ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ~favourited ()
+    ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged ~favourited
+    ~favourites_count ()
   |> Lwt.return
 
 (* Entity relationship *)

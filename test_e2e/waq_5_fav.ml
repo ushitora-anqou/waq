@@ -13,8 +13,9 @@ let f =
   assert favourited;
   let%lwt { favourited; _ } = fav `Waq ~token:token2 ~id in
   assert favourited;
-  let%lwt { favourited; _ } = fav `Waq ~token:token3 ~id in
+  let%lwt { favourited; favourites_count; _ } = fav `Waq ~token:token3 ~id in
   assert favourited;
+  assert (favourites_count = 3);
 
   let%lwt l = get_favourited_by `Waq ~token ~id in
   assert (List.length l = 3);
@@ -51,8 +52,9 @@ let f =
   assert (not favourited);
   let%lwt { favourited; _ } = unfav `Waq ~token:token2 ~id in
   assert (not favourited);
-  let%lwt { favourited; _ } = unfav `Waq ~token:token3 ~id in
+  let%lwt { favourited; favourites_count; _ } = unfav `Waq ~token:token3 ~id in
   assert (not favourited);
+  assert (favourites_count = 0);
 
   (match%lwt get_favourited_by `Waq ~token ~id with
   | [] -> Lwt.return_unit
