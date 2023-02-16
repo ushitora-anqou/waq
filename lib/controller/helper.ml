@@ -7,6 +7,7 @@ let content_type_app_jrd_json =
   (`Content_type, "application/jrd+json; charset=utf-8")
 
 let content_type_app_json = (`Content_type, "application/json; charset=utf-8")
+let content_type_app_activity_json = (`Content_type, "application/activity+json")
 
 let authenticate_bearer = function
   | Httpq.Server.Request r -> (
@@ -39,6 +40,10 @@ let bool_of_string s =
 let respond_yojson y =
   Yojson.Safe.to_string y
   |> Httpq.Server.respond ~headers:[ content_type_app_json ]
+
+let respond_activity_yojson y =
+  Yojson.Safe.to_string y
+  |> Httpq.Server.respond ~headers:[ content_type_app_activity_json ]
 
 let parse_webfinger_address q =
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
