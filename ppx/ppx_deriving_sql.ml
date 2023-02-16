@@ -31,14 +31,6 @@ let column_name_of_label (f : label_declaration) =
   let name = Attribute.get Attrs.column_name f in
   name |> Option.value ~default:f.pld_name.txt
 
-let accessor_impl ptype_name (ld : label_declaration) =
-  let loc = ld.pld_loc in
-  Ast_helper.with_default_loc loc @@ fun () ->
-  [%stri
-    let [%p ppat_var ~loc { loc; txt = ptype_name ^ "_" ^ ld.pld_name.txt }] =
-     fun x ->
-      [%e pexp_field ~loc [%expr x] { loc; txt = lident ld.pld_name.txt }]]
-
 let pack_impl loc (fields : label_declaration list) =
   Ast_helper.with_default_loc loc @@ fun () ->
   let funname = "pack" in
@@ -295,5 +287,6 @@ let generate_impl ~ctxt (_rec_flag, type_declarations) =
 let impl_generator =
   Deriving.Generator.V2.make_noarg generate_impl
     ~attributes:[ Attribute.T Attrs.table_name ]
+;;
 
-let my_deriver = Deriving.add "sql" ~str_type_decl:impl_generator
+Deriving.add "sql" ~str_type_decl:impl_generator
