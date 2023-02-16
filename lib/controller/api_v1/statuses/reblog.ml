@@ -17,7 +17,9 @@ let post req =
     | Some id -> Db.Status.get_one ~id ()
   in
   let%lwt s =
-    match%lwt Db.Status.get_one ~reblog_of_id:(Some status.id) () with
+    match%lwt
+      Db.Status.get_one ~account_id:self_id ~reblog_of_id:(Some status.id) ()
+    with
     | s ->
         (* Already reblogged *)
         Lwt.return s
