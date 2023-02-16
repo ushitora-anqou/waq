@@ -17,7 +17,7 @@ let f =
    {
      typ = "reblog";
      account = { id = account_id3; _ };
-     status = Some { id = status_id3; _ };
+     status = Some { id = status_id3; reblogs_count; _ };
      _;
    };
    {
@@ -31,5 +31,6 @@ let f =
       assert (status_id2 = reblog_id2);
       assert (account_id3 = user3_id);
       assert (status_id3 = reblog_id3);
+      assert (reblogs_count = 3);
       Lwt.return_unit
   | _ -> assert false

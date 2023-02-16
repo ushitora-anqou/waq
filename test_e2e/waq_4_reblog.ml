@@ -20,12 +20,13 @@ let f =
     let%lwt { id = id2'; reblog = Some { id = id1''; _ }; _ } =
       reblog `Waq ~token ~id:id1
     in
-    let%lwt { id = id2''; reblog = Some { id = id1'''; _ }; _ } =
+    let%lwt { id = id2''; reblog = Some { id = id1'''; _ }; reblogs_count; _ } =
       reblog `Waq ~token ~id:id2
     in
     assert (id1 = id1' && id1 = id1'' && id1 = id1''');
     assert (id2 = id2' && id2 = id2'');
     expected_ids := [ id1; id2 ];
+    assert (reblogs_count = 1);
 
     Lwt.return_unit
   in
@@ -52,10 +53,7 @@ let f =
   in
 
   assert (List.sort compare !expected_ids = List.sort compare ws_recv_ids);
-
-  let%lwt got_notifications = get_notifications `Waq ~token in
-  assert (got_notifications <> []);
-  assert (List.sort compare ws_recv_notfs = List.sort compare got_notifications);
+  assert (ws_recv_notfs = []);
 
   Lwt.return_unit
   [@@warning "-8"]
