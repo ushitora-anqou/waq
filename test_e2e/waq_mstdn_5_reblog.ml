@@ -11,13 +11,18 @@ let f =
   follow `Waq ~token:waq_token admin_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Post and reblog by @admin@localhost:3000 *)
-  let%lwt { id; uri; _ } = post `Mstdn ~token:mstdn_token () in
-  Lwt_unix.sleep 1.0;%lwt
-  let%lwt _ = reblog `Mstdn ~token:mstdn_token ~id in
+  (* Post by user1 *)
+  let%lwt { uri; id = post_id; _ } = post `Waq ~token:waq_token () in
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Get my home timeline and check *)
+  (* Reblog the post by @admin@locahost:3000 *)
+  (match%lwt search `Mstdn ~token:mstdn_token uri with
+  | _, [ status ], _ ->
+      reblog `Mstdn ~token:mstdn_token ~id:status.id |> ignore_lwt
+  | _ -> assert false);%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* Check home timeline *)
   (home_timeline `Waq ~token:waq_token >|= function
    | [ `Assoc l1; `Assoc l2 ] ->
        (* Check if the timeline is correct *)
@@ -27,6 +32,20 @@ let f =
          = (l1 |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
           |> expect_string));
        ()
+   | _ -> assert false);%lwt
+
+  (* Check notifications *)
+  (get_notifications `Waq ~token:waq_token >|= function
+   | [
+       {
+         typ = "reblog";
+         account = { id = account_id; _ };
+         status = Some { reblog = Some { id = status_id; _ }; _ };
+         _;
+       };
+     ] ->
+       assert (account_id = admin_id);
+       assert (status_id = post_id)
    | _ -> assert false);%lwt
 
   Lwt.return_unit
