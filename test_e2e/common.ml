@@ -20,6 +20,10 @@ let expect_list = function
   | `List l -> l
   | _ -> failwith "Expected list, got something different"
 
+let expect_bool = function
+  | `Bool b -> b
+  | _ -> failwith "Expected bool, got something different"
+
 let with_lock mtx f =
   match mtx with None -> f () | Some mtx -> Lwt_mutex.with_lock mtx f
 
@@ -221,8 +225,14 @@ let get_notifications ?token kind =
   >|= List.map (notification_of_yojson |.> Result.get_ok)
 
 let follow ~token kind account_id =
-  do_fetch ~meth:`POST ~token kind ("/api/v1/accounts/" ^ account_id ^ "/follow")
-  |> ignore_lwt
+  let%lwt r =
+    do_fetch ~meth:`POST ~token kind
+      ("/api/v1/accounts/" ^ account_id ^ "/follow")
+  in
+  assert (
+    Yojson.Safe.from_string r |> expect_assoc |> List.assoc "following"
+    |> expect_bool);
+  Lwt.return_unit
 
 let unfollow ~token kind account_id =
   do_fetch ~meth:`POST ~token kind

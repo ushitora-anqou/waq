@@ -1,5 +1,4 @@
 open Entity
-open Lwt.Infix
 open Helper
 open Util
 
@@ -80,5 +79,7 @@ let post req =
   service ~src:self ~dst:acct;%lwt
 
   (* Return the result to the client *)
-  make_relationship_from_model self acct
-  >|= relationship_to_yojson >>= respond_yojson
+  let%lwt rel = make_relationship_from_model self acct in
+  (* Pretend the follow succeeded *)
+  let rel = { rel with following = true } in
+  rel |> relationship_to_yojson |> respond_yojson
