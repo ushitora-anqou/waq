@@ -205,15 +205,45 @@ module Favourite = struct
 end
 
 module Notification = struct
+  type activity_type_t = [ `Status | `Favourite | `Follow ]
+
+  let string_of_activity_type_t : activity_type_t -> string = function
+    | `Status -> "Status"
+    | `Favourite -> "Favourite"
+    | `Follow -> "Follow"
+
+  let activity_type_t_of_string : string -> activity_type_t = function
+    | "Status" -> `Status
+    | "Favourite" -> `Favourite
+    | "Follow" -> `Follow
+    | _ -> failwith "activity_type_t_of_string: invalid input"
+
+  type typ_t = [ `reblog | `favourite | `follow ]
+
+  let string_of_typ_t : typ_t -> string = function
+    | `reblog -> "reblog"
+    | `favourite -> "favourite"
+    | `follow -> "follow"
+
+  let typ_t_of_string : string -> typ_t = function
+    | "reblog" -> `reblog
+    | "favourite" -> `favourite
+    | "follow" -> `follow
+    | _ -> failwith "type_t_of_string: invalid input"
+
   type t = {
     id : int; [@sql.auto_increment]
     activity_id : int;
-    activity_type : string;
+    activity_type : activity_type_t;
+        [@sql.column_encoding
+          string_of_activity_type_t, activity_type_t_of_string]
     created_at : Ptime.t;
     updated_at : Ptime.t;
     account_id : int;
     from_account_id : int;
-    typ : string option; [@sql.column_name "type"]
+    typ : typ_t option;
+        [@sql.column_name "type"]
+        [@sql.column_encoding string_of_typ_t, typ_t_of_string]
   }
   [@@sql.table_name "notifications"] [@@deriving make, sql]
 end

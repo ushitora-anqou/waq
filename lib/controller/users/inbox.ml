@@ -27,8 +27,8 @@ let kick_inbox_follow (req : ap_follow) =
                   ~target_account_id:dst.id ~uri:req.id
                 |> save_one)
             in
-            Worker.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow"
-              ~src ~dst ~typ:"follow";%lwt
+            Worker.Local_notify.kick ~activity_id:f.id ~activity_type:`Follow
+              ~src ~dst ~typ:`follow;%lwt
             Lwt.return f
       in
 
@@ -87,8 +87,8 @@ let kick_inbox_announce (req : ap_announce) =
   let%lwt src = Db.Account.get_one ~id:s.account_id () in
   let%lwt s' = Db.Status.get_one ~id:(Option.get s.reblog_of_id) () in
   let%lwt dst = Db.Account.get_one ~id:s'.account_id () in
-  Worker.Local_notify.kick ~activity_id:s.id ~activity_type:"Status"
-    ~typ:"reblog" ~src ~dst
+  Worker.Local_notify.kick ~activity_id:s.id ~activity_type:`Status ~typ:`reblog
+    ~src ~dst
 
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =
@@ -97,8 +97,8 @@ let kick_inbox_like (req : ap_like) =
   let%lwt src = Db.Account.get_one ~id:f.account_id () in
   let%lwt s = Db.Status.get_one ~id:f.status_id () in
   let%lwt dst = Db.Account.get_one ~id:s.account_id () in
-  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:"Favourite"
-    ~typ:"favourite" ~src ~dst;%lwt
+  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:`Favourite
+    ~typ:`favourite ~src ~dst;%lwt
   Lwt.return_unit
 
 (* Recv POST /users/:name/inbox *)

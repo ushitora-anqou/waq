@@ -1,8 +1,8 @@
 open Util
 open Lwt.Infix
 
-let kick ~(activity_id : int) ~(activity_type : string) ~(dst : Db.Account.t)
-    ~(src : Db.Account.t) ~(typ : string) =
+let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
+    ~(dst : Db.Account.t) ~(src : Db.Account.t) ~(typ : Db.Notification.typ_t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let open Db.Notification in
   let account_id = dst.id in

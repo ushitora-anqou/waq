@@ -16,16 +16,31 @@ module Attrs = struct
     Attribute.declare "sql.column_name" Attribute.Context.label_declaration
       Ast_pattern.(pstr (pstr_eval (estring __) nil ^:: nil))
       Fun.id
+
+  let column_encoding =
+    Attribute.declare "sql.column_encoding" Attribute.Context.label_declaration
+      Ast_pattern.(
+        pstr (pstr_eval (pexp_tuple (__ ^:: __ ^:: nil)) nil ^:: nil))
+      (fun a b -> (a, b))
 end
 
-let core_type_mapper = function
-  | [%type: int] -> `Int
-  | [%type: int option] -> `IntOption
-  | [%type: string] -> `String
-  | [%type: string option] -> `StringOption
-  | [%type: Ptime.t] -> `Ptime
-  | [%type: Ptime.t option] -> `PtimeOption
-  | _ -> assert false
+let core_type_mapper f =
+  let encoding = Attribute.get Attrs.column_encoding f in
+  match encoding with
+  | Some (encode, decode) -> (
+      match f.pld_type with
+      | { ptyp_desc = Ptyp_constr ({ txt = Lident "option"; _ }, _); _ } ->
+          `EncodeOption (encode, decode)
+      | _ -> `Encode (encode, decode))
+  | None -> (
+      match f.pld_type with
+      | [%type: int] -> `Int
+      | [%type: int option] -> `IntOption
+      | [%type: string] -> `String
+      | [%type: string option] -> `StringOption
+      | [%type: Ptime.t] -> `Ptime
+      | [%type: Ptime.t option] -> `PtimeOption
+      | _ -> assert false)
 
 let column_name_of_label (f : label_declaration) =
   let name = Attribute.get Attrs.column_name f in
@@ -41,7 +56,7 @@ let pack_impl loc (fields : label_declaration list) =
            let e_fname = column_name_of_label f |> estring ~loc in
            ( (* label *) { loc; txt = lident fname },
              (* field *)
-             match core_type_mapper f.pld_type with
+             match core_type_mapper f with
              | `Int -> [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_int]
              | `IntOption ->
                  [%expr List.assoc [%e e_fname] l |> Sql.Value.expect_int_opt]
@@ -55,15 +70,23 @@ let pack_impl loc (fields : label_declaration list) =
              | `PtimeOption ->
                  [%expr
                    List.assoc [%e e_fname] l |> Sql.Value.expect_timestamp_opt]
-           ))
+             | `Encode (_, decode) ->
+                 [%expr
+                   List.assoc [%e e_fname] l
+                   |> Sql.Value.expect_string |> [%e decode]]
+             | `EncodeOption (_, decode) ->
+                 [%expr
+                   List.assoc [%e e_fname] l
+                   |> Sql.Value.expect_string_opt
+                   |> Option.map [%e decode]] ))
   in
   [%stri
     let [%p ppat_var ~loc { loc; txt = funname }] =
      fun (l : Sql.single_query_result) ->
       [%e pexp_record ~loc record_fields None]]
 
-let wrap_value_with_type loc pld_type value =
-  match core_type_mapper pld_type with
+let wrap_value_with_type loc f value =
+  match core_type_mapper f with
   | `Int -> [%expr `Int [%e value]]
   | `IntOption ->
       [%expr match [%e value] with None -> `Null | Some v -> `Int v]
@@ -73,6 +96,12 @@ let wrap_value_with_type loc pld_type value =
   | `Ptime -> [%expr `Timestamp [%e value]]
   | `PtimeOption ->
       [%expr match [%e value] with None -> `Null | Some v -> `Timestamp v]
+  | `Encode (encode, _) -> [%expr `String ([%e encode] [%e value])]
+  | `EncodeOption (encode, _) ->
+      [%expr
+        match [%e value] with
+        | None -> `Null
+        | Some v -> `String ([%e encode] v)]
 
 let unpack_impl loc (fields : label_declaration list) =
   Ast_helper.with_default_loc loc @@ fun () ->
@@ -87,7 +116,7 @@ let unpack_impl loc (fields : label_declaration list) =
              pexp_field ~loc [%expr x] { loc; txt = lident field_name }
            in
            (* e.g., `Int x.id *)
-           let value = wrap_value_with_type loc f.pld_type value in
+           let value = wrap_value_with_type loc f value in
            (* e.g., ("id", `Int x.id) *)
            [%expr [%e key], [%e value]])
     |> elist ~loc
@@ -186,15 +215,16 @@ let general_where_impl kind loc (fields : label_declaration list)
             Option.fold ~none:(query, params)
               ~some:(fun x ->
                 ( [%e
-                    match core_type_mapper f.pld_type with
-                    | `Int | `String | `Ptime ->
+                    match core_type_mapper f with
+                    | `Int | `String | `Ptime | `Encode _ ->
                         estring ~loc (column_name ^ " = :" ^ name)
-                    | `IntOption | `StringOption | `PtimeOption ->
+                    | `IntOption | `StringOption | `PtimeOption
+                    | `EncodeOption _ ->
                         estring ~loc
                           (column_name ^ " IS NOT DISTINCT FROM :" ^ name)]
                   :: query,
                   ( [%e estring ~loc name],
-                    [%e wrap_value_with_type loc f.pld_type [%expr x]] )
+                    [%e wrap_value_with_type loc f [%expr x]] )
                   :: params ))
               [%e pexp_ident ~loc { loc; txt = Lident varname }]]
      in

@@ -32,8 +32,8 @@ let direct_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
   in
 
   (* Notify *)
-  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:"Follow" ~dst:acc
-    ~src:self ~typ:"follow";%lwt
+  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:`Follow ~dst:acc
+    ~src:self ~typ:`follow;%lwt
 
   Lwt.return_unit
 

@@ -30,8 +30,8 @@ let post req =
           let%lwt activity = Activity.(like_of_favourite fav >|= like) in
           Worker.Delivery.kick ~activity ~src ~dst
         else
-          Worker.Local_notify.kick ~activity_id:fav.id
-            ~activity_type:"Favourite" ~typ:"favourite" ~src ~dst);%lwt
+          Worker.Local_notify.kick ~activity_id:fav.id ~activity_type:`Favourite
+            ~typ:`favourite ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
   >|= status_to_yojson >>= respond_yojson
