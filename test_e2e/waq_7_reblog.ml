@@ -7,6 +7,7 @@ let f =
   let%lwt token2 = fetch_access_token ~username:"user2" in
   let%lwt token3 = fetch_access_token ~username:"user3" in
   let%lwt { id; _ } = post `Waq ~token () in
+  let%lwt _ = reblog `Waq ~token ~id in
   let%lwt { id = reblog_id2; _ } = reblog `Waq ~token:token2 ~id in
   let%lwt { id = reblog_id3; _ } = reblog `Waq ~token:token3 ~id in
 
