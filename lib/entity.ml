@@ -13,6 +13,9 @@ type emoji = {
 type field = { name : string; value : string; verified_at : string option }
 [@@deriving make, yojson]
 
+type credential_account_source = { privacy : string; sensitive : bool }
+[@@deriving make, yojson]
+
 type account = {
   id : string;
   username : string;
@@ -35,6 +38,7 @@ type account = {
   statuses_count : int;
   followers_count : int;
   following_count : int;
+  source : credential_account_source option; [@yojson.optional]
 }
 [@@deriving make, yojson]
 
@@ -57,29 +61,12 @@ let make_account_from_model (a : Db.Account.t) : account Lwt.t =
   |> Lwt.return
 
 (* Entity CredentialAccount *)
-type credential_account_source = { privacy : string; sensitive : bool }
-[@@deriving make, yojson]
-
-type credential_account = {
-  account : account;
-  source : credential_account_source;
-}
-[@@deriving make]
-
-let yojson_of_credential_account (ca : credential_account) : Yojson.Safe.t =
-  let a = yojson_of_account ca.account in
-  let source = yojson_of_credential_account_source ca.source in
-  match a with
-  | `Assoc l -> `Assoc (("source", source) :: l)
-  | _ -> assert false
-
-let make_credential_account_from_model (a : Db.Account.t) :
-    credential_account Lwt.t =
-  let%lwt account = make_account_from_model a in
+let make_credential_account_from_model (a : Db.Account.t) : account Lwt.t =
   let source =
     make_credential_account_source ~privacy:"public" ~sensitive:false
   in
-  make_credential_account ~account ~source |> Lwt.return
+  make_account_from_model a >|= fun account ->
+  { account with source = Some source }
 
 (* Entity status *)
 type status_mention = {
