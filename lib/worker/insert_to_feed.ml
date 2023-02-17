@@ -8,7 +8,7 @@ let kick ~status_id ~account_id ~user_id ~stream =
   let%lwt payload =
     Db.Status.get_one ~id:status_id ()
     >>= make_status_from_model ~self_id:account_id
-    >|= status_to_yojson >|= Yojson.Safe.to_string
+    >|= yojson_of_status >|= Yojson.Safe.to_string
   in
   Streaming.push ~key ~event:"update" ~payload ();
   Lwt.return_unit

@@ -31,5 +31,5 @@ let get _req =
     ~description:"Waq's long description" ~email:"admin@example.com"
     ~version:"0.0.1"
     ~urls:(make_v1_instance_urls ~streaming_api)
-  |> v1_instance_to_yojson |> Yojson.Safe.to_string
+  |> yojson_of_v1_instance |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

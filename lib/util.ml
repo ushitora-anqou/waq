@@ -46,3 +46,8 @@ module Lwt_option = struct
     | None -> Lwt.return_none
     | Some v -> Lwt.map Option.some (f v)
 end
+
+type json_any = Yojson.Safe.t
+
+let yojson_of_json_any : json_any -> Yojson.Safe.t = Fun.id
+let json_any_of_yojson : Yojson.Safe.t -> json_any = Fun.id

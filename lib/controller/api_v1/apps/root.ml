@@ -20,5 +20,5 @@ let post req =
   make_res ~id:(string_of_int app.id) ~name:app.name
     ~redirect_uri:app.redirect_uri ~client_id:app.uid ~client_secret:app.secret
     ()
-  |> res_to_yojson |> Yojson.Safe.to_string
+  |> yojson_of_res |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

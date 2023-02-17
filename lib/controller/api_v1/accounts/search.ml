@@ -31,6 +31,6 @@ let get req =
       make_entry ~id:(string_of_int acc.id) ~username ~acct
         ~display_name:acc.display_name
     in
-    [ ent ] |> to_yojson |> Yojson.Safe.to_string
+    [ ent ] |> yojson_of_t |> Yojson.Safe.to_string
     |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
   with _ -> Httpq.Server.raise_error_response `Not_found

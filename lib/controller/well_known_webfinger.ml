@@ -25,10 +25,10 @@ let get req =
         [
           make_webfinger_link ~rel:"self" ~typ:"application/activity+json"
             ~href:a.uri
-          |> webfinger_link_to_yojson;
+          |> yojson_of_webfinger_link;
         ]
       ()
-    |> webfinger_to_yojson |> Yojson.Safe.to_string
+    |> yojson_of_webfinger |> Yojson.Safe.to_string
     |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
   with e ->
     Logq.debug (fun m ->

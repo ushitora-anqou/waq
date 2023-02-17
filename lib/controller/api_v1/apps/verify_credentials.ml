@@ -5,5 +5,5 @@ let get req =
   let%lwt app =
     Db.OAuthApplication.get_one ~id:(Option.get token.application_id) ()
   in
-  make_res ~name:app.name |> res_to_yojson |> Yojson.Safe.to_string
+  make_res ~name:app.name |> yojson_of_res |> Yojson.Safe.to_string
   |> Httpq.Server.respond

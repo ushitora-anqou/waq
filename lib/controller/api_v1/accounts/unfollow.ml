@@ -39,4 +39,4 @@ let post req =
 
   (* Return the result to the client *)
   make_relationship_from_model self acc
-  >|= relationship_to_yojson >>= respond_yojson
+  >|= yojson_of_relationship >>= respond_yojson

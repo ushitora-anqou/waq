@@ -6,7 +6,7 @@ open Util
 type t = {
   accounts : account list;
   statuses : status list;
-  hashtags : Yojson.Safe.t list;
+  hashtags : string (* FIXME: dummy *) list;
 }
 [@@deriving make, yojson]
 
@@ -52,4 +52,4 @@ let parse_query q =
 let get req =
   let%lwt _ = authenticate_user req in
   let q = req |> Httpq.Server.query "q" in
-  parse_query q >|= to_yojson >>= respond_yojson
+  parse_query q >|= yojson_of_t >>= respond_yojson

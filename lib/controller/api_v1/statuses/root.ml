@@ -9,7 +9,7 @@ let get req =
   | None -> Httpq.Server.raise_error_response `Not_found
   | Some s ->
       let%lwt s = make_status_from_model ?self_id s in
-      s |> status_to_yojson |> Yojson.Safe.to_string
+      s |> yojson_of_status |> Yojson.Safe.to_string
       |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
 
 (* Recv POST /api/v1/statuses *)
@@ -32,5 +32,5 @@ let post req =
   Worker.Distribute.kick s;%lwt
   (* Return the result to the client *)
   let%lwt s = make_status_from_model ~self_id s in
-  s |> status_to_yojson |> Yojson.Safe.to_string
+  s |> yojson_of_status |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

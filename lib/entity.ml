@@ -66,9 +66,9 @@ type credential_account = {
 }
 [@@deriving make]
 
-let credential_account_to_yojson (ca : credential_account) : Yojson.Safe.t =
-  let a = account_to_yojson ca.account in
-  let source = credential_account_source_to_yojson ca.source in
+let yojson_of_credential_account (ca : credential_account) : Yojson.Safe.t =
+  let a = yojson_of_account ca.account in
+  let source = yojson_of_credential_account_source ca.source in
   match a with
   | `Assoc l -> `Assoc (("source", source) :: l)
   | _ -> assert false
@@ -175,7 +175,7 @@ type relationship = {
   endorsed : bool;
   note : string;
 }
-[@@deriving make, yojson { strict = false }]
+[@@deriving make, yojson] [@@yojson.allow_extra_fields]
 
 let make_relationship_from_model (self : Db.Account.t) (acct : Db.Account.t) =
   let id = acct.id |> string_of_int in
@@ -201,18 +201,18 @@ type notification = {
 }
 [@@deriving make]
 
-let notification_to_yojson (r : notification) : Yojson.Safe.t =
+let yojson_of_notification (r : notification) : Yojson.Safe.t =
   let l =
     [
       ("id", `String r.id);
       ("type", `String r.typ);
       ("created_at", `String r.created_at);
-      ("account", account_to_yojson r.account);
+      ("account", yojson_of_account r.account);
     ]
   in
   let l =
     r.status
-    |> Option.fold ~none:l ~some:(fun s -> ("status", status_to_yojson s) :: l)
+    |> Option.fold ~none:l ~some:(fun s -> ("status", yojson_of_status s) :: l)
   in
   `Assoc l
 

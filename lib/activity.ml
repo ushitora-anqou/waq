@@ -14,14 +14,14 @@ type webfinger_link = {
   typ : string; [@key "type"]
   href : string;
 }
-[@@deriving make, yojson { strict = false }]
+[@@deriving make, yojson] [@@yojson.allow_extra_fields]
 
 type webfinger = {
   subject : string;
   aliases : string list;
-  links : Yojson.Safe.t list;
+  links : json_any list;
 }
-[@@deriving make, yojson { strict = false }]
+[@@deriving make, yojson] [@@yojson.allow_extra_fields]
 
 [@@@warning "-30"]
 
@@ -361,8 +361,7 @@ let get_webfinger ~scheme ~domain ~username =
     Httpq.Client.fetch_exn @@ scheme ^ ":/" ^/ domain
     ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
   in
-  body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Result.get_ok
-  |> Lwt.return
+  body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Lwt.return
 
 let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   let domain = Uri.of_string r.id |> Uri.domain in
@@ -395,9 +394,8 @@ and fetch_account ?(scheme = "https") by =
           let href =
             webfinger.links
             |> List.find_map (fun l ->
-                   match webfinger_link_of_yojson l with
-                   | Ok l when l.rel = "self" -> Some l.href
-                   | _ -> None)
+                   let l = webfinger_link_of_yojson l in
+                   if l.rel = "self" then Some l.href else None)
             |> Option.get
           in
           make_new_account href)

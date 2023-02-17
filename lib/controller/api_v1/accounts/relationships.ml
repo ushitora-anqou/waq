@@ -12,6 +12,6 @@ let get req =
   |> Lwt_list.map_p (fun account_id ->
          Db.Account.get_one ~id:account_id ()
          >>= make_relationship_from_model self)
-  >|= List.map relationship_to_yojson
+  >|= List.map yojson_of_relationship
   >|= (fun l -> `List l)
   >>= respond_yojson

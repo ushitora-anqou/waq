@@ -11,4 +11,4 @@ let get req =
     | a -> Lwt.return a
     | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Not_found
   in
-  make_account_from_model a >|= account_to_yojson >>= respond_yojson
+  make_account_from_model a >|= yojson_of_account >>= respond_yojson

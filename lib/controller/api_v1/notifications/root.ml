@@ -23,6 +23,6 @@ let get req =
 
   Db.get_notifications ~account_id:self_id ~max_id ~since_id ~limit
   >>= Lwt_list.map_p (Entity.make_notification_from_model ~self_id)
-  >|= List.map notification_to_yojson
+  >|= List.map yojson_of_notification
   >|= (fun l -> `List l)
   >>= respond_yojson

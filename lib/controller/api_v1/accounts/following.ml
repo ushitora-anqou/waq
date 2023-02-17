@@ -22,7 +22,7 @@ let parse_req req =
 
 let respond_account_list accts =
   Lwt_list.map_p make_account_from_model accts
-  >|= List.map account_to_yojson
+  >|= List.map yojson_of_account
   >|= (fun l -> `List l)
   >>= respond_yojson
 

@@ -22,7 +22,7 @@ let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
       in
       let%lwt payload =
         Entity.make_notification_from_model ~self_id:u.id n
-        >|= Entity.notification_to_yojson >|= Yojson.Safe.to_string
+        >|= Entity.yojson_of_notification >|= Yojson.Safe.to_string
       in
       Streaming.(
         push

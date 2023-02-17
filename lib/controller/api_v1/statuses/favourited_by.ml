@@ -8,6 +8,6 @@ let get req =
   let%lwt accts = Db.get_favourited_by ~status_id in
   let%lwt accts =
     accts
-    |> Lwt_list.map_p (fun a -> make_account_from_model a >|= account_to_yojson)
+    |> Lwt_list.map_p (fun a -> make_account_from_model a >|= yojson_of_account)
   in
   `List accts |> respond_yojson

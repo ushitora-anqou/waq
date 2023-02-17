@@ -43,5 +43,5 @@ let post req =
   make_res ~access_token:token.token ~token_type:"Bearer" ~scope
     ~created_at:
       (token.created_at |> Ptime.to_span |> Ptime.Span.to_int_s |> Option.get)
-  |> res_to_yojson |> Yojson.Safe.to_string
+  |> yojson_of_res |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

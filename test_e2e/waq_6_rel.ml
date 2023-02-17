@@ -143,8 +143,7 @@ let f =
            then
              Some
                (List.assoc "payload" l |> expect_string
-              |> Yojson.Safe.from_string |> notification_of_yojson
-              |> Result.get_ok)
+              |> Yojson.Safe.from_string |> notification_of_yojson)
            else None)
   in
   let%lwt got_notifications = get_notifications `Waq ~token in

@@ -1,7 +1,7 @@
 (executable
  (name main)
  (preprocess
-  (pps lwt_ppx ppx_deriving.make ppx_deriving_yojson))
+  (pps lwt_ppx ppx_deriving.make ppx_yojson_conv))
  (libraries
   cohttp
   cohttp-lwt-unix
@@ -9,7 +9,6 @@
   logq
   lwt
   lwt.unix
-  ppx_deriving_yojson.runtime
   waq
   websocket
   websocket-lwt-unix

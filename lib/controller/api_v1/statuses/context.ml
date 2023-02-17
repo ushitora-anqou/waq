@@ -18,5 +18,5 @@ let get req =
         descendants |> Lwt_list.map_p (make_status_from_model ?self_id)
       in
       make ~ancestors ~descendants ()
-      |> to_yojson |> Yojson.Safe.to_string
+      |> yojson_of_t |> Yojson.Safe.to_string
       |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

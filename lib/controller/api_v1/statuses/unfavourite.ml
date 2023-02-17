@@ -26,4 +26,4 @@ let post req =
         Worker.Delivery.kick ~activity ~src ~dst);%lwt
 
   make_status_from_model ~self_id:account_id status
-  >|= status_to_yojson >>= respond_yojson
+  >|= yojson_of_status >>= respond_yojson

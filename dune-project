@@ -37,7 +37,7 @@
   ocaml
   postgresql
   ppx_deriving_yaml
-  ppx_deriving_yojson
+  ppx_yojson_conv
   ptime
   re
   result

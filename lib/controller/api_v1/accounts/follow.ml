@@ -82,4 +82,4 @@ let post req =
   let%lwt rel = make_relationship_from_model self acct in
   (* Pretend the follow succeeded *)
   let rel = { rel with following = true } in
-  rel |> relationship_to_yojson |> respond_yojson
+  rel |> yojson_of_relationship |> respond_yojson

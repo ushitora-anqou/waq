@@ -40,4 +40,4 @@ let post req =
         Lwt.return s
   in
   make_status_from_model ~self_id s
-  >|= status_to_yojson >>= Helper.respond_yojson
+  >|= yojson_of_status >>= Helper.respond_yojson

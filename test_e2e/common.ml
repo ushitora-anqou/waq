@@ -108,7 +108,7 @@ type account = {
   followers_count : int;
   following_count : int;
 }
-[@@deriving yojson { strict = false }]
+[@@deriving yojson] [@@yojson.allow_extra_fields]
 
 type status = {
   id : string;
@@ -120,30 +120,19 @@ type status = {
   account : account;
   favourites_count : int;
 }
-[@@deriving yojson { strict = false }]
+[@@deriving yojson] [@@yojson.allow_extra_fields]
 
 type relationship = { id : string; following : bool; followed_by : bool }
-[@@deriving yojson { strict = false }]
+[@@deriving yojson] [@@yojson.allow_extra_fields]
 
 type notification = {
   id : string;
   typ : string; [@key "type"]
   created_at : string;
   account : account;
-  status : status option;
+  status : status option; [@yojson.option]
 }
-[@@deriving make]
-
-let notification_of_yojson (y : Yojson.Safe.t) : (notification, unit) result =
-  let l = expect_assoc y in
-  let id = List.assoc "id" l |> expect_string in
-  let typ = List.assoc "type" l |> expect_string in
-  let created_at = List.assoc "created_at" l |> expect_string in
-  let account = List.assoc "account" l |> account_of_yojson |> Result.get_ok in
-  let status =
-    List.assoc_opt "status" l |> Option.map (status_of_yojson |.> Result.get_ok)
-  in
-  make_notification ~id ~typ ~created_at ~account ?status () |> Result.ok
+[@@deriving make, yojson]
 
 let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let target =
@@ -153,7 +142,7 @@ let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
     | Some domain -> src ^ username ^ "@" ^ domain
   in
   let%lwt r = do_fetch ~token kind target in
-  let a = r |> Yojson.Safe.from_string |> account_of_yojson |> Result.get_ok in
+  let a = r |> Yojson.Safe.from_string |> account_of_yojson in
   Lwt.return (a.id, a.username, a.acct)
 
 let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
@@ -181,10 +170,8 @@ let search ~token kind q =
   let%lwt r = do_fetch ~token kind (Uri.to_string u) in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   Lwt.return
-    ( List.assoc "accounts" l |> expect_list
-      |> List.map (account_of_yojson |.> Result.get_ok),
-      List.assoc "statuses" l |> expect_list
-      |> List.map (status_of_yojson |.> Result.get_ok),
+    ( List.assoc "accounts" l |> expect_list |> List.map account_of_yojson,
+      List.assoc "statuses" l |> expect_list |> List.map status_of_yojson,
       List.assoc "hashtags" l |> expect_list )
 
 let lookup ~token kind ?domain ~username () =
@@ -198,7 +185,7 @@ let lookup ~token kind ?domain ~username () =
 
 let get_account kind id =
   do_fetch kind ("/api/v1/accounts/" ^ id)
-  >|= Yojson.Safe.from_string >|= account_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= account_of_yojson
 
 let get_relationships ~token kind account_ids =
   let target =
@@ -207,22 +194,20 @@ let get_relationships ~token kind account_ids =
   in
   do_fetch ~token kind target
   >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (relationship_of_yojson |.> Result.get_ok)
+  >|= List.map relationship_of_yojson
 
 let get_followers ?token kind account_id =
   do_fetch ?token kind ("/api/v1/accounts/" ^ account_id ^ "/followers")
-  >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (account_of_yojson |.> Result.get_ok)
+  >|= Yojson.Safe.from_string >|= expect_list >|= List.map account_of_yojson
 
 let get_following ?token kind account_id =
   do_fetch ?token kind ("/api/v1/accounts/" ^ account_id ^ "/following")
-  >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (account_of_yojson |.> Result.get_ok)
+  >|= Yojson.Safe.from_string >|= expect_list >|= List.map account_of_yojson
 
 let get_notifications ?token kind =
   do_fetch ?token kind "/api/v1/notifications"
   >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (notification_of_yojson |.> Result.get_ok)
+  >|= List.map notification_of_yojson
 
 let follow ~token kind account_id =
   let%lwt r =
@@ -241,14 +226,13 @@ let unfollow ~token kind account_id =
 
 let get_status kind ?token status_id =
   do_fetch ?token kind ("/api/v1/statuses/" ^ status_id)
-  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= status_of_yojson
 
 let get_account_statuses kind ?token ?(exclude_replies = false) account_id =
   do_fetch ?token kind
     ("/api/v1/accounts/" ^ account_id ^ "/statuses?exclude_replies="
     ^ string_of_bool exclude_replies)
-  >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (status_of_yojson |.> Result.get_ok)
+  >|= Yojson.Safe.from_string >|= expect_list >|= List.map status_of_yojson
 
 let get_status_context kind status_id =
   let%lwt r = do_fetch kind ("/api/v1/statuses/" ^ status_id ^ "/context") in
@@ -256,12 +240,8 @@ let get_status_context kind status_id =
   match l with
   | [ ("ancestors", `List ancestors); ("descendants", `List descendants) ]
   | [ ("descendants", `List descendants); ("ancestors", `List ancestors) ] ->
-      let ancestors =
-        ancestors |> List.map (status_of_yojson |.> Result.get_ok)
-      in
-      let descendants =
-        descendants |> List.map (status_of_yojson |.> Result.get_ok)
-      in
+      let ancestors = ancestors |> List.map status_of_yojson in
+      let descendants = descendants |> List.map status_of_yojson in
       Lwt.return (ancestors, descendants)
   | _ -> assert false
 
@@ -277,24 +257,23 @@ let post ~token kind ?content ?in_reply_to_id () =
     `Assoc l |> Yojson.Safe.to_string
   in
   do_fetch ~token ~meth:`POST ~body kind "/api/v1/statuses"
-  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= status_of_yojson
 
 let reblog ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/reblog")
-  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= status_of_yojson
 
 let fav ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/favourite")
-  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= status_of_yojson
 
 let unfav ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/unfavourite")
-  >|= Yojson.Safe.from_string >|= status_of_yojson >|= Result.get_ok
+  >|= Yojson.Safe.from_string >|= status_of_yojson
 
 let get_favourited_by ~token kind ~id =
   do_fetch ~token ~meth:`GET kind ("/api/v1/statuses/" ^ id ^ "/favourited_by")
-  >|= Yojson.Safe.from_string >|= expect_list
-  >|= List.map (account_of_yojson |.> Result.get_ok)
+  >|= Yojson.Safe.from_string >|= expect_list >|= List.map account_of_yojson
 
 let home_timeline ~token kind =
   do_fetch ~token kind "/api/v1/timelines/home" >|= fun r ->

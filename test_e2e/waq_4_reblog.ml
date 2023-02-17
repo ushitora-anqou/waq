@@ -45,10 +45,10 @@ let f =
            in
            match (List.assoc "stream" l, List.assoc "event" l) with
            | `List [ `String "user" ], `String "update" ->
-               let s = payload |> status_of_yojson |> Result.get_ok in
+               let s = payload |> status_of_yojson in
                (s.id :: ws_recv_ids, ws_recv_notfs)
            | `List [ `String "user" ], `String "notification" ->
-               let n = payload |> notification_of_yojson |> Result.get_ok in
+               let n = payload |> notification_of_yojson in
                (ws_recv_ids, n :: ws_recv_notfs)
            | _ -> (ws_recv_ids, ws_recv_notfs))
          ([], [])
