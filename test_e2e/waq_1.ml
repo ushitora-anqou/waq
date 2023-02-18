@@ -23,6 +23,8 @@ let f =
   assert (l |> List.assoc "username" |> expect_string = "user1");
   assert (l |> List.assoc "acct" |> expect_string = "user1");
   assert (
+    l |> List.assoc "display_name" |> expect_string = "User 1's display name");
+  assert (
     l |> List.assoc "source" |> expect_assoc |> List.assoc "privacy"
     |> expect_string = "public");
   let account_id = l |> List.assoc "id" |> expect_string in
@@ -39,5 +41,12 @@ let f =
   assert (r.statuses_count = 0);
   assert (r.followers_count = 0);
   assert (r.following_count = 0);
+
+  let%lwt a =
+    update_credentials `Waq ~token:access_token ~display_name:"mod user1" ()
+  in
+  assert (a.display_name = "mod user1");
+  let%lwt a = get_account `Waq account_id in
+  assert (a.display_name = "mod user1");
 
   Lwt.return_unit

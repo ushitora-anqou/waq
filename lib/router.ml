@@ -54,6 +54,7 @@ let routes_from_clients =
           get "/verify_credentials" Verify_credentials.get;
           get "/lookup" Lookup.get;
           get "/relationships" Relationships.get;
+          patch "/update_credentials" Update_credentials.patch;
           get "/:id" Root.get; (* Wildcard match *)
         ];
         scope "/timelines" Timelines.[

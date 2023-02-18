@@ -13,7 +13,14 @@ type emoji = {
 type field = { name : string; value : string; verified_at : string option }
 [@@deriving make, yojson]
 
-type credential_account_source = { privacy : string; sensitive : bool }
+type credential_account_source = {
+  note : string;
+  fields : field list;
+  privacy : string;
+  sensitive : bool;
+  language : string;
+  follow_requests_count : int;
+}
 [@@deriving make, yojson]
 
 type account = {
@@ -63,7 +70,8 @@ let make_account_from_model (a : Db.Account.t) : account Lwt.t =
 (* Entity CredentialAccount *)
 let make_credential_account_from_model (a : Db.Account.t) : account Lwt.t =
   let source =
-    make_credential_account_source ~privacy:"public" ~sensitive:false
+    make_credential_account_source ~privacy:"public" ~sensitive:false ~note:""
+      ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
   in
   make_account_from_model a >|= fun account ->
   { account with source = Some source }

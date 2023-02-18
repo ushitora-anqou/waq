@@ -34,6 +34,8 @@
   lwt
   lwt_ppx
   mirage-crypto-rng
+  multipart_form
+  multipart_form-lwt
   ocaml
   postgresql
   ppx_deriving_yaml

@@ -103,6 +103,7 @@ type account = {
   id : string;
   username : string;
   acct : string;
+  display_name : string;
   last_status_at : string option;
   statuses_count : int;
   followers_count : int;
@@ -133,6 +134,37 @@ type notification = {
   status : status option; [@yojson.option]
 }
 [@@deriving make, yojson]
+
+let update_credentials ~token kind ?display_name () =
+  let target = "/api/v1/accounts/update_credentials" in
+  let headers =
+    [
+      (`Accept, "application/json");
+      (`Authorization, "Bearer " ^ token);
+      ( `Content_type,
+        "multipart/form-data; \
+         boundary=---------------------------91791948726096252761377705945" );
+    ]
+  in
+  let body =
+    [ {|-----------------------------91791948726096252761377705945--|}; {||} ]
+  in
+  let body =
+    match display_name with
+    | None -> body
+    | Some display_name ->
+        [
+          {|-----------------------------91791948726096252761377705945|};
+          {|Content-Disposition: form-data; name="display_name"|};
+          {||};
+          display_name;
+        ]
+        @ body
+  in
+  assert (List.length body <> 2);
+  let body = String.concat "\r\n" body in
+  fetch_exn ~headers ~meth:`PATCH ~body (url kind target)
+  >|= Yojson.Safe.from_string >|= account_of_yojson
 
 let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let target =

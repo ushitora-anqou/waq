@@ -38,9 +38,9 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
     let%lwt resp, body =
       match meth with
       | `GET -> Client.get ~headers uri
-      | `POST ->
+      | `POST | `PATCH ->
           let body = Cohttp_lwt.Body.of_string body in
-          Client.post ~headers ~body uri
+          Client.call ~headers ~body meth uri
       | _ -> failwith "Not implemented method"
     in
     let status = Response.status resp in

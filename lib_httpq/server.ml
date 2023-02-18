@@ -4,6 +4,10 @@ open Lwt.Infix
 type request_body =
   | JSON of Yojson.Safe.t
   | Form of (string * string list) list
+  | MultipartFormdata of {
+      loaded : (string * string) list;
+      raw : (Multipart_form.Header.t * string Lwt_stream.t) list;
+    }
 
 type request =
   | Request of {
@@ -15,7 +19,7 @@ type request =
       query : (string * string list) list;
       param : (string * string) list;
       body : request_body;
-      raw_body : string;
+      raw_body : string option;
       headers : Headers.t;
     }
 
@@ -34,7 +38,10 @@ let raise_error_response ?(body = "") status =
 let respond ?(status = `OK) ?(headers = []) (body : string) =
   Response { status; headers; body } |> Lwt.return
 
-let body = function Request { raw_body; _ } -> raw_body
+let body = function
+  | Request { raw_body = Some raw_body; _ } -> raw_body
+  | _ -> failwith "body: none"
+
 let param name = function Request { param; _ } -> List.assoc name param
 
 let query_many_opt name : request -> string list option = function
@@ -63,11 +70,27 @@ let query ?default name = function
             match List.assoc_opt name query with
             | Some l -> List.hd l
             | None -> body |> List.assoc name |> List.hd)
+        | MultipartFormdata { loaded; _ } -> loaded |> List.assoc name
       with
       | _ when default <> None -> Option.get default
       | _ -> raise_error_response `Bad_request)
 
 let query_opt name r = try Some (query name r) with _ -> None
+
+let formdata name r =
+  let open Multipart_form in
+  try
+    match r with
+    | Request { body = MultipartFormdata { raw; _ }; _ } ->
+        raw
+        |> List.find (fun (hdr, _stream) ->
+               let ( let* ) v f = v |> Option.fold ~none:false ~some:f in
+               let* cd = Header.content_disposition hdr in
+               let* name' = Content_disposition.name cd in
+               name = name')
+        |> snd
+    | _ -> failwith "formdata: not MultipartFormdata"
+  with _ -> raise_error_response `Bad_request
 
 let header_opt name : request -> string option = function
   | Request { headers; _ } -> headers |> List.assoc_opt name
@@ -82,29 +105,62 @@ let default_handler : handler = function
       in
       respond ~status ""
 
+let parse_body ~body ~headers =
+  match List.assoc_opt `Content_type headers with
+  | Some s when String.starts_with ~prefix:"multipart/form-data" s -> (
+      let open Multipart_form in
+      let content_type =
+        match Content_type.of_string (s ^ "\r\n") with
+        | Ok s -> s
+        | Error (`Msg _msg) -> raise_error_response `Bad_request
+      in
+      let `Parse th, stream =
+        Multipart_form_lwt.stream ~identify:Fun.id
+          (Bare_server.Body.to_stream body)
+          content_type
+      in
+      let rec save_part loaded raw =
+        match%lwt Lwt_stream.get stream with
+        | None -> Lwt.return (MultipartFormdata { loaded; raw })
+        | Some (_, hdr, contents) ->
+            let raw = (hdr, contents) :: raw in
+            let%lwt loaded =
+              let ( let* ) v f =
+                v |> Option.fold ~none:(Lwt.return loaded) ~some:f
+              in
+              let* cd = Header.content_disposition hdr in
+              let* name = Content_disposition.name cd in
+              match Content_disposition.filename cd with
+              | Some _ -> Lwt.return loaded
+              | None -> (
+                  match%lwt Lwt_stream.get contents with
+                  | None -> Lwt.return loaded
+                  | Some contents -> Lwt.return ((name, contents) :: loaded))
+            in
+            save_part loaded raw
+      in
+      match%lwt Lwt.both th (save_part [] []) with
+      | Error (`Msg _msg), _ -> raise_error_response `Bad_request
+      | Ok _, data -> Lwt.return (None, data))
+  | Some "application/json" -> (
+      Bare_server.Body.to_string body >|= fun raw_body ->
+      ( Some raw_body,
+        try JSON (Yojson.Safe.from_string raw_body) with _ -> Form [] ))
+  | Some "application/x-www-form-urlencoded" | _ ->
+      Bare_server.Body.to_string body >|= fun raw_body ->
+      (Some raw_body, Form (Uri.query_of_encoded raw_body))
+
 let start_server ?(port = 8080) (handler : handler) k : unit =
   Bare_server.start_server port (k ())
   @@ fun (req : Bare_server.Request.t) (body : Bare_server.Body.t) :
     Bare_server.Response.t Lwt.t ->
-  let uri = Bare_server.Request.uri req in
-  let meth = Bare_server.Request.meth req in
-  let headers = Bare_server.Request.headers req |> Headers.of_list in
-  let path = Uri.path uri in
-  let query = Uri.query uri in
-
-  (* Parse body *)
-  let%lwt raw_body = Bare_server.Body.to_string body in
-  let parsed_body =
-    if raw_body = "" then Form []
-    else
-      match List.assoc_opt `Content_type headers with
-      | Some "application/json" -> JSON (Yojson.Safe.from_string raw_body)
-      | Some "application/x-www-form-urlencoded" | _ ->
-          Form (raw_body |> Uri.query_of_encoded)
-  in
-
-  (* Construct request *)
-  let req =
+  let parse_req () =
+    let uri = Bare_server.Request.uri req in
+    let meth = Bare_server.Request.meth req in
+    let headers = Bare_server.Request.headers req |> Headers.of_list in
+    let path = Uri.path uri in
+    let query = Uri.query uri in
+    parse_body ~body ~headers >|= fun (raw_body, parsed_body) ->
     Request
       {
         bare_req = req;
@@ -122,7 +178,7 @@ let start_server ?(port = 8080) (handler : handler) k : unit =
 
   (* Invoke the handler *)
   match%lwt
-    try%lwt handler req
+    try%lwt parse_req () >>= handler
     with ErrorResponse { status; body } ->
       Logq.debug (fun m ->
           m "Error response raised: %s\n%s" (Status.to_string status)
@@ -184,6 +240,7 @@ module Router = struct
 
   let get target f : spec_entry = Route (`GET, target, f)
   let post target f : spec_entry = Route (`POST, target, f)
+  let patch target f : spec_entry = Route (`PATCH, target, f)
   let options target f : spec_entry = Route (`OPTIONS, target, f)
   let scope (name : string) (spec : spec) : spec_entry = Scope (name, spec)
 end
