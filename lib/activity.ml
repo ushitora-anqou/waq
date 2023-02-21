@@ -76,13 +76,17 @@ and ap_announce = {
 }
 
 and ap_like = { id : string; actor : string; obj : string }
+and ap_delete = { id : string; actor : string; to_ : string list; obj : t }
+and ap_tombstone = { id : string }
 
 and t =
   | Accept of ap_accept
   | Announce of ap_announce
   | Create of ap_create
+  | Delete of ap_delete
   | Follow of ap_follow
   | Like of ap_like
+  | Tombstone of ap_tombstone
   | Note of ap_note
   | Person of ap_person
   | Undo of ap_undo
@@ -93,24 +97,30 @@ and t =
 let get_accept = function Accept r -> Some r | _ -> None
 let get_announce = function Announce r -> Some r | _ -> None
 let get_create = function Create r -> Some r | _ -> None
+let get_delete = function Delete r -> Some r | _ -> None
 let get_follow = function Follow r -> Some r | _ -> None
 let get_like = function Like r -> Some r | _ -> None
 let get_note = function Note r -> Some r | _ -> None
 let get_person = function Person r -> Some r | _ -> None
+let get_tombstone = function Tombstone r -> Some r | _ -> None
 let get_undo = function Undo r -> Some r | _ -> None
 let of_accept r = Accept r
 let of_note r = Note r
 let announce r = Announce r
 let create r = Create r
+let delete r = Delete r
 let follow r = Follow r
+let like r = Like r
 let note r = Note r
 let person r = Person r
+let tombstone r = Tombstone r
 let undo r = Undo r
-let like r = Like r
 let make_follow ~id ~actor ~obj : ap_follow = { id; actor; obj }
 let make_accept ~id ~actor ~obj : ap_accept = { id; actor; obj }
 let make_undo ~id ~actor ~obj : ap_undo = { id; actor; obj }
 let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
+let make_delete ~id ~actor ~obj ~to_ : ap_delete = { id; actor; obj; to_ }
+let make_tombstone ~id : ap_tombstone = { id }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
@@ -210,6 +220,12 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let obj = string Object in
       make_announce ~id ~actor:(string Actor) ~published ~to_ ~cc ~obj
       |> announce
+  | "Delete" ->
+      let actor = string Actor in
+      let to_ = list To |> List.map expect_string in
+      let obj = get Object |> of_yojson in
+      make_delete ~id ~actor ~to_ ~obj |> delete
+  | "Tombstone" -> make_tombstone ~id |> tombstone
   | "Follow" ->
       make_follow ~id ~actor:(string Actor) ~obj:(string Object) |> follow
   | "Undo" ->
@@ -286,6 +302,14 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Cc, `List (r.cc |> List.map string));
           (Object, to_yojson r.obj);
         ]
+    | Delete r ->
+        [
+          (Id, `String r.id);
+          (Type, `String "Delete");
+          (Actor, `String r.actor);
+          (To, `List (r.to_ |> List.map string));
+          (Object, to_yojson r.obj);
+        ]
     | Follow r ->
         [
           (Id, `String r.id);
@@ -332,6 +356,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
                 ("publicKeyPem", `String r.public_key_pem);
               ] );
         ]
+    | Tombstone r -> [ (Id, `String r.id); (Type, `String "Tombstone") ]
     | Undo r ->
         [
           (Id, `String r.id);

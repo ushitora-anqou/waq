@@ -11,6 +11,8 @@ let all_tests =
     ("waq-mstdn-6", Waq_mstdn_6_fav.f);
     ("waq-mstdn-7", Waq_mstdn_7_fav.f);
     ("waq-mstdn-8", Waq_mstdn_8_lookup_search.f);
+    ("waq-mstdn-9-1", Waq_mstdn_9_delete.f_waq_mstdn);
+    ("waq-mstdn-9-2", Waq_mstdn_9_delete.f_mstdn_waq);
     ("waq-1", Waq_1.f);
     ("waq-2", Waq_2_ws.f);
     ("waq-3", Waq_3.f);

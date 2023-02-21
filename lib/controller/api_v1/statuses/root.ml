@@ -46,6 +46,6 @@ let delete req =
     with Sql.NoRowFound -> Httpq.Server.raise_error_response `Not_found
   in
 
-  Worker.Removal.kick ~self_id ~status_id;%lwt
+  Worker.Removal.kick ~account_id:self_id ~status_id;%lwt
 
   make_status_from_model ~self_id status >|= yojson_of_status >>= respond_yojson

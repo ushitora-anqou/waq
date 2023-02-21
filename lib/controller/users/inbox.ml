@@ -101,6 +101,13 @@ let kick_inbox_like (req : ap_like) =
     ~typ:`favourite ~src ~dst;%lwt
   Lwt.return_unit
 
+let kick_inbox_delete (req : ap_delete) =
+  let%lwt account = Db.Account.get_one ~uri:req.actor () in
+  let%lwt status =
+    Db.Status.get_one ~uri:(get_tombstone req.obj |> Option.get).id ()
+  in
+  Worker.Removal.kick ~account_id:account.id ~status_id:status.id
+
 (* Recv POST /users/:name/inbox *)
 let post req =
   let body = Httpq.Server.body req in
@@ -108,10 +115,11 @@ let post req =
   (match of_yojson j with
   | Accept r -> kick_inbox_accept r
   | Announce r -> kick_inbox_announce r
-  | Follow r -> kick_inbox_follow r
-  | Undo r -> kick_inbox_undo r
   | Create r -> kick_inbox_create r
+  | Delete r -> kick_inbox_delete r
+  | Follow r -> kick_inbox_follow r
   | Like r -> kick_inbox_like r
+  | Undo r -> kick_inbox_undo r
   | _ | (exception _) ->
       Logq.warn (fun m -> m "Ignoring inbox message:\n%s" body);
       Lwt.return_unit);%lwt
