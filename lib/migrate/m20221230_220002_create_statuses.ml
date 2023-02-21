@@ -7,6 +7,7 @@ CREATE TABLE statuses (
   text TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  deleted_at TIMESTAMP WITHOUT TIME ZONE,
   in_reply_to_id BIGINT,
   reblog_of_id BIGINT,
   account_id BIGINT NOT NULL,

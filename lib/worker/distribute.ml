@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Util
 
 let deliver_to_local ~(followers : Db.User.t list) ~(status : Db.Status.t) :
@@ -22,16 +21,8 @@ let kick (s : Db.Status.t) =
   let%lwt a = Db.Account.get_one ~id:s.account_id () in
   let is_status_from_remote = a.domain <> None in
 
-  let%lwt followers = Db.Follow.get_many ~target_account_id:a.id () in
-  let%lwt local_followers, remote_followers =
-    followers
-    |> Lwt_list.partition_map_p (fun (f : Db.Follow.t) ->
-           let%lwt a = Db.Account.get_one ~id:f.account_id () in
-           match a.domain with
-           | None (* local *) ->
-               Db.User.get_one ~account_id:a.id () >|= fun u -> Either.Left u
-           | Some _ (* remote *) -> Lwt.return (Either.Right a))
-  in
+  let%lwt local_followers = Db.get_local_followers ~account_id:a.id in
+  let%lwt remote_followers = Db.get_remote_followers ~account_id:a.id in
 
   (* Deliver to self *)
   (if is_status_from_remote then Lwt.return_unit (* Just ignore *)

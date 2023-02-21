@@ -37,7 +37,7 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
   try%lwt
     let%lwt resp, body =
       match meth with
-      | `GET -> Client.get ~headers uri
+      | `GET | `DELETE -> Client.call ~headers meth uri
       | `POST | `PATCH ->
           let body = Cohttp_lwt.Body.of_string body in
           Client.call ~headers ~body meth uri

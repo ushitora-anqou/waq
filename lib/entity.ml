@@ -113,14 +113,16 @@ let rec make_status_from_model ?(visibility = "public") ?self_id
     | None -> Lwt.return_none
     | Some id -> (
         match%lwt Db.Status.get_one ~id () with
-        | exception Sql.NoRowFound ->
-            Httpq.Server.raise_error_response `Bad_request
+        | exception Sql.NoRowFound -> Lwt.return_none
         | s -> s.account_id |> string_of_int |> Lwt.return_some)
   in
   let%lwt reblog =
-    s.reblog_of_id
-    |> Lwt_option.map (fun id ->
-           Db.Status.get_one ~id () >>= make_status_from_model)
+    match s.reblog_of_id with
+    | None -> Lwt.return_none
+    | Some id -> (
+        match%lwt Db.Status.get_one ~id () with
+        | exception Sql.NoRowFound -> Lwt.return_none
+        | s -> make_status_from_model s >|= Option.some)
   in
   let%lwt reblogs_count =
     s.reblog_of_id |> Option.value ~default:s.id |> Db.Status.get_reblogs_count

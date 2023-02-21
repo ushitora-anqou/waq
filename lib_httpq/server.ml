@@ -241,6 +241,7 @@ module Router = struct
   let get target f : spec_entry = Route (`GET, target, f)
   let post target f : spec_entry = Route (`POST, target, f)
   let patch target f : spec_entry = Route (`PATCH, target, f)
+  let delete target f : spec_entry = Route (`DELETE, target, f)
   let options target f : spec_entry = Route (`OPTIONS, target, f)
   let scope (name : string) (spec : spec) : spec_entry = Scope (name, spec)
 end

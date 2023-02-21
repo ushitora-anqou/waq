@@ -38,6 +38,7 @@ let routes_from_clients =
         scope "/statuses" Statuses.[
           post "" Root.post;
           get "/:id" Root.get;
+          delete "/:id" Root.delete;
           get "/:id/context" Context.get;
           post "/:id/reblog" Reblog.post;
           post "/:id/favourite" Favourite.post;

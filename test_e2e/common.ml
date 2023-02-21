@@ -291,6 +291,10 @@ let post ~token kind ?content ?in_reply_to_id () =
   do_fetch ~token ~meth:`POST ~body kind "/api/v1/statuses"
   >|= Yojson.Safe.from_string >|= status_of_yojson
 
+let delete_status ~token kind status_id =
+  do_fetch ~token ~meth:`DELETE kind ("/api/v1/statuses/" ^ status_id)
+  >|= Yojson.Safe.from_string >|= status_of_yojson
+
 let reblog ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/reblog")
   >|= Yojson.Safe.from_string >|= status_of_yojson

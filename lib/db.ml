@@ -81,11 +81,17 @@ module Status = struct
     text : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
+    deleted_at : Ptime.t option;
     in_reply_to_id : int option;
     reblog_of_id : int option;
     account_id : int;
   }
   [@@sql.table_name "statuses"] [@@deriving make, sql]
+
+  let get_one' = get_one
+  let get_many' = get_many
+  let get_one = get_one ~deleted_at:None
+  let get_many = get_many ~deleted_at:None
 
   let save_one_with_uri s =
     let%lwt s = save_one s in
@@ -97,13 +103,15 @@ module Status = struct
 
   let get_reblogs_count (id : int) : int Lwt.t =
     do_query @@ fun c ->
-    Sql.query_row c "SELECT COUNT(*) FROM statuses WHERE reblog_of_id = $1"
+    Sql.query_row c
+      {|SELECT COUNT(*) FROM statuses WHERE deleted_at IS NULL AND reblog_of_id = $1|}
       ~p:[ `Int id ]
     >|= List.hd >|= snd >|= Sql.Value.expect_int
 
   let get_replies_count (id : int) : int Lwt.t =
     do_query @@ fun c ->
-    Sql.query_row c "SELECT COUNT(*) FROM statuses WHERE in_reply_to_id = $1"
+    Sql.query_row c
+      {|SELECT COUNT(*) FROM statuses WHERE deleted_at IS NULL AND in_reply_to_id = $1|}
       ~p:[ `Int id ]
     >|= List.hd >|= snd >|= Sql.Value.expect_int
 
@@ -112,9 +120,9 @@ module Status = struct
       ~p:[ `Int id ]
       {|
 WITH RECURSIVE t(id) AS (
-  SELECT in_reply_to_id FROM statuses WHERE id = $1
+  SELECT in_reply_to_id FROM statuses WHERE deleted_at IS NULL AND id = $1
   UNION
-  SELECT in_reply_to_id FROM statuses s, t WHERE s.id = t.id
+  SELECT in_reply_to_id FROM statuses s, t WHERE deleted_at IS NULL AND s.id = t.id
 )
 SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
 
@@ -123,11 +131,20 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
       ~p:[ `Int id ]
       {|
 WITH RECURSIVE t(id) AS (
-  SELECT id FROM statuses WHERE in_reply_to_id = $1
+  SELECT id FROM statuses WHERE deleted_at IS NULL AND in_reply_to_id = $1
   UNION
-  SELECT s.id FROM statuses s, t WHERE s.in_reply_to_id = t.id
+  SELECT s.id FROM statuses s, t WHERE deleted_at IS NULL AND s.in_reply_to_id = t.id
 )
 SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
+
+  let discard_with_reblogs id : t Lwt.t =
+    let time = Ptime.now () in
+    do_query (fun c ->
+        Sql.execute c
+          {|UPDATE statuses SET deleted_at = $2 WHERE reblog_of_id = $1 AND deleted_at IS NULL|}
+          ~p:[ `Int id; `Timestamp time ]);%lwt
+    query_row "UPDATE statuses SET deleted_at = $2 WHERE id = $1 RETURNING *"
+      ~p:[ `Int id; `Timestamp time ]
 end
 
 module Follow = struct
@@ -265,6 +282,7 @@ let home_timeline ~id ~limit ~max_id ~since_id : Status.t list Lwt.t =
     {|
 SELECT * FROM statuses
 WHERE
+  deleted_at IS NULL AND
   ( account_id = $1 OR
     account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) ) AND
   ( $3 = 0 OR id >= $3 ) AND ( $4 = 0 OR id <= $4 )
@@ -281,6 +299,7 @@ let account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies :
     Status.t list Lwt.t =
   let where =
     [
+      "deleted_at IS NULL";
       "account_id = :id";
       ":since_id = 0 OR id >= :since_id";
       ":max_id = 0 OR id <= :max_id";
@@ -318,13 +337,14 @@ WHERE f.status_id = $1
 
 let count_statuses ~account_id : int Lwt.t =
   do_query @@ fun c ->
-  Sql.query_row c {|SELECT COUNT(*) FROM statuses WHERE account_id = $1|}
+  Sql.query_row c
+    {|SELECT COUNT(*) FROM statuses WHERE deleted_at IS NULL AND account_id = $1|}
     ~p:[ `Int account_id ]
   >|= List.hd >|= snd >|= Sql.Value.expect_int
 
 let get_last_status_at ~account_id : Ptime.t option Lwt.t =
   Status.query
-    {|SELECT * FROM statuses WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1 |}
+    {|SELECT * FROM statuses WHERE deleted_at IS NULL AND account_id = $1 ORDER BY created_at DESC LIMIT 1 |}
     ~p:[ `Int account_id ]
   >|= function
   | [ s ] -> Some s.created_at
@@ -403,3 +423,21 @@ LIMIT :limit|}
         ("max_id", `Int (Option.value ~default:0 max_id));
       ]
   >|= List.map Notification.pack
+
+let get_local_followers ~account_id : User.t list Lwt.t =
+  User.query
+    {|
+SELECT u.* FROM users u
+WHERE u.id IN (
+  SELECT a.id FROM accounts a
+  INNER JOIN follows f ON a.id = f.account_id
+  WHERE f.target_account_id = $1)|}
+    ~p:[ `Int account_id ]
+
+let get_remote_followers ~account_id : Account.t list Lwt.t =
+  Account.query
+    {|
+SELECT a.* FROM accounts a
+INNER JOIN follows f ON a.id = f.account_id
+WHERE f.target_account_id = $1 AND a.domain IS NOT NULL|}
+    ~p:[ `Int account_id ]
