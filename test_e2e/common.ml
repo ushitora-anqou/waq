@@ -57,13 +57,18 @@ let new_mastodon_session f =
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
 
-let make_waq_and_mstdn_scenario handler () : unit =
+let make_waq_and_mstdn_scenario ?(timeout = 30.0) handler () : unit =
   new_session @@ fun waq_token ->
   Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
   new_mastodon_session @@ fun mstdn_token ->
   Logq.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
   Unix.sleep 10;
-  Lwt_main.run @@ handler waq_token mstdn_token
+  Lwt_main.run
+  @@ Lwt.pick
+       [
+         handler waq_token mstdn_token;
+         (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout");
+       ]
 
 let make_waq_scenario handler () : unit =
   new_session @@ fun waq_token ->
