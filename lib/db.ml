@@ -52,6 +52,7 @@ module Account = struct
     uri : string;
     url : string option;
     inbox_url : string;
+    shared_inbox_url : string;
     followers_url : string;
     created_at : Ptime.t;
     updated_at : Ptime.t;
@@ -72,6 +73,12 @@ module Account = struct
     named_query_row
       ("UPDATE accounts SET " ^ query ^ " WHERE id = :id RETURNING *")
       a
+
+  let preferred_inbox_url a =
+    match (a.inbox_url, a.shared_inbox_url) with s, "" -> s | _, s -> s
+
+  let preferred_inbox_urls accts =
+    accts |> List.map preferred_inbox_url |> List.sort_uniq compare
 end
 
 module Status = struct

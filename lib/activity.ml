@@ -54,6 +54,7 @@ and ap_person = {
   followers : string;
   inbox : string;
   outbox : string;
+  shared_inbox : string;
   preferred_username : string;
   name : string;
   summary : string;
@@ -111,6 +112,7 @@ let get_tombstone = function Tombstone r -> Some r | _ -> None
 let get_undo = function Undo r -> Some r | _ -> None
 let of_accept r = Accept r
 let of_note r = Note r
+let accept r = Accept r
 let announce r = Announce r
 let create r = Create r
 let delete r = Delete r
@@ -137,13 +139,15 @@ let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to :
     ap_note =
   { id; published; attributed_to; to_; cc; content; in_reply_to }
 
-let make_person ~id ~following ~followers ~inbox ~outbox ~preferred_username
-    ~name ~summary ~url ~tag ~public_key_id ~public_key_owner ~public_key_pem =
+let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
+    ~preferred_username ~name ~summary ~url ~tag ~public_key_id
+    ~public_key_owner ~public_key_pem =
   {
     id;
     following;
     followers;
     inbox;
+    shared_inbox;
     outbox;
     preferred_username;
     name;
@@ -169,6 +173,7 @@ type property =
   | Following
   | Followers
   | Inbox
+  | SharedInbox
   | Outbox
   | PreferredUsername
   | Name
@@ -176,6 +181,7 @@ type property =
   | Url
   | Tag
   | PublicKey
+  | Endpoints
 
 let string_of_property : property -> string = function
   | Id -> "id"
@@ -191,6 +197,7 @@ let string_of_property : property -> string = function
   | Following -> "following"
   | Followers -> "followers"
   | Inbox -> "inbox"
+  | SharedInbox -> "sharedInbox"
   | Outbox -> "outbox"
   | PreferredUsername -> "preferredUsername"
   | Name -> "name"
@@ -198,6 +205,7 @@ let string_of_property : property -> string = function
   | Url -> "url"
   | Tag -> "tag"
   | PublicKey -> "publicKey"
+  | Endpoints -> "endpoints"
 
 let rec of_yojson (src : Yojson.Safe.t) =
   let expect_assoc = function `Assoc l -> l | _ -> failwith "Expect assoc" in
@@ -259,6 +267,17 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let following = string Following in
       let followers = string Followers in
       let inbox = string Inbox in
+      let shared_inbox =
+        match string SharedInbox with
+        | s -> s
+        | exception _ -> (
+            match assoc Endpoints with
+            | l ->
+                l
+                |> List.assoc (string_of_property SharedInbox)
+                |> expect_string
+            | exception _ -> "")
+      in
       let outbox = string Outbox in
       let preferred_username = string PreferredUsername in
       let name = string Name in
@@ -273,9 +292,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let public_key_pem =
         public_key |> List.assoc "publicKeyPem" |> expect_string
       in
-      make_person ~id ~following ~followers ~inbox ~outbox ~preferred_username
-        ~name ~summary ~url ~tag ~public_key_id ~public_key_owner
-        ~public_key_pem
+      make_person ~id ~following ~followers ~inbox ~outbox ~shared_inbox
+        ~preferred_username ~name ~summary ~url ~tag ~public_key_id
+        ~public_key_owner ~public_key_pem
       |> person
   | _ -> assert false
 
@@ -351,6 +370,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Following, `String r.following);
           (Followers, `String r.followers);
           (Inbox, `String r.inbox);
+          (SharedInbox, `String r.shared_inbox);
           (Outbox, `String r.outbox);
           (PreferredUsername, `String r.preferred_username);
           (Name, `String r.name);
@@ -411,7 +431,7 @@ let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   Db.Account.make ~username:r.preferred_username ~domain
     ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
     ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
-    ~updated_at:now ()
+    ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
   |> Db.Account.save_one
 
 and account_person (r : ap_person) : Db.Account.t Lwt.t =
@@ -446,9 +466,7 @@ and fetch_account ?(scheme = "https") by =
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound -> make_new_account uri)
 
-(* Send activity+json to POST inbox *)
-let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
-    ~(dst : Db.Account.t) =
+let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
   let body = Yojson.Safe.to_string body in
   let sign =
     let priv_key =
@@ -460,16 +478,19 @@ let post_activity_to_inbox ~(body : Yojson.Safe.t) ~(src : Db.Account.t)
     in
     Some (priv_key, key_id, signed_headers)
   in
+  (sign, body)
+
+let post_activity_json ~body ~sign ~url =
   let meth = `POST in
   let headers = [ (`Content_type, "application/activity+json") ] in
-  let%lwt res = Httpq.Client.fetch ~meth ~headers ~body ~sign dst.inbox_url in
+  let%lwt res = Httpq.Client.fetch ~meth ~headers ~body ~sign url in
   Lwt.return
   @@
   match res with
   | Ok (status, _, _body)
     when Cohttp.Code.(status |> code_of_status |> is_success) ->
       ()
-  | _ -> failwith "Failed to post activity to inbox"
+  | _ -> failwith "Failed to post activity json"
 
 let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   let%lwt self = Db.Account.get_one ~id:s.account_id () in

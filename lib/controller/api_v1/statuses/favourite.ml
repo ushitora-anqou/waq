@@ -28,7 +28,7 @@ let post req =
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in
         if%lwt Db.Account.is_remote ~id:status.account_id then
           let%lwt activity = Activity.(like_of_favourite fav >|= like) in
-          Worker.Delivery.kick ~activity ~src ~dst
+          Worker.Delivery.kick ~activity ~src ~url:dst.inbox_url
         else
           Worker.Local_notify.kick ~activity_id:fav.id ~activity_type:`Favourite
             ~typ:`favourite ~src ~dst);%lwt

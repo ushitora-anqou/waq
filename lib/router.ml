@@ -16,6 +16,7 @@ let routes_from_servers =
     [
       get "/.well-known/host-meta" Well_known_host_meta.get;
       get "/.well-known/webfinger" Well_known_webfinger.get;
+      post "/inbox" Inbox.post;
       scope "/users/:name"
         Users.
           [

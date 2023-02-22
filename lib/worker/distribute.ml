@@ -9,12 +9,11 @@ let deliver_to_local ~(followers : Db.User.t list) ~(status : Db.Status.t) :
 
 let deliver_to_remote ~(followers : Db.Account.t list) ~(status : Db.Status.t) :
     unit Lwt.t =
-  (* FIXME: use sharedInbox *)
-  followers
-  |> Lwt_list.iter_p (fun (a : Db.Account.t) ->
+  followers |> Db.Account.preferred_inbox_urls
+  |> Lwt_list.iter_p (fun url ->
          match status.reblog_of_id with
-         | None -> Create_note.kick a.id status
-         | Some _ -> Announce.kick a status)
+         | None -> Create_note.kick ~status ~url
+         | Some _ -> Announce.kick ~status ~url)
 
 let kick (s : Db.Status.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->

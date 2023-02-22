@@ -25,7 +25,12 @@ let all_tests =
 
 let execute_one_test (name, f) =
   Logq.debug (fun m -> m "===== Testcase %s =====" name);
-  f ()
+  try f ()
+  with e ->
+    Logq.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
+    Logq.err (fun m -> m "Testcase %s failed: %s" name (Printexc.to_string e));
+    Logq.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
+    raise e
 
 let () =
   print_newline ();

@@ -1,4 +1,7 @@
-let kick ~(activity : Activity.t) ~(dst : Db.Account.t) ~(src : Db.Account.t) =
+open Activity
+
+let kick ~(activity : t) ~(url : string) ~(src : Db.Account.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let body = Activity.to_yojson activity in
-  Activity.post_activity_to_inbox ~body ~src ~dst
+  let body = to_yojson activity in
+  let sign, body = sign_activity ~body ~src in
+  post_activity_json ~body ~sign ~url

@@ -11,6 +11,7 @@ CREATE TABLE accounts (
   uri TEXT NOT NULL,
   url TEXT,
   inbox_url TEXT NOT NULL,
+  shared_inbox_url TEXT NOT NULL,
   followers_url TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,

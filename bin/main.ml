@@ -11,10 +11,11 @@ let register_user ~username ~display_name ~email =
   let uri = Activity.url [ "users"; username ] in
   let inbox_url = uri ^/ "inbox" in
   let followers_url = uri ^/ "followers" in
+  let shared_inbox_url = Activity.url [ "inbox" ] in
   let%lwt a =
     Db.Account.(
       make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
-        ~followers_url ~created_at ~updated_at ()
+        ~followers_url ~created_at ~updated_at ~shared_inbox_url ()
       |> save_one)
   in
   let%lwt u =

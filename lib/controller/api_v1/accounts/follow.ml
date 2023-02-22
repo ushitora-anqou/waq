@@ -14,7 +14,7 @@ let request_follow ~now ~uri (self : Db.Account.t) (acc : Db.Account.t) =
   (* Post activity *)
   let open Activity in
   let activity = make_follow ~id:uri ~actor:self.uri ~obj:acc.uri |> follow in
-  Worker.Delivery.kick ~activity ~src:self ~dst:acc;%lwt
+  Worker.Delivery.kick ~activity ~src:self ~url:acc.inbox_url;%lwt
 
   Lwt.return_unit
 
