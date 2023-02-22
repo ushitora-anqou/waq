@@ -75,7 +75,22 @@ let websocket (req : Request.t) f =
   Lwt.async (fun () ->
       try
         Logq.debug (fun m -> m "Websocket: start thread");
-        f conn
+
+        (* Send Ping continuously *)
+        let timeout = ref None in
+        let timeout_seconds = 10 in
+        timeout :=
+          Some
+            ( Lwt_timeout.create timeout_seconds @@ fun () ->
+              Logq.debug (fun m -> m "Websocket: ping");
+              ws_send ~opcode:Ping conn "";
+              Lwt_timeout.start (Option.get !timeout) );
+
+        (* Start the process *)
+        Lwt_timeout.start (Option.get !timeout);
+        f conn;%lwt
+        Lwt_timeout.stop (Option.get !timeout);
+        Lwt.return_unit
       with e ->
         Logq.err (fun m ->
             m "Websocket: thread error: %s\n%s" (Printexc.to_string e)
