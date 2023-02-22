@@ -41,6 +41,7 @@ let routes_from_clients =
           delete "/:id" Root.delete;
           get "/:id/context" Context.get;
           post "/:id/reblog" Reblog.post;
+          post "/:id/unreblog" Unreblog.post;
           post "/:id/favourite" Favourite.post;
           post "/:id/unfavourite" Unfavourite.post;
           get "/:id/favourited_by" Favourited_by.get;

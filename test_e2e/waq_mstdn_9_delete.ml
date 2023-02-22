@@ -13,6 +13,7 @@ let follow src = follow src.kind ~token:src.token
 let post src = post src.kind ~token:src.token
 let search src = search src.kind ~token:src.token
 let reblog src = reblog src.kind ~token:src.token
+let unreblog src = unreblog src.kind ~token:src.token
 let home_timeline src = home_timeline src.kind ~token:src.token
 let delete_status src = delete_status src.kind ~token:src.token
 let get_status src = get_status src.kind ~token:src.token
@@ -61,6 +62,35 @@ let f (a0 : agent) (a1 : agent) =
 
   (* a0: Check the posts *)
   expect_no_status a0 a0_post_id;%lwt
+  expect_no_status a0 a0_reblog_id;%lwt
+
+  (***************************)
+
+  (* a1: Post *)
+  let%lwt { uri; _ } = post a1 () in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* a0: Get the post id *)
+  let%lwt a0_post_id =
+    match%lwt search a0 uri with
+    | _, [ s ], _ -> Lwt.return s.id
+    | _ -> assert false
+  in
+
+  (* a0: Reblog the post *)
+  let%lwt a0_reblog_id = reblog a0 ~id:a0_post_id >|= fun r -> r.id in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* a0: Check the posts *)
+  let%lwt _ = get_status a0 a0_post_id in
+  let%lwt _ = get_status a0 a0_reblog_id in
+
+  (* a0: Unreblog the post *)
+  unreblog a0 ~id:a0_post_id |> ignore_lwt;%lwt
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* a0: Check the posts *)
+  let%lwt _ = get_status a0 a0_post_id in
   expect_no_status a0 a0_reblog_id;%lwt
 
   Lwt.return_unit

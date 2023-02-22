@@ -64,7 +64,12 @@ and ap_person = {
   public_key_pem : string;
 }
 
-and ap_undo = { id : string; actor : Yojson.Safe.t; obj : t }
+and ap_undo = {
+  id : string;
+  actor : Yojson.Safe.t;
+  to_ : string list option;
+  obj : t;
+}
 
 and ap_announce = {
   id : string;
@@ -117,7 +122,7 @@ let tombstone r = Tombstone r
 let undo r = Undo r
 let make_follow ~id ~actor ~obj : ap_follow = { id; actor; obj }
 let make_accept ~id ~actor ~obj : ap_accept = { id; actor; obj }
-let make_undo ~id ~actor ~obj : ap_undo = { id; actor; obj }
+let make_undo ~id ~actor ~obj ?to_ () : ap_undo = { id; actor; obj; to_ }
 let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
 let make_delete ~id ~actor ~obj ~to_ : ap_delete = { id; actor; obj; to_ }
 let make_tombstone ~id : ap_tombstone = { id }
@@ -229,7 +234,11 @@ let rec of_yojson (src : Yojson.Safe.t) =
   | "Follow" ->
       make_follow ~id ~actor:(string Actor) ~obj:(string Object) |> follow
   | "Undo" ->
-      make_undo ~id ~actor:(get Actor) ~obj:(get Object |> of_yojson) |> undo
+      make_undo ~id ~actor:(get Actor)
+        ~obj:(get Object |> of_yojson)
+        ?to_:(try Some (list To |> List.map expect_string) with _ -> None)
+        ()
+      |> undo
   | "Create" ->
       let published = string Published in
       let to_ = list To |> List.map expect_string in
@@ -358,12 +367,20 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
         ]
     | Tombstone r -> [ (Id, `String r.id); (Type, `String "Tombstone") ]
     | Undo r ->
-        [
-          (Id, `String r.id);
-          (Type, `String "Undo");
-          (Actor, r.actor);
-          (Object, to_yojson r.obj);
-        ]
+        let l =
+          [
+            (Id, `String r.id);
+            (Type, `String "Undo");
+            (Actor, r.actor);
+            (Object, to_yojson r.obj);
+          ]
+        in
+        let l =
+          r.to_
+          |> Option.fold ~none:l ~some:(fun xs ->
+                 (To, `List (xs |> List.map (fun x -> `String x))) :: l)
+        in
+        l
   in
   let l = l |> List.map (fun (k, v) -> (string_of_property k, v)) in
   let l =
@@ -539,8 +556,12 @@ let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
     obj = Note note;
   }
 
-let announce_of_status (s : Db.Status.t) : ap_announce Lwt.t =
-  let%lwt reblog = Db.Status.get_one ~id:(Option.get s.reblog_of_id) () in
+let announce_of_status ?(deleted = false) (s : Db.Status.t) : ap_announce Lwt.t
+    =
+  let%lwt reblog =
+    let id = Option.get s.reblog_of_id in
+    Db.Status.(if deleted then get_one' ~id () else get_one ~id ())
+  in
   let%lwt reblog_acct = Db.Account.get_one ~id:reblog.account_id () in
   let%lwt self = Db.Account.get_one ~id:s.account_id () in
 
@@ -584,8 +605,13 @@ let to_undo ~actor =
   function
   | Like v as a ->
       let id = v.id ^/ "undo" in
-      make_undo ~id ~actor ~obj:a
+      make_undo ~id ~actor ~obj:a ()
   | Follow _ ->
       (* Undo Follow is not straightforward and should be handled separately in each case *)
       assert false
+  | Announce v as a ->
+      let id = v.id ^/ "undo" in
+      make_undo ~id ~actor
+        ~to_:[ "https://www.w3.org/ns/activitystreams#Public" ]
+        ~obj:a ()
   | _ -> assert false

@@ -60,13 +60,8 @@ let kick_inbox_undo_like (l : ap_like) =
   let%lwt { id; _ } = favourite_of_like ~must_already_exist:true l in
   Db.Favourite.delete ~id ()
 
-(* Recv Undo in inbox *)
-let kick_inbox_undo (req : ap_undo) =
-  match req.obj with
-  | Follow { id; _ } ->
-      Job.kick ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
-  | Like l -> kick_inbox_undo_like l
-  | _ -> Httpq.Server.raise_error_response `Bad_request
+let kick_inbox_undo_follow ({ id; _ } : ap_follow) =
+  Job.kick ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
 
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =
@@ -119,7 +114,8 @@ let post req =
   | Delete r -> kick_inbox_delete r
   | Follow r -> kick_inbox_follow r
   | Like r -> kick_inbox_like r
-  | Undo r -> kick_inbox_undo r
+  | Undo { obj = Follow v; _ } -> kick_inbox_undo_follow v
+  | Undo { obj = Like v; _ } -> kick_inbox_undo_like v
   | _ | (exception _) ->
       Logq.warn (fun m -> m "Ignoring inbox message:\n%s" body);
       Lwt.return_unit);%lwt

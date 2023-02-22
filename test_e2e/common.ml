@@ -299,6 +299,10 @@ let reblog ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/reblog")
   >|= Yojson.Safe.from_string >|= status_of_yojson
 
+let unreblog ~token kind ~id =
+  do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/unreblog")
+  >|= Yojson.Safe.from_string >|= status_of_yojson
+
 let fav ~token kind ~id =
   do_fetch ~token ~meth:`POST kind ("/api/v1/statuses/" ^ id ^ "/favourite")
   >|= Yojson.Safe.from_string >|= status_of_yojson

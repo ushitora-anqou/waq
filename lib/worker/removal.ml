@@ -15,16 +15,23 @@ let kick ~account_id ~status_id =
            let payload = string_of_int status.id in
            push ~key ~event:"delete" ~payload ())
   in
-  let delivery_to_remote ~acct =
+  let delivery_to_remote ~(acct : Db.Account.t) =
     let open Activity in
-    status :: reblogs
-    |> Lwt_list.iter_p (fun (status : Db.Status.t) ->
-           let id = status.uri ^ "#delete" in
-           let actor = src.uri in
-           let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-           let obj = make_tombstone ~id:status.uri |> tombstone in
-           let activity = make_delete ~id ~actor ~to_ ~obj |> delete in
-           Delivery.kick ~src ~dst:acct ~activity)
+    let%lwt activity =
+      match status.reblog_of_id with
+      | Some _ ->
+          (* Undo Announce *)
+          announce_of_status ~deleted:true status
+          >|= announce >|= to_undo ~actor:acct.uri >|= undo
+      | None ->
+          (* Delete *)
+          let id = status.uri ^ "#delete" in
+          let actor = src.uri in
+          let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
+          let obj = make_tombstone ~id:status.uri |> tombstone in
+          make_delete ~id ~actor ~to_ ~obj |> delete |> Lwt.return
+    in
+    Delivery.kick ~src ~dst:acct ~activity
   in
 
   (* Deliver to self if necessary *)

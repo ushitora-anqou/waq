@@ -14,7 +14,7 @@ let service (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
       let activity =
         make_undo
           ~id:(self.uri ^ "#follows" ^/ string_of_int f.id ^/ "undo")
-          ~actor:(`String self.uri) ~obj
+          ~actor:(`String self.uri) ~obj ()
         |> undo
       in
       Worker.Delivery.kick ~activity ~src:self ~dst:acc

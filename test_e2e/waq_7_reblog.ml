@@ -12,7 +12,7 @@ let f =
   let%lwt { id = reblog_id3; _ } = reblog `Waq ~token:token3 ~id in
 
   let%lwt ntfs = get_notifications `Waq ~token in
-  match ntfs with
+  (match ntfs with
   | [
    {
      typ = "reblog";
@@ -33,4 +33,27 @@ let f =
       assert (status_id3 = reblog_id3);
       assert (reblogs_count = 3);
       Lwt.return_unit
-  | _ -> assert false
+  | _ -> assert false);%lwt
+
+  let%lwt { reblogs_count; _ } = get_status `Waq ~token id in
+  assert (reblogs_count = 3);
+  let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
+    unreblog `Waq ~token ~id
+  in
+  assert (unreblog_id = id);
+  assert (reblogs_count = 2);
+  assert (not reblogged);
+  let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
+    unreblog `Waq ~token:token2 ~id
+  in
+  assert (unreblog_id = id);
+  assert (reblogs_count = 1);
+  assert (not reblogged);
+  let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
+    unreblog `Waq ~token:token3 ~id
+  in
+  assert (unreblog_id = id);
+  assert (reblogs_count = 0);
+  assert (not reblogged);
+
+  Lwt.return_unit
