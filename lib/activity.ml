@@ -89,7 +89,7 @@ and ap_ordered_collection = {
   id : string;
   totalItems : int;
   first : string;
-  last : string;
+  last : string option;
 }
 
 and t =
@@ -148,8 +148,8 @@ let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to :
     ap_note =
   { id; published; attributed_to; to_; cc; content; in_reply_to }
 
-let make_ordered_collection ~id ~totalItems ~first ~last : ap_ordered_collection
-    =
+let make_ordered_collection ~id ~totalItems ~first ?last () :
+    ap_ordered_collection =
   { id; totalItems; first; last }
 
 let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
@@ -240,6 +240,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
   let string name = get name |> expect_string in
   let list name = get name |> expect_list in
   let int name = get name |> expect_int in
+  let string_opt name = try Some (get name |> expect_string) with _ -> None in
 
   let id = string Id in
   let typ = string Type in
@@ -287,8 +288,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
   | "OrderedCollection" ->
       let totalItems = int TotalItems in
       let first = string First in
-      let last = string Last in
-      make_ordered_collection ~id ~totalItems ~first ~last |> ordered_collection
+      let last = string_opt Last in
+      make_ordered_collection ~id ~totalItems ~first ?last ()
+      |> ordered_collection
   | "Person" ->
       let following = string Following in
       let followers = string Followers in
@@ -390,13 +392,18 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (InReplyTo, r.in_reply_to);
         ]
     | OrderedCollection r ->
-        [
-          (Id, `String r.id);
-          (Type, `String "OrderedCollection");
-          (TotalItems, `Int r.totalItems);
-          (First, `String r.first);
-          (Last, `String r.last);
-        ]
+        let l =
+          [
+            (Id, `String r.id);
+            (Type, `String "OrderedCollection");
+            (TotalItems, `Int r.totalItems);
+            (First, `String r.first);
+          ]
+        in
+        let l =
+          match r.last with None -> l | Some last -> (Last, `String last) :: l
+        in
+        l
     | Person r ->
         [
           (Id, `String r.id);

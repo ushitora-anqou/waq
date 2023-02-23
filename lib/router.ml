@@ -23,6 +23,8 @@ let routes_from_servers =
         get "" Root.get;
         post "/inbox" Inbox.post;
         get "/outbox" Outbox.get;
+        get "/followers" Following.get_followers;
+        get "/following" Following.get_following;
         get "/statuses/:id" Statuses.get;
       ];
     ] [@ocamlformat "disable"]

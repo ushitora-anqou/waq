@@ -9,6 +9,6 @@ let get req =
   let first = acct.outbox_url ^ "?page=true" in
   let last = acct.outbox_url ^ "?min_id=0&page=true" in
   Activity.(
-    make_ordered_collection ~id ~totalItems ~first ~last
+    make_ordered_collection ~id ~totalItems ~first ~last ()
     |> ordered_collection |> to_yojson)
   |> respond_yojson
