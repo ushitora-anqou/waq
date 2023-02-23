@@ -18,7 +18,7 @@ type request =
       path : string;
       query : (string * string list) list;
       param : (string * string) list;
-      body : request_body;
+      body : request_body option;
       raw_body : string option;
       headers : Headers.t;
     }
@@ -56,7 +56,7 @@ let query_many ?default name req =
   | None -> raise_error_response `Bad_request
 
 let query ?default name = function
-  | Request { body; query; _ } -> (
+  | Request { body = Some body; query; _ } -> (
       try
         match body with
         | JSON (`Assoc l) -> (
@@ -74,6 +74,7 @@ let query ?default name = function
       with
       | _ when default <> None -> Option.get default
       | _ -> raise_error_response `Bad_request)
+  | _ -> failwith "query: body none"
 
 let query_opt name r = try Some (query name r) with _ -> None
 
@@ -81,7 +82,7 @@ let formdata name r =
   let open Multipart_form in
   try
     match r with
-    | Request { body = MultipartFormdata { raw; _ }; _ } ->
+    | Request { body = Some (MultipartFormdata { raw; _ }); _ } ->
         raw
         |> List.find (fun (hdr, _stream) ->
                let ( let* ) v f = v |> Option.fold ~none:false ~some:f in
@@ -101,13 +102,6 @@ let header name (r : request) : string =
 let headers = function Request { headers; _ } -> headers
 let path = function Request { path; _ } -> path
 let meth = function Request { meth; _ } -> meth
-
-let default_handler : handler = function
-  | Request req ->
-      let status =
-        match req.meth with `GET -> `Not_found | _ -> `Method_not_allowed
-      in
-      respond ~status ""
 
 let parse_body ~body ~headers =
   match List.assoc_opt `Content_type headers with
@@ -154,17 +148,29 @@ let parse_body ~body ~headers =
       Bare_server.Body.to_string body >|= fun raw_body ->
       (Some raw_body, Form (Uri.query_of_encoded raw_body))
 
-let start_server ?(port = 8080) (handler : handler) k : unit =
+let default_handler : handler = function
+  | Request req ->
+      let status =
+        match req.meth with `GET -> `Not_found | _ -> `Method_not_allowed
+      in
+      respond ~status ""
+
+let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
   Bare_server.start_server port (k ())
   @@ fun (req : Bare_server.Request.t) (body : Bare_server.Body.t) :
     Bare_server.Response.t Lwt.t ->
-  let parse_req () =
-    let uri = Bare_server.Request.uri req in
-    let meth = Bare_server.Request.meth req in
-    let headers = Bare_server.Request.headers req |> Headers.of_list in
-    let path = Uri.path uri in
-    let query = Uri.query uri in
-    parse_body ~body ~headers >|= fun (raw_body, parsed_body) ->
+  (* Parse req *)
+  let uri = Bare_server.Request.uri req in
+  let meth = Bare_server.Request.meth req in
+  let headers = Bare_server.Request.headers req |> Headers.of_list in
+  let path = Uri.path uri in
+  let query = Uri.query uri in
+  let%lwt raw_body, parsed_body =
+    match%lwt parse_body ~body ~headers with
+    | exception _ -> Lwt.return (None, None)
+    | raw_body, parsed_body -> Lwt.return (raw_body, Some parsed_body)
+  in
+  let req =
     Request
       {
         bare_req = req;
@@ -181,17 +187,31 @@ let start_server ?(port = 8080) (handler : handler) k : unit =
   in
 
   (* Invoke the handler *)
-  match%lwt
-    try%lwt parse_req () >>= handler
+  let%lwt res =
+    try%lwt handler req
     with ErrorResponse { status; body } ->
       Logq.debug (fun m ->
           m "Error response raised: %s\n%s" (Status.to_string status)
             (Printexc.get_backtrace ()));
       respond ~status body
-  with
-  | BareResponse resp -> Lwt.return resp
-  | Response { status; headers; body } ->
-      Bare_server.respond ~status ~headers ~body
+  in
+
+  (* Respond (after call error_handler if necessary *)
+  let rec aux first = function
+    | BareResponse resp -> Lwt.return resp
+    | Response { status; headers; body }
+      when (not first)
+           || Option.is_none error_handler
+           || not (Status.is_error status)
+           (* - error_handler is already called;
+              - error_handler is not specified; or
+              - not erroneous response *) ->
+        Bare_server.respond ~status ~headers ~body
+    | Response { status; headers; body } ->
+        let error_handler = Option.get error_handler in
+        error_handler ~req ~status ~headers ~body >>= aux false
+  in
+  aux true res
 
 (* WebSocket *)
 type ws_conn = Bare_server.ws_conn

@@ -29,7 +29,17 @@ let register_user ~username ~display_name ~email =
 let server () =
   let _host, port = (C.listen_host (), C.listen_port ()) in
 
-  Httpq.Server.start_server ~port Router.handler @@ fun () ->
+  let error_handler ~req ~status ~headers ~body =
+    let open Controller.Helper in
+    let default () = Httpq.Server.respond ~status ~headers body in
+    let main () =
+      Httpq.Server.respond ~status ~headers
+        ("<h1>" ^ Httpq.Status.to_string status ^ "</h1>")
+    in
+    req |> render ~default [ (text_html, main) ]
+  in
+
+  Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
 

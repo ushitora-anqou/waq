@@ -2,6 +2,7 @@ open Util
 open Lwt.Infix
 
 let app_activity_json = "application/activity+json"
+let text_html = "text/html"
 
 let content_type_app_xrd_xml =
   (`Content_type, "application/xrd+xml; charset=utf-8")
