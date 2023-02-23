@@ -700,3 +700,12 @@ let to_undo ~actor =
         ~to_:[ "https://www.w3.org/ns/activitystreams#Public" ]
         ~obj:a ()
   | _ -> assert false
+
+let person_of_account (a : Db.Account.t) =
+  make_person ~id:a.uri ~following:(a.uri ^/ "following")
+    ~followers:a.followers_url ~inbox:a.inbox_url
+    ~shared_inbox:a.shared_inbox_url ~outbox:a.outbox_url
+    ~preferred_username:a.username ~name:a.display_name
+    ~summary:"FIXME: summary is here" ~url:a.uri ~tag:[]
+    ~public_key_id:(a.uri ^ "#main-key") ~public_key_owner:a.uri
+    ~public_key_pem:a.public_key
