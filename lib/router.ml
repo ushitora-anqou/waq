@@ -10,7 +10,7 @@ let cors =
       make "/oauth/token" ~methods:[ `POST ] ();
     ]
 
-let routes_from_servers =
+let routes =
   let open Router in
   Controller.
     [
@@ -27,12 +27,6 @@ let routes_from_servers =
         get "/following" Following.get_following;
         get "/statuses/:id" Statuses.get;
       ];
-    ] [@ocamlformat "disable"]
-
-let routes_from_clients =
-  let open Router in
-  Controller.
-    [
       scope "/api/v1" Api_v1.[
         get "/streaming" Streaming.get;
         get "/instance" Instance.get;
@@ -81,6 +75,4 @@ let routes_from_clients =
       ];
     ] [@ocamlformat "disable"]
 
-let handler =
-  Logger.use @@ Cors.use cors
-  @@ Router.use (routes_from_servers @ routes_from_clients) default_handler
+let handler = Logger.use @@ Cors.use cors @@ Router.use routes default_handler
