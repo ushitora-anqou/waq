@@ -2,10 +2,10 @@ open Helper
 open Lwt.Infix
 open Util
 
-let respond_activity a =
+let respond_activity a () =
   Activity.(person_of_account a |> person |> to_yojson) |> respond_yojson
 
-let respond_html (a : Db.Account.t) =
+let respond_html (a : Db.Account.t) () =
   let open Jingoo.Jg_types in
   let%lwt statuses =
     Db.account_statuses ~id:a.id ~limit:30 ~max_id:None ~since_id:None
@@ -81,12 +81,6 @@ let get req =
   | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Not_found
   | a ->
       let%lwt _ = Db.User.get_one ~account_id:a.id () in
-      let accept =
-        Httpq.Server.header `Accept req
-        |> String.split_on_char ',' |> List.map String.trim
-      in
-      if
-        accept |> List.mem "application/activity+json"
-        || accept |> List.mem "application/ld+json"
-      then respond_activity a
-      else respond_html a
+      req
+      |> render ~default:(respond_html a)
+           [ (app_activity_json, respond_activity a) ]

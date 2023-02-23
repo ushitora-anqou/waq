@@ -1,4 +1,7 @@
+open Util
 open Lwt.Infix
+
+let app_activity_json = "application/activity+json"
 
 let content_type_app_xrd_xml =
   (`Content_type, "application/xrd+xml; charset=utf-8")
@@ -44,6 +47,22 @@ let respond_yojson y =
 let respond_activity_yojson y =
   Yojson.Safe.to_string y
   |> Httpq.Server.respond ~headers:[ content_type_app_activity_json ]
+
+let render ~default routes req =
+  let accept =
+    Httpq.Server.header_opt `Accept req
+    |> Option.map (String.split_on_char ',' |.> List.map String.trim)
+  in
+  let route =
+    match accept with
+    | None -> default
+    | Some accept ->
+        routes
+        |> List.find_map (fun (content_type, route) ->
+               if List.mem content_type accept then Some route else None)
+        |> Option.value ~default
+  in
+  route ()
 
 let parse_webfinger_address q =
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
