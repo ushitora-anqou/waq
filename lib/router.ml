@@ -14,17 +14,17 @@ let routes_from_servers =
   let open Router in
   Controller.
     [
-      get "/.well-known/host-meta" Well_known_host_meta.get;
-      get "/.well-known/webfinger" Well_known_webfinger.get;
       post "/inbox" Inbox.post;
-      scope "/users/:name"
-        Users.
-          [
-            get "" Root.get;
-            post "/inbox" Inbox.post;
-            get "/statuses/:id" Statuses.get;
-          ];
-    ]
+      scope "/.well-known" Well_known.[
+        get "/host-meta" Host_meta.get;
+        get "/webfinger" Webfinger.get;
+      ];
+      scope "/users/:name" Users.[
+        get "" Root.get;
+        post "/inbox" Inbox.post;
+        get "/statuses/:id" Statuses.get;
+      ];
+    ] [@ocamlformat "disable"]
 
 let routes_from_clients =
   let open Router in
