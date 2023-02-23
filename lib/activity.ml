@@ -462,6 +462,7 @@ and fetch_account ?(scheme = "https") by =
           in
           make_new_account href)
   | `Uri uri -> (
+      let uri = Uri.(with_fragment (of_string uri) None |> to_string) in
       match%lwt Db.Account.get_one ~uri () with
       | acc -> Lwt.return acc
       | exception Sql.NoRowFound -> make_new_account uri)
@@ -479,6 +480,28 @@ let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
     Some (priv_key, key_id, signed_headers)
   in
   (sign, body)
+
+let verify_activity_json req =
+  let body = Httpq.Server.body req in
+  let signature = Httpq.Server.header `Signature req in
+  let headers = Httpq.Server.headers req in
+  let path = Httpq.Server.path req in
+  let meth = Httpq.Server.meth req in
+
+  let open Httpq.Signature in
+  let { key_id; algorithm; headers = signed_headers; signature } =
+    parse_signature_header signature
+  in
+  let%lwt acct = fetch_account (`Uri key_id) in
+  let pub_key = decode_public_key acct.public_key in
+  Lwt.return
+  @@
+  match
+    verify ~pub_key ~algorithm ~signed_headers ~signature ~headers ~meth ~path
+      ~body:(Some body)
+  with
+  | Error _ -> Error "verification failed"
+  | Ok () -> Ok body
 
 let post_activity_json ~body ~sign ~url =
   let meth = `POST in

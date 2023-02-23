@@ -98,6 +98,10 @@ let header_opt name : request -> string option = function
 let header name (r : request) : string =
   match header_opt name r with None -> failwith "header: none" | Some v -> v
 
+let headers = function Request { headers; _ } -> headers
+let path = function Request { path; _ } -> path
+let meth = function Request { meth; _ } -> meth
+
 let default_handler : handler = function
   | Request req ->
       let status =
