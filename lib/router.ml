@@ -14,6 +14,7 @@ let routes =
   let open Router in
   Controller.
     [
+      get "/" Root.get;
       post "/inbox" Inbox.post;
       scope "/.well-known" Well_known.[
         get "/host-meta" Host_meta.get;
