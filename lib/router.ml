@@ -22,6 +22,7 @@ let routes_from_servers =
       scope "/users/:name" Users.[
         get "" Root.get;
         post "/inbox" Inbox.post;
+        get "/outbox" Outbox.get;
         get "/statuses/:id" Statuses.get;
       ];
     ] [@ocamlformat "disable"]

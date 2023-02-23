@@ -85,6 +85,13 @@ and ap_like = { id : string; actor : string; obj : string }
 and ap_delete = { id : string; actor : string; to_ : string list; obj : t }
 and ap_tombstone = { id : string }
 
+and ap_ordered_collection = {
+  id : string;
+  totalItems : int;
+  first : string;
+  last : string;
+}
+
 and t =
   | Accept of ap_accept
   | Announce of ap_announce
@@ -92,9 +99,10 @@ and t =
   | Delete of ap_delete
   | Follow of ap_follow
   | Like of ap_like
-  | Tombstone of ap_tombstone
   | Note of ap_note
+  | OrderedCollection of ap_ordered_collection
   | Person of ap_person
+  | Tombstone of ap_tombstone
   | Undo of ap_undo
 
 [@@@warning "+30"]
@@ -119,6 +127,7 @@ let delete r = Delete r
 let follow r = Follow r
 let like r = Like r
 let note r = Note r
+let ordered_collection r = OrderedCollection r
 let person r = Person r
 let tombstone r = Tombstone r
 let undo r = Undo r
@@ -138,6 +147,10 @@ let make_create ~id ~actor ~published ~to_ ~cc ~obj : ap_create =
 let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to :
     ap_note =
   { id; published; attributed_to; to_; cc; content; in_reply_to }
+
+let make_ordered_collection ~id ~totalItems ~first ~last : ap_ordered_collection
+    =
+  { id; totalItems; first; last }
 
 let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
     ~preferred_username ~name ~summary ~url ~tag ~public_key_id
@@ -182,6 +195,9 @@ type property =
   | Tag
   | PublicKey
   | Endpoints
+  | TotalItems
+  | First
+  | Last
 
 let string_of_property : property -> string = function
   | Id -> "id"
@@ -206,6 +222,9 @@ let string_of_property : property -> string = function
   | Tag -> "tag"
   | PublicKey -> "publicKey"
   | Endpoints -> "endpoints"
+  | TotalItems -> "totalItems"
+  | First -> "first"
+  | Last -> "last"
 
 let rec of_yojson (src : Yojson.Safe.t) =
   let expect_assoc = function `Assoc l -> l | _ -> failwith "Expect assoc" in
@@ -214,11 +233,13 @@ let rec of_yojson (src : Yojson.Safe.t) =
     | _ -> failwith "Expect string"
   in
   let expect_list = function `List l -> l | _ -> failwith "Expect list" in
+  let expect_int = function `Int i -> i | _ -> failwith "Expect int" in
   let l = expect_assoc src in
   let get name = l |> List.assoc (string_of_property name) in
   let assoc name = get name |> expect_assoc in
   let string name = get name |> expect_string in
   let list name = get name |> expect_list in
+  let int name = get name |> expect_int in
 
   let id = string Id in
   let typ = string Type in
@@ -263,6 +284,11 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let in_reply_to = get InReplyTo in
       make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
       |> note
+  | "OrderedCollection" ->
+      let totalItems = int TotalItems in
+      let first = string First in
+      let last = string Last in
+      make_ordered_collection ~id ~totalItems ~first ~last |> ordered_collection
   | "Person" ->
       let following = string Following in
       let followers = string Followers in
@@ -363,6 +389,14 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Content, `String r.content);
           (InReplyTo, r.in_reply_to);
         ]
+    | OrderedCollection r ->
+        [
+          (Id, `String r.id);
+          (Type, `String "OrderedCollection");
+          (TotalItems, `Int r.totalItems);
+          (First, `String r.first);
+          (Last, `String r.last);
+        ]
     | Person r ->
         [
           (Id, `String r.id);
@@ -430,8 +464,8 @@ let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   let now = Ptime.now () in
   Db.Account.make ~username:r.preferred_username ~domain
     ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
-    ~inbox_url:r.inbox ~followers_url:r.followers ~created_at:now
-    ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
+    ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
+    ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
   |> Db.Account.save_one
 
 and account_person (r : ap_person) : Db.Account.t Lwt.t =

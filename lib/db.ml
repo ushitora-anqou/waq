@@ -52,6 +52,7 @@ module Account = struct
     uri : string;
     url : string option;
     inbox_url : string;
+    outbox_url : string;
     shared_inbox_url : string;
     followers_url : string;
     created_at : Ptime.t;

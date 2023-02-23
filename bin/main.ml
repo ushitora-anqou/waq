@@ -10,12 +10,13 @@ let register_user ~username ~display_name ~email =
   let private_key = Httpq.Signature.encode_private_key private_key in
   let uri = Activity.url [ "users"; username ] in
   let inbox_url = uri ^/ "inbox" in
+  let outbox_url = uri ^/ "outbox" in
   let followers_url = uri ^/ "followers" in
   let shared_inbox_url = Activity.url [ "inbox" ] in
   let%lwt a =
     Db.Account.(
       make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
-        ~followers_url ~created_at ~updated_at ~shared_inbox_url ()
+        ~outbox_url ~followers_url ~created_at ~updated_at ~shared_inbox_url ()
       |> save_one)
   in
   let%lwt u =

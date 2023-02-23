@@ -15,8 +15,8 @@ let test_user _ _ =
 
   let%lwt a =
     Account.make ~username:"anqou" ~public_key:"" ~display_name:"Ushitora Anqou"
-      ~uri:"" ~inbox_url:"" ~followers_url:"" ~created_at ~updated_at
-      ~shared_inbox_url:"" ()
+      ~uri:"" ~inbox_url:"" ~outbox_url:"" ~followers_url:"" ~created_at
+      ~updated_at ~shared_inbox_url:"" ()
     |> Account.save_one
   in
   assert (a.id = 1);

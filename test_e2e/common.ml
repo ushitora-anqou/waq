@@ -24,6 +24,10 @@ let expect_bool = function
   | `Bool b -> b
   | _ -> failwith "Expected bool, got something different"
 
+let expect_int = function
+  | `Int v -> v
+  | _ -> failwith "Expected int, got something different"
+
 let with_lock mtx f =
   match mtx with None -> f () | Some mtx -> Lwt_mutex.with_lock mtx f
 
