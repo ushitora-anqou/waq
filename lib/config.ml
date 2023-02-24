@@ -28,6 +28,9 @@ let header_url () = !c.header_url
 let url (l : string list) =
   "https:/" ^ (server_name () :: l |> List.fold_left Util.( ^/ ) "")
 
+let config_path () =
+  Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"
+
 let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
   |> Option.map bool_of_string
@@ -38,5 +41,4 @@ let debug_generate_test_users () =
   |> Option.map bool_of_string
   |> Option.value ~default:false
 
-let config_path () =
-  Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"
+let debug_dump_req_dir () = Sys.getenv_opt "WAQ_DUMP_REQ_DIR"

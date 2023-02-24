@@ -76,4 +76,7 @@ let routes =
       ];
     ] [@ocamlformat "disable"]
 
-let handler = Logger.use @@ Cors.use cors @@ Router.use routes default_handler
+let handler =
+  Logger.use ?dump_req_dir:(Config.debug_dump_req_dir ())
+  @@ Cors.use cors
+  @@ Router.use routes default_handler

@@ -33,3 +33,4 @@ config.yml
 config
 misc/
 Makefile
+log

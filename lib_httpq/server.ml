@@ -337,15 +337,38 @@ end
 
 (* Middlware Logger *)
 module Logger = struct
-  let use (inner_handler : handler) (req : request) : response Lwt.t =
+  let use ?dump_req_dir (inner_handler : handler) (req : request) :
+      response Lwt.t =
     let (Request { uri; meth; _ }) = req in
     let meth = Method.to_string meth in
     let uri = Uri.to_string uri in
     Logq.debug (fun m -> m "%s %s" meth uri);
-    inner_handler req >|= fun resp ->
+
+    let%lwt resp = inner_handler req in
+
     (match resp with
     | Response { status; _ } ->
         Logq.info (fun m -> m "%s %s %s" (Status.to_string status) meth uri)
     | BareResponse _ -> Logq.info (fun m -> m "[bare] %s %s" meth uri));
-    resp
+
+    (match (dump_req_dir, req, resp) with
+    | Some dir, Request { bare_req; raw_body; _ }, Response { status; _ }
+      when Status.is_error status ->
+        (* NOTE: We use open_temp_file to make sure that each request is written to each file. So, this file should NOT be removed after we write the content to it. *)
+        let prefix = Ptime.(now () |> to_float_s |> string_of_float) ^ "." in
+        let%lwt _, oc = Lwt_io.open_temp_file ~temp_dir:dir ~prefix () in
+        (let buf = Buffer.create 1 in
+         let oc_f = Format.formatter_of_buffer buf in
+         Bare_server.Request.pp_hum oc_f bare_req;
+         Format.pp_print_newline oc_f ();
+         Lwt_io.write oc (Buffer.contents buf));%lwt
+        (match raw_body with
+        | None -> Lwt.return_unit
+        | Some s -> Lwt_io.fprintf oc "\n%s\n" s);%lwt
+        Lwt_io.fprintl oc "\n==============================\n";%lwt
+        Lwt_io.fprintf oc "Status: %s\n" (Status.to_string status);%lwt
+        Lwt_io.close oc
+    | _ -> Lwt.return_unit);%lwt
+
+    Lwt.return resp
 end
