@@ -544,7 +544,7 @@ let verify_activity_json req =
 let post_activity_json ~body ~sign ~url =
   let meth = `POST in
   let headers = [ (`Content_type, "application/activity+json") ] in
-  let%lwt res = Httpq.Client.fetch ~meth ~headers ~body ~sign url in
+  let%lwt res = Throttle_fetch.f ~meth ~headers ~body ~sign url in
   Lwt.return
   @@
   match res with
