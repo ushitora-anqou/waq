@@ -352,6 +352,7 @@ let fetch_access_token ~username =
           ("client_id", [ client_id ]);
           ("redirect_uri", [ "http://example.com?origin=http://example.com" ]);
           ("username", [ username ]);
+          ("password", [ username ^ "password" ]);
         ]
     in
     fetch ~meth:`POST ~body (waq "/oauth/authorize")

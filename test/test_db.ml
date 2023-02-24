@@ -38,7 +38,7 @@ let test_user _ _ =
 
   let%lwt u =
     User.make ~id:0 ~email:"ushitora@anqou.net" ~created_at ~updated_at
-      ~account_id:1
+      ~account_id:1 ~encrypted_password:""
     |> User.save_one
   in
   assert (u.id = 1);

@@ -1,8 +1,6 @@
-open Activity
-
 (* Recv GET /.well-known/host-meta *)
 let get _req =
-  let url = url [ ".well-known"; "webfinger" ] in
+  let url = Config.url [ ".well-known"; "webfinger" ] in
   Jingoo.Jg_template.from_string
     ~models:[ ("url", Tstr url) ]
     {|<?xml version="1.0" encoding="UTF-8"?>

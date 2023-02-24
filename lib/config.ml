@@ -25,6 +25,9 @@ let db_url () = !c.db_url
 let avatar_url () = !c.avatar_url
 let header_url () = !c.header_url
 
+let url (l : string list) =
+  "https:/" ^ (server_name () :: l |> List.fold_left Util.( ^/ ) "")
+
 let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
   |> Option.map bool_of_string

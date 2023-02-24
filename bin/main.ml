@@ -2,30 +2,6 @@ open Waq
 open Util [@@warning "-33"]
 module C = Config
 
-let register_user ~username ~display_name ~email =
-  let now = Ptime.now () in
-  let created_at, updated_at = (now, now) in
-  let private_key, public_key = Httpq.Signature.generate_keypair () in
-  let public_key = Httpq.Signature.encode_public_key public_key in
-  let private_key = Httpq.Signature.encode_private_key private_key in
-  let uri = Activity.url [ "users"; username ] in
-  let inbox_url = uri ^/ "inbox" in
-  let outbox_url = uri ^/ "outbox" in
-  let followers_url = uri ^/ "followers" in
-  let shared_inbox_url = Activity.url [ "inbox" ] in
-  let%lwt a =
-    Db.Account.(
-      make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
-        ~outbox_url ~followers_url ~created_at ~updated_at ~shared_inbox_url ()
-      |> save_one)
-  in
-  let%lwt u =
-    let created_at, updated_at = (now, now) in
-    Db.User.(
-      make ~id:0 ~email ~created_at ~updated_at ~account_id:a.id |> save_one)
-  in
-  Lwt.return (a, u)
-
 let server () =
   let _host, port = (C.listen_host (), C.listen_port ()) in
 
@@ -56,7 +32,9 @@ let db_reset () =
            let username = sprintf "user%d" i in
            let display_name = sprintf "User %d's display name" i in
            let email = sprintf "user%d@example.com" i in
-           register_user ~username ~display_name ~email |> ignore_lwt)
+           let password = sprintf "user%dpassword" i in
+           Db.register_user ~username ~display_name ~email ~password
+           |> ignore_lwt)
   in
   Lwt_main.run f
 

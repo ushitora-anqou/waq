@@ -43,6 +43,7 @@
   ptime
   re
   result
+  safepass
   sha
   uri
   uuidm

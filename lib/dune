@@ -25,6 +25,7 @@
   re
   re.pcre
   result
+  safepass
   unix
   uri
   uuidm

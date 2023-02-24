@@ -12,6 +12,7 @@ let content_type_app_jrd_json =
 
 let content_type_app_json = (`Content_type, "application/json; charset=utf-8")
 let content_type_app_activity_json = (`Content_type, "application/activity+json")
+let raise_error_response = Httpq.Server.raise_error_response
 
 let authenticate_bearer = function
   | Httpq.Server.Request r -> (
@@ -20,25 +21,25 @@ let authenticate_bearer = function
         assert (String.starts_with ~prefix:"Bearer " header);
         let bearer_token = String.sub header 7 (String.length header - 7) in
         Oauth_helper.authenticate_access_token bearer_token
-      with _ -> Httpq.Server.raise_error_response `Unauthorized)
+      with _ -> raise_error_response `Unauthorized)
 
 let authenticate_user (r : Httpq.Server.request) =
   try
     let%lwt token = authenticate_bearer r in
     token.resource_owner_id |> Option.get |> Lwt.return
-  with _ -> Httpq.Server.raise_error_response `Unauthorized
+  with _ -> raise_error_response `Unauthorized
 
 let may_authenticate_user r =
   try%lwt authenticate_user r >|= Option.some with _ -> Lwt.return_none
 
 let int_of_string s =
   match int_of_string_opt s with
-  | None -> Httpq.Server.raise_error_response `Bad_request
+  | None -> raise_error_response `Bad_request
   | Some i -> i
 
 let bool_of_string s =
   match bool_of_string_opt s with
-  | None -> Httpq.Server.raise_error_response `Bad_request
+  | None -> raise_error_response `Bad_request
   | Some b -> b
 
 let respond_yojson y =
@@ -71,4 +72,7 @@ let parse_webfinger_address q =
   | Ok [ _; username; domain ] ->
       let domain = if domain = "" then None else Some domain in
       (username, domain)
-  | _ -> Httpq.Server.raise_error_response `Bad_request
+  | _ -> raise_error_response `Bad_request
+
+let raise_if_no_row_found ?(status = `Bad_request) f =
+  try%lwt f with Sql.NoRowFound -> raise_error_response status

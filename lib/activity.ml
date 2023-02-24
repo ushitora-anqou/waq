@@ -2,9 +2,6 @@ open Lwt.Infix
 open Util
 module Uri = Httpq.Uri
 
-let url (l : string list) =
-  "https:/" ^ (Config.server_name () :: l |> List.fold_left ( ^/ ) "")
-
 let is_my_domain (u : string) =
   u |> Uri.of_string |> Uri.domain |> Config.is_my_domain
 

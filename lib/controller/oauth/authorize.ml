@@ -1,25 +1,27 @@
+open Helper
+
 let post req =
   let response_type = req |> Httpq.Server.query "response_type" in
   let client_id = req |> Httpq.Server.query "client_id" in
   let redirect_uri = req |> Httpq.Server.query "redirect_uri" in
   let scope = req |> Httpq.Server.query ~default:"read" "scope" in
   let username = req |> Httpq.Server.query "username" in
+  let password = req |> Httpq.Server.query "password" in
 
-  if response_type <> "code" then Httpq.Server.raise_error_response `Bad_request;
+  if response_type <> "code" then raise_error_response `Bad_request;
   let%lwt app = Oauth_helper.authenticate_application client_id in
   (* FIXME: Check if scope is correct *)
-  if redirect_uri <> app.redirect_uri then
-    Httpq.Server.raise_error_response `Bad_request;
+  if redirect_uri <> app.redirect_uri then raise_error_response `Bad_request;
 
-  let%lwt resource_owner_id =
-    match%lwt
-      Db.(Account.get_one ~domain:None ~username () |> maybe_no_row)
-    with
-    | None -> Httpq.Server.raise_error_response `Bad_request
-    | Some a ->
-        let%lwt u = Db.User.get_one ~account_id:a.id () in
-        Lwt.return u.id
+  let%lwt account =
+    Db.Account.get_one ~domain:None ~username () |> raise_if_no_row_found
   in
+  let%lwt user =
+    Db.User.get_one ~account_id:account.id () |> raise_if_no_row_found
+  in
+  if not Bcrypt.(verify password (hash_of_string user.encrypted_password)) then
+    raise_error_response `Unauthorized;
+  let resource_owner_id = user.id in
 
   let%lwt grant =
     Oauth_helper.generate_access_grant ~expires_in:600 ~redirect_uri
