@@ -451,14 +451,14 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
 
 (* Get activity+json from the Internet *)
 let fetch_activity ~uri =
-  Httpq.Client.fetch_exn ~headers:[ (`Accept, "application/activity+json") ] uri
+  Throttle_fetch.f_exn ~headers:[ (`Accept, "application/activity+json") ] uri
   >|= Yojson.Safe.from_string
 
 (* Send GET /.well-known/webfinger *)
 let get_webfinger ~scheme ~domain ~username =
   (* FIXME: Check /.well-known/host-meta if necessary *)
   let%lwt body =
-    Httpq.Client.fetch_exn @@ scheme ^ ":/" ^/ domain
+    Throttle_fetch.f_exn @@ scheme ^ ":/" ^/ domain
     ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
   in
   body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Lwt.return
