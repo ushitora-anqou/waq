@@ -59,6 +59,41 @@ let oauth_generate_access_token username =
   in
   Lwt_main.run f
 
+let hidden_input f =
+  let open Unix in
+  let attr = tcgetattr stdin in
+  attr.c_echo <- false;
+  tcsetattr stdin TCSAFLUSH attr;
+  let res = f () in
+  attr.c_echo <- true;
+  tcsetattr stdin TCSAFLUSH attr;
+  res
+
+let user_register () =
+  let f =
+    print_string "Username: ";
+    let username = read_line () |> String.trim in
+    print_string "Display name: ";
+    let display_name = read_line () |> String.trim in
+    print_string "Email: ";
+    let email = read_line () |> String.trim in
+    let password =
+      hidden_input @@ fun () ->
+      print_string "Password: ";
+      let password = read_line () |> String.trim in
+      print_newline ();
+      print_string "Retype your password: ";
+      let password' = read_line () |> String.trim in
+      print_newline ();
+      if password <> password' then failwith "Password was not equal";
+      password
+    in
+    let%lwt _, u = Db.register_user ~username ~display_name ~email ~password in
+    print_endline ("Correctly registered. User # = " ^ string_of_int u.id);
+    Lwt.return_unit
+  in
+  Lwt_main.run f
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.(load_file (config_path ()));
@@ -70,4 +105,5 @@ let () =
   match subcommand with
   | "db:reset" -> db_reset ()
   | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
+  | "user:register" -> user_register ()
   | _ -> server ()
