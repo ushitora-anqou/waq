@@ -32,3 +32,11 @@ let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
   |> Option.map bool_of_string
   |> Option.value ~default:false
+
+let debug_generate_test_users () =
+  Sys.getenv_opt "WAQ_GENERATE_TEST_USERS"
+  |> Option.map bool_of_string
+  |> Option.value ~default:false
+
+let config_path () =
+  Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"

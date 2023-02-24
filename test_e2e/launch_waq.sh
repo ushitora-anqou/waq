@@ -12,10 +12,12 @@ killtree() {
     kill -${_sig} ${_pid}
 }
 
+export WAQ_DEBUG_JOB_KICK_BLOCK=true
+export WAQ_GENERATE_TEST_USERS=true
+export WAQ_CONFIG_PATH="config/test.yml"
 dune exec bin/main.exe db:reset >/dev/null 2>/dev/null
 dune exec bin/main.exe oauth:generate_access_token user1
-#dune exec bin/main.exe >/dev/null 2>/dev/null &
-WAQ_DEBUG_JOB_KICK_BLOCK=true dune exec bin/main.exe &
+dune exec bin/main.exe &
 waq_pid=$!
 
 cleanup() {

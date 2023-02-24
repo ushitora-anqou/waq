@@ -1,9 +1,8 @@
 open Waq
 open Util [@@warning "-33"]
-module C = Config
 
 let server () =
-  let _host, port = (C.listen_host (), C.listen_port ()) in
+  let _host, port = Config.(listen_host (), listen_port ()) in
 
   let error_handler ~req ~status ~headers ~body =
     let open Controller.Helper in
@@ -24,17 +23,18 @@ let db_reset () =
     Db.debug_drop_all_tables_in_db ();%lwt
     Migration.migrate ();%lwt
 
-    (* Generate some users for tests.
-       FIXME: Should be removed once an endpoint to register a user is implemented *)
-    [ 1; 2; 3 ] |> List.rev
-    |> Lwt_list.iter_s (fun i ->
-           let open Printf in
-           let username = sprintf "user%d" i in
-           let display_name = sprintf "User %d's display name" i in
-           let email = sprintf "user%d@example.com" i in
-           let password = sprintf "user%dpassword" i in
-           Db.register_user ~username ~display_name ~email ~password
-           |> ignore_lwt)
+    if Config.debug_generate_test_users () then
+      (* Generate some users for tests *)
+      [ 1; 2; 3 ] |> List.rev
+      |> Lwt_list.iter_s (fun i ->
+             let open Printf in
+             let username = sprintf "user%d" i in
+             let display_name = sprintf "User %d's display name" i in
+             let email = sprintf "user%d@example.com" i in
+             let password = sprintf "user%dpassword" i in
+             Db.register_user ~username ~display_name ~email ~password
+             |> ignore_lwt)
+    else Lwt.return_unit
   in
   Lwt_main.run f
 
@@ -61,7 +61,7 @@ let oauth_generate_access_token username =
 
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
-  C.load_file "config.yml";
+  Config.(load_file (config_path ()));
   Crypto.initialize ();
   Db.initialize ();
   let subcommand =
