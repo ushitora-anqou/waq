@@ -106,8 +106,8 @@ let kick_inbox_delete (req : ap_delete) =
 (* Recv POST /users/:name/inbox *)
 let post req =
   match%lwt Activity.verify_activity_json req with
-  | Error _ -> Httpq.Server.respond ~status:`Unauthorized ""
-  | Ok body ->
+  | exception _ -> Httpq.Server.respond ~status:`Unauthorized ""
+  | body ->
       (try
          match Yojson.Safe.from_string body |> of_yojson with
          | Accept r -> kick_inbox_accept r

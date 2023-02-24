@@ -538,8 +538,8 @@ let verify_activity_json req =
     verify ~pub_key ~algorithm ~signed_headers ~signature ~headers ~meth ~path
       ~body:(Some body)
   with
-  | Error _ -> Error "verification failed"
-  | Ok () -> Ok body
+  | Error _ -> failwith "verification failed"
+  | Ok () -> body
 
 let post_activity_json ~body ~sign ~url =
   let meth = `POST in
