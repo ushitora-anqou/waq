@@ -36,6 +36,7 @@ let execute_one_test (name, f) =
 let () =
   print_newline ();
   Logq.(add_reporter (make_reporter ~l:Debug ()));
+  Random.self_init ();
 
   let shuffle d =
     (* Thanks to: https://stackoverflow.com/a/15095713 *)
