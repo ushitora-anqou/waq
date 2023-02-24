@@ -187,14 +187,7 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
   in
 
   (* Invoke the handler *)
-  let%lwt res =
-    try%lwt handler req
-    with ErrorResponse { status; body } ->
-      Logq.debug (fun m ->
-          m "Error response raised: %s\n%s" (Status.to_string status)
-            (Printexc.get_backtrace ()));
-      respond ~status body
-  in
+  let%lwt res = handler req in
 
   (* Respond (after call error_handler if necessary *)
   let rec aux first = function
@@ -248,7 +241,7 @@ module Router = struct
     in
 
     match req with
-    | Request req ->
+    | Request req -> (
         (* Choose correct handler from routes *)
         let param, handler =
           routes
@@ -260,7 +253,17 @@ module Router = struct
           |> Option.value ~default:([], inner_handler)
         in
         let req = Request { req with param } in
-        handler req
+        try%lwt handler req with
+        | ErrorResponse { status; body } ->
+            Logq.debug (fun m ->
+                m "Error response raised: %s\n%s" (Status.to_string status)
+                  (Printexc.get_backtrace ()));
+            respond ~status body
+        | e ->
+            Logq.debug (fun m ->
+                m "Exception raised: %s\n%s" (Printexc.to_string e)
+                  (Printexc.get_backtrace ()));
+            respond ~status:`Internal_server_error "")
 
   let get target f : spec_entry = Route (`GET, target, f)
   let post target f : spec_entry = Route (`POST, target, f)
