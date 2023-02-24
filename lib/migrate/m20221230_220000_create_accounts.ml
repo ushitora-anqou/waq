@@ -15,9 +15,14 @@ CREATE TABLE accounts (
   shared_inbox_url TEXT NOT NULL,
   followers_url TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-
-  UNIQUE (username, domain)
-)|}
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+)|};%lwt
+  Sql.execute c
+    {|
+CREATE INDEX ON accounts (
+  LOWER(username),
+  COALESCE(LOWER(domain), '')
+)
+|}
 
 let down c = Sql.execute c {|DROP TABLE accounts|}

@@ -9,6 +9,7 @@ CREATE TABLE users (
   encrypted_password TEXT NOT NULL,
   account_id BIGINT NOT NULL,
 
+  UNIQUE (email),
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE
 )|}
 
