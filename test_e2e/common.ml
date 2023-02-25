@@ -74,11 +74,16 @@ let make_waq_and_mstdn_scenario ?(timeout = 30.0) handler () : unit =
          (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout");
        ]
 
-let make_waq_scenario handler () : unit =
+let make_waq_scenario ?(timeout = 30.0) handler () : unit =
   new_session @@ fun waq_token ->
   Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
   Unix.sleep 1;
-  Lwt_main.run @@ handler waq_token
+  Lwt_main.run
+  @@ Lwt.pick
+       [
+         handler waq_token;
+         (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout");
+       ]
 
 let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)

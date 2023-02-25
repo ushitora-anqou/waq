@@ -45,6 +45,8 @@ module Lwt_option = struct
   let map f = function
     | None -> Lwt.return_none
     | Some v -> Lwt.map Option.some (f v)
+
+  let iter f = function None -> Lwt.return_unit | Some v -> f v
 end
 
 type json_any = Yojson.Safe.t

@@ -30,6 +30,89 @@ BEGIN
     END LOOP;
 END $$|}
 
+module AccountStat = struct
+  type t = {
+    id : int; [@sql.auto_increment]
+    account_id : int;
+    statuses_count : int;
+    following_count : int;
+    followers_count : int;
+    created_at : Ptime.t;
+    updated_at : Ptime.t;
+    last_status_at : Ptime.t option;
+  }
+  [@@sql.table_name "account_stats"] [@@deriving sql, make]
+
+  let increment ~account_id ?(statuses_count = 0) ?(following_count = 0)
+      ?(followers_count = 0) ?last_status_at () =
+    do_query @@ fun c ->
+    Sql.execute c
+      {|
+INSERT INTO account_stats ( account_id, statuses_count, following_count, followers_count, created_at, updated_at, last_status_at )
+VALUES ( $1, $2, $3, $4, now(), now(), $5 )
+ON CONFLICT (account_id) DO UPDATE
+SET statuses_count  = account_stats.statuses_count + $2,
+    following_count = account_stats.following_count + $3,
+    followers_count = account_stats.followers_count + $4,
+    last_status_at = $5,
+    updated_at = now()|}
+      ~p:
+        [
+          `Int account_id;
+          `Int statuses_count;
+          `Int following_count;
+          `Int followers_count;
+          `NullTimestamp last_status_at;
+        ]
+
+  let decrement ~account_id ?(statuses_count = 0) ?(following_count = 0)
+      ?(followers_count = 0) =
+    let statuses_count = -statuses_count in
+    let following_count = -following_count in
+    let followers_count = -followers_count in
+    increment ~account_id ~statuses_count ~following_count ~followers_count
+end
+
+module StatusStat = struct
+  type t = {
+    id : int;
+    status_id : int;
+    replies_count : int;
+    reblogs_count : int;
+    favourites_count : int;
+    created_at : Ptime.t;
+    updated_at : Ptime.t;
+  }
+  [@@sql.table_name "status_stats"] [@@deriving sql, make]
+
+  let increment ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
+      ?(favourites_count = 0) () =
+    do_query @@ fun c ->
+    Sql.execute c
+      {|
+INSERT INTO status_stats ( status_id, replies_count, reblogs_count, favourites_count, created_at, updated_at )
+VALUES ($1, $2, $3, $4, now(), now())
+ON CONFLICT (status_id) DO UPDATE
+SET replies_count = status_stats.replies_count + $2,
+    reblogs_count = status_stats.reblogs_count + $3,
+    favourites_count = status_stats.favourites_count + $4,
+    updated_at = now()|}
+      ~p:
+        [
+          `Int status_id;
+          `Int replies_count;
+          `Int reblogs_count;
+          `Int favourites_count;
+        ]
+
+  let decrement ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
+      ?(favourites_count = 0) () =
+    let replies_count = -replies_count in
+    let reblogs_count = -reblogs_count in
+    let favourites_count = -favourites_count in
+    increment ~status_id ~replies_count ~reblogs_count ~favourites_count ()
+end
+
 module User = struct
   type t = {
     id : int; [@sql.auto_increment]
@@ -101,6 +184,19 @@ module Status = struct
   let get_many' = get_many
   let get_one = get_one ~deleted_at:None
   let get_many = get_many ~deleted_at:None
+  let delete () = assert false
+
+  let save_one s =
+    let%lwt s = save_one s in
+    AccountStat.increment ~account_id:s.account_id ~statuses_count:1
+      ~last_status_at:s.created_at ();%lwt
+    s.reblog_of_id
+    |> Lwt_option.iter (fun status_id ->
+           StatusStat.increment ~status_id ~reblogs_count:1 ());%lwt
+    s.in_reply_to_id
+    |> Lwt_option.iter (fun status_id ->
+           StatusStat.increment ~status_id ~replies_count:1 ());%lwt
+    Lwt.return s
 
   let save_one_with_uri s =
     let%lwt s = save_one s in
@@ -148,12 +244,26 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
 
   let discard_with_reblogs id : t Lwt.t =
     let time = Ptime.now () in
-    do_query (fun c ->
-        Sql.execute c
-          {|UPDATE statuses SET deleted_at = $2 WHERE reblog_of_id = $1 AND deleted_at IS NULL|}
-          ~p:[ `Int id; `Timestamp time ]);%lwt
-    query_row "UPDATE statuses SET deleted_at = $2 WHERE id = $1 RETURNING *"
-      ~p:[ `Int id; `Timestamp time ]
+    let%lwt reblogs =
+      query
+        {|UPDATE statuses SET deleted_at = $2 WHERE reblog_of_id = $1 AND deleted_at IS NULL RETURNING *|}
+        ~p:[ `Int id; `Timestamp time ]
+    in
+    let%lwt status =
+      query_row "UPDATE statuses SET deleted_at = $2 WHERE id = $1 RETURNING *"
+        ~p:[ `Int id; `Timestamp time ]
+    in
+    status :: reblogs
+    |> Lwt_list.iter_p (fun s ->
+           AccountStat.decrement ~account_id:s.account_id ~statuses_count:1 ();%lwt
+           s.reblog_of_id
+           |> Lwt_option.iter (fun status_id ->
+                  StatusStat.decrement ~status_id ~reblogs_count:1 ());%lwt
+           s.in_reply_to_id
+           |> Lwt_option.iter (fun status_id ->
+                  StatusStat.decrement ~status_id ~replies_count:1 ());%lwt
+           Lwt.return_unit);%lwt
+    Lwt.return status
 end
 
 module Follow = struct
@@ -166,6 +276,18 @@ module Follow = struct
     uri : string;
   }
   [@@sql.table_name "follows"] [@@deriving make, sql]
+
+  let save_one f =
+    let%lwt f = save_one f in
+    AccountStat.increment ~account_id:f.account_id ~following_count:1 ();%lwt
+    AccountStat.increment ~account_id:f.target_account_id ~followers_count:1 ();%lwt
+    Lwt.return f
+
+  let delete f =
+    delete ~id:f.id ();%lwt
+    AccountStat.decrement ~account_id:f.account_id ~following_count:1 ();%lwt
+    AccountStat.decrement ~account_id:f.target_account_id ~followers_count:1 ();%lwt
+    Lwt.return_unit
 
   let does_follow ~account_id ~target_account_id : bool Lwt.t =
     match%lwt get_one ~account_id ~target_account_id () with
@@ -234,6 +356,15 @@ module Favourite = struct
     status_id : int;
   }
   [@@sql.table_name "favourites"] [@@deriving make, sql]
+
+  let save_one f =
+    let%lwt f = save_one f in
+    StatusStat.increment ~status_id:f.status_id ~favourites_count:1 ();%lwt
+    Lwt.return f
+
+  let delete f =
+    delete ~id:f.id ();%lwt
+    StatusStat.decrement ~status_id:f.status_id ~favourites_count:1 ()
 
   let get_favourites_count ~status_id =
     do_query @@ fun c ->

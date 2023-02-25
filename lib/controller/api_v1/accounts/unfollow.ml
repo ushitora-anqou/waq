@@ -4,7 +4,7 @@ open Helper
 open Util
 
 let service (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
-  Db.Follow.delete ~uri:f.uri ();%lwt
+  Db.Follow.delete f;%lwt
   match acc.domain with
   | None -> Lwt.return_unit
   | Some _ ->

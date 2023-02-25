@@ -15,7 +15,7 @@ let post req =
   (match%lwt Db.Favourite.get_one ~status_id ~account_id () with
   | exception Sql.NoRowFound -> (* Already unfavourited *) Lwt.return_unit
   | fav ->
-      Db.Favourite.delete ~id:fav.id ();%lwt
+      Db.Favourite.delete fav;%lwt
       if%lwt Db.Account.is_remote ~id:status.account_id then
         let%lwt src = Db.Account.get_one ~id:account_id () in
         let%lwt dst = Db.Account.get_one ~id:status.account_id () in

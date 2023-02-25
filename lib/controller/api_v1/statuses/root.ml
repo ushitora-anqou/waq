@@ -1,6 +1,6 @@
 open Entity
 open Util
-open Lwt.Infix
+open Lwt.Infix [@@warning "-33"]
 open Helper
 
 (* GET /api/v1/statuses/:id *)
@@ -46,6 +46,7 @@ let delete req =
     with Sql.NoRowFound -> Httpq.Server.raise_error_response `Not_found
   in
 
+  (* We should construct the result BEFORE the removal *)
+  let%lwt status_to_be_returned = make_status_from_model ~self_id status in
   Worker.Removal.kick ~account_id:self_id ~status_id;%lwt
-
-  make_status_from_model ~self_id status >|= yojson_of_status >>= respond_yojson
+  yojson_of_status status_to_be_returned |> respond_yojson

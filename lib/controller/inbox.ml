@@ -57,11 +57,13 @@ let kick_inbox_accept (req : ap_accept) =
 
 let kick_inbox_undo_like (l : ap_like) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt { id; _ } = favourite_of_like ~must_already_exist:true l in
-  Db.Favourite.delete ~id ()
+  let%lwt fav = favourite_of_like ~must_already_exist:true l in
+  Db.Favourite.delete fav
 
 let kick_inbox_undo_follow ({ id; _ } : ap_follow) =
-  Job.kick ~name:__FUNCTION__ @@ fun () -> Db.Follow.delete ~uri:id ()
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
+  let%lwt follow = Db.Follow.get_one ~uri:id () in
+  Db.Follow.delete follow
 
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =

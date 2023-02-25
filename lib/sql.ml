@@ -15,11 +15,14 @@ module Value = struct
     | `Timestamp of Ptime.t ]
   [@@deriving show]
 
-  type null_t = [ t | `NullString of string option ]
+  type null_t =
+    [ t | `NullString of string option | `NullTimestamp of Ptime.t option ]
 
   let normalize : null_t -> t = function
     | `NullString None -> `Null
     | `NullString (Some s) -> `String s
+    | `NullTimestamp None -> `Null
+    | `NullTimestamp (Some t) -> `Timestamp t
     | #t as v -> v
 
   let to_string = show
