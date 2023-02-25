@@ -1,4 +1,3 @@
-open Entity
 open Lwt.Infix
 open Helper
 
@@ -21,8 +20,10 @@ let parse_req req =
   Lwt.return { id; self_id; max_id; since_id; limit }
 
 let respond_account_list accts =
-  Lwt_list.map_p make_account_from_model accts
-  >|= List.map yojson_of_account
+  accts
+  |> List.map (fun (a : Db.Account.t) -> a.id)
+  |> Entity.serialize_accounts
+  >|= List.map Entity.yojson_of_account
   >|= (fun l -> `List l)
   >>= respond_yojson
 

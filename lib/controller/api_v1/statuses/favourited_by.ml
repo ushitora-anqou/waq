@@ -1,6 +1,5 @@
 open Util
 open Helper
-open Entity
 open Lwt.Infix
 
 let get req =
@@ -8,6 +7,8 @@ let get req =
   let%lwt accts = Db.get_favourited_by ~status_id in
   let%lwt accts =
     accts
-    |> Lwt_list.map_p (fun a -> make_account_from_model a >|= yojson_of_account)
+    |> List.map (fun (a : Db.Account.t) -> a.id)
+    |> Entity.serialize_accounts
+    >|= List.map Entity.yojson_of_account
   in
   `List accts |> respond_yojson

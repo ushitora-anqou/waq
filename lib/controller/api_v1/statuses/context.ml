@@ -1,6 +1,4 @@
-open Entity
-
-type t = { ancestors : status list; descendants : status list }
+type t = { ancestors : Entity.status list; descendants : Entity.status list }
 [@@deriving make, yojson]
 
 let get req =
@@ -12,10 +10,14 @@ let get req =
   | None, _ | _, None -> Httpq.Server.raise_error_response `Not_found
   | Some ancestors, Some descendants ->
       let%lwt ancestors =
-        ancestors |> Lwt_list.map_p (make_status_from_model ?self_id)
+        ancestors
+        |> List.map (fun (s : Db.Status.t) -> s.id)
+        |> Entity.serialize_statuses ?self_id
       in
       let%lwt descendants =
-        descendants |> Lwt_list.map_p (make_status_from_model ?self_id)
+        descendants
+        |> List.map (fun (s : Db.Status.t) -> s.id)
+        |> Entity.serialize_statuses ?self_id
       in
       make ~ancestors ~descendants ()
       |> yojson_of_t |> Yojson.Safe.to_string

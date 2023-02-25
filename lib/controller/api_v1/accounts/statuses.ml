@@ -1,4 +1,3 @@
-open Entity
 open Lwt.Infix
 open Helper
 
@@ -32,7 +31,8 @@ let get req =
     parse_req req
   in
   Db.account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies
-  >>= Lwt_list.map_p (make_status_from_model ?self_id)
-  >|= List.map yojson_of_status
+  >|= List.map (fun (s : Db.Status.t) -> s.id)
+  >>= Entity.serialize_statuses ?self_id
+  >|= List.map Entity.yojson_of_status
   >|= (fun l -> `List l)
   >>= respond_yojson

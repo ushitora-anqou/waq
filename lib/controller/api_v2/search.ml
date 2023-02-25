@@ -1,11 +1,10 @@
-open Entity
 open Helper
 open Lwt.Infix
 open Util
 
 type t = {
-  accounts : account list;
-  statuses : status list;
+  accounts : Entity.account list;
+  statuses : Entity.status list;
   hashtags : string (* FIXME: dummy *) list;
 }
 [@@deriving make, yojson]
@@ -44,8 +43,14 @@ let parse_query q =
   (* FIXME: Support more kinds of queries *)
   let%lwt a1, s1 = parse_query_uri q in
   let%lwt a2 = parse_query_accounts q in
-  let%lwt accounts = a1 @ a2 |> Lwt_list.map_p make_account_from_model in
-  let%lwt statuses = s1 |> Lwt_list.map_p make_status_from_model in
+  let%lwt accounts =
+    a1 @ a2
+    |> List.map (fun (a : Db.Account.t) -> a.id)
+    |> Entity.serialize_accounts
+  in
+  let%lwt statuses =
+    s1 |> List.map (fun (s : Db.Status.t) -> s.id) |> Entity.serialize_statuses
+  in
   let hashtags = [] in
   make ~accounts ~statuses ~hashtags () |> Lwt.return
 

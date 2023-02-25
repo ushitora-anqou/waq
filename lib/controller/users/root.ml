@@ -10,7 +10,8 @@ let respond_html (a : Db.Account.t) () =
   let%lwt statuses =
     Db.account_statuses ~id:a.id ~limit:30 ~max_id:None ~since_id:None
       ~exclude_replies:false
-    >>= Lwt_list.map_p Entity.make_status_from_model
+    >|= List.map (fun (s : Db.Status.t) -> s.id)
+    >>= Entity.serialize_statuses
   in
   let status_to_Tobj (s : Entity.status) =
     let rec aux (s : Entity.status) =
