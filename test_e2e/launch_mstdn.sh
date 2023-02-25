@@ -24,8 +24,11 @@ mstdn_token=$(echo '\
     token.token' | \
     rails c --no-sandbox | egrep '^=>' | awk -F'"' '{print $2}' | sed -r "s/\x1B\[([0-9]{1,3}(;[0-9]{1,3})*)?[mGK]//g")
 echo "$mstdn_token"
-#foreman start >&2 2>/dev/null &
-foreman start >/dev/null 2>/dev/null &
+if [ -z "$MSTDN_LOG" ]; then
+  foreman start >/dev/null 2>/dev/null &
+else
+  foreman start >&2 2>/dev/null &
+fi
 mstdn_pid=$!
 
 cleanup() {
