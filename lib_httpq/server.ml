@@ -25,7 +25,12 @@ type request =
 
 type response =
   | BareResponse of Bare_server.Response.t
-  | Response of { status : Status.t; headers : Headers.t; body : string }
+  | Response of {
+      status : Status.t;
+      headers : Headers.t;
+      body : string;
+      tags : string list;
+    }
 
 type handler = request -> response Lwt.t
 type middleware = handler -> handler
@@ -35,8 +40,8 @@ exception ErrorResponse of { status : Status.t; body : string }
 let raise_error_response ?(body = "") status =
   raise (ErrorResponse { status; body })
 
-let respond ?(status = `OK) ?(headers = []) (body : string) =
-  Response { status; headers; body } |> Lwt.return
+let respond ?(status = `OK) ?(headers = []) ?(tags = []) (body : string) =
+  Response { status; headers; body; tags } |> Lwt.return
 
 let body = function
   | Request { raw_body = Some raw_body; _ } -> raw_body
@@ -192,7 +197,7 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
   (* Respond (after call error_handler if necessary *)
   let rec aux first = function
     | BareResponse resp -> Lwt.return resp
-    | Response { status; headers; body }
+    | Response { status; headers; body; _ }
       when (not first)
            || Option.is_none error_handler
            || not (Status.is_error status)
@@ -200,7 +205,7 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
               - error_handler is not specified; or
               - not erroneous response *) ->
         Bare_server.respond ~status ~headers ~body
-    | Response { status; headers; body } ->
+    | Response { status; headers; body; _ } ->
         let error_handler = Option.get error_handler in
         error_handler ~req ~status ~headers ~body >>= aux false
   in
@@ -242,28 +247,32 @@ module Router = struct
 
     match req with
     | Request req -> (
-        (* Choose correct handler from routes *)
-        let param, handler =
-          routes
-          |> List.find_map (fun (meth', pat, handler) ->
-                 if req.meth <> meth' then None
-                 else
-                   Path_pattern.perform ~pat req.path
-                   |> Option.map (fun param -> (param, handler)))
-          |> Option.value ~default:([], inner_handler)
-        in
-        let req = Request { req with param } in
-        try%lwt handler req with
-        | ErrorResponse { status; body } ->
-            Logq.debug (fun m ->
-                m "Error response raised: %s\n%s" (Status.to_string status)
-                  (Printexc.get_backtrace ()));
-            respond ~status body
-        | e ->
-            Logq.debug (fun m ->
-                m "Exception raised: %s\n%s" (Printexc.to_string e)
-                  (Printexc.get_backtrace ()));
-            respond ~status:`Internal_server_error "")
+        ((* Choose correct handler from routes *)
+         let param, handler =
+           routes
+           |> List.find_map (fun (meth', pat, handler) ->
+                  if req.meth <> meth' then None
+                  else
+                    Path_pattern.perform ~pat req.path
+                    |> Option.map (fun param -> (param, handler)))
+           |> Option.value ~default:([], inner_handler)
+         in
+         let req = Request { req with param } in
+         try%lwt handler req with
+         | ErrorResponse { status; body } ->
+             Logq.debug (fun m ->
+                 m "Error response raised: %s\n%s" (Status.to_string status)
+                   (Printexc.get_backtrace ()));
+             respond ~status ~tags:[ "log" ] body
+         | e ->
+             Logq.debug (fun m ->
+                 m "Exception raised: %s\n%s" (Printexc.to_string e)
+                   (Printexc.get_backtrace ()));
+             respond ~status:`Internal_server_error "")
+        >|= function
+        | Response ({ status; tags; _ } as r) when Status.is_error status ->
+            Response { r with tags = "log" :: tags }
+        | r -> r)
 
   let get target f : spec_entry = Route (`GET, target, f)
   let post target f : spec_entry = Route (`POST, target, f)
@@ -352,10 +361,12 @@ module Logger = struct
     | BareResponse _ -> Logq.info (fun m -> m "[bare] %s %s" meth uri));
 
     (match (dump_req_dir, req, resp) with
-    | Some dir, Request { bare_req; raw_body; _ }, Response { status; _ }
-      when Status.is_error status ->
+    | Some dir, Request { bare_req; raw_body; _ }, Response { status; tags; _ }
+      when List.mem "log" tags ->
         (* NOTE: We use open_temp_file to make sure that each request is written to each file. So, this file should NOT be removed after we write the content to it. *)
-        let prefix = Ptime.(now () |> to_float_s |> string_of_float) ^ "." in
+        let prefix =
+          Ptime.(now () |> to_float_s |> Printf.sprintf "%.2f") ^ "."
+        in
         let%lwt _, oc = Lwt_io.open_temp_file ~temp_dir:dir ~prefix () in
         (let buf = Buffer.create 1 in
          let oc_f = Format.formatter_of_buffer buf in

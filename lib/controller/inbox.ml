@@ -109,19 +109,17 @@ let kick_inbox_delete (req : ap_delete) =
 let post req =
   match%lwt Activity.verify_activity_json req with
   | exception _ -> Httpq.Server.respond ~status:`Unauthorized ""
-  | body ->
-      (try
-         match Yojson.Safe.from_string body |> of_yojson with
-         | Accept r -> kick_inbox_accept r
-         | Announce r -> kick_inbox_announce r
-         | Create r -> kick_inbox_create r
-         | Delete r -> kick_inbox_delete r
-         | Follow r -> kick_inbox_follow r
-         | Like r -> kick_inbox_like r
-         | Undo { obj = Follow v; _ } -> kick_inbox_undo_follow v
-         | Undo { obj = Like v; _ } -> kick_inbox_undo_like v
-         | _ -> failwith "activity not implemented"
-       with _ ->
-         Logq.warn (fun m -> m "Ignoring inbox message:\n%s" body);
-         Lwt.return_unit);%lwt
-      Httpq.Server.respond ~status:`Accepted ""
+  | body -> (
+      try
+        (match Yojson.Safe.from_string body |> of_yojson with
+        | Accept r -> kick_inbox_accept r
+        | Announce r -> kick_inbox_announce r
+        | Create r -> kick_inbox_create r
+        | Delete r -> kick_inbox_delete r
+        | Follow r -> kick_inbox_follow r
+        | Like r -> kick_inbox_like r
+        | Undo { obj = Follow v; _ } -> kick_inbox_undo_follow v
+        | Undo { obj = Like v; _ } -> kick_inbox_undo_like v
+        | _ -> failwith "activity not implemented");%lwt
+        Httpq.Server.respond ~status:`Accepted ""
+      with _ -> Httpq.Server.respond ~status:`Accepted ~tags:[ "log" ] "")
