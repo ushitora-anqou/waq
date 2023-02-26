@@ -89,6 +89,8 @@ and ap_ordered_collection = {
   last : string option;
 }
 
+and ap_update = { id : string; actor : string; to_ : string list; obj : t }
+
 and t =
   | Accept of ap_accept
   | Announce of ap_announce
@@ -101,6 +103,7 @@ and t =
   | Person of ap_person
   | Tombstone of ap_tombstone
   | Undo of ap_undo
+  | Update of ap_update
 
 [@@@warning "+30"]
 
@@ -115,6 +118,7 @@ let get_note = function Note r -> Some r | _ -> None
 let get_person = function Person r -> Some r | _ -> None
 let get_tombstone = function Tombstone r -> Some r | _ -> None
 let get_undo = function Undo r -> Some r | _ -> None
+let get_update = function Update r -> Some r | _ -> None
 let of_accept r = Accept r
 let of_note r = Note r
 let accept r = Accept r
@@ -128,12 +132,14 @@ let ordered_collection r = OrderedCollection r
 let person r = Person r
 let tombstone r = Tombstone r
 let undo r = Undo r
+let update r = Update r
 let make_follow ~id ~actor ~obj : ap_follow = { id; actor; obj }
 let make_accept ~id ~actor ~obj : ap_accept = { id; actor; obj }
 let make_undo ~id ~actor ~obj ?to_ () : ap_undo = { id; actor; obj; to_ }
 let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
 let make_delete ~id ~actor ~obj ~to_ : ap_delete = { id; actor; obj; to_ }
 let make_tombstone ~id : ap_tombstone = { id }
+let make_update ~id ~actor ~to_ ~obj : ap_update = { id; actor; to_; obj }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
@@ -321,6 +327,11 @@ let rec of_yojson (src : Yojson.Safe.t) =
         ~preferred_username ~name ~summary ~url ~tag ~public_key_id
         ~public_key_owner ~public_key_pem
       |> person
+  | "Update" ->
+      let actor = string Actor in
+      let to_ = list To |> List.map expect_string in
+      let obj = get Object |> of_yojson in
+      make_update ~id ~actor ~to_ ~obj |> update
   | _ -> assert false
 
 let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
@@ -439,6 +450,14 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
                  (To, `List (xs |> List.map (fun x -> `String x))) :: l)
         in
         l
+    | Update r ->
+        [
+          (Id, `String r.id);
+          (Type, `String "Update");
+          (Actor, `String r.actor);
+          (To, `List (r.to_ |> List.map string));
+          (Object, to_yojson r.obj);
+        ]
   in
   let l = l |> List.map (fun (k, v) -> (string_of_property k, v)) in
   let l =

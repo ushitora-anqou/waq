@@ -18,4 +18,5 @@ let patch req =
   in
 
   let%lwt a = Db.Account.update_one ~id:a.id a () in
+  Worker.Account_update.kick ~account_id:a.id ~updated_at:a.updated_at;%lwt
   make_credential_account_from_model a >|= yojson_of_account >>= respond_yojson

@@ -105,6 +105,25 @@ let kick_inbox_delete (req : ap_delete) =
   in
   Worker.Removal.kick ~account_id:account.id ~status_id:status.id
 
+let kick_inbox_update_person (r : ap_person) =
+  let%lwt a = Db.Account.get_one ~uri:r.id () in
+  let a =
+    {
+      a with
+      username = r.preferred_username;
+      domain = Some Uri.(of_string r.id |> domain);
+      public_key = r.public_key_pem;
+      display_name = r.name;
+      uri = r.id;
+      url = Some r.url;
+      inbox_url = r.inbox;
+      outbox_url = r.outbox;
+      followers_url = r.followers;
+      shared_inbox_url = r.shared_inbox;
+    }
+  in
+  Db.Account.update_one ~id:a.id a () |> ignore_lwt
+
 (* Recv POST /users/:name/inbox *)
 let post req =
   match%lwt Activity.verify_activity_json req with
@@ -120,6 +139,7 @@ let post req =
         | Like r -> kick_inbox_like r
         | Undo { obj = Follow v; _ } -> kick_inbox_undo_follow v
         | Undo { obj = Like v; _ } -> kick_inbox_undo_like v
+        | Update { obj = Person r; _ } -> kick_inbox_update_person r
         | _ -> failwith "activity not implemented");%lwt
         Httpq.Server.respond ~status:`Accepted ""
       with _ -> Httpq.Server.respond ~status:`Accepted ~tags:[ "log" ] "")
