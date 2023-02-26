@@ -15,8 +15,12 @@ let server () =
   in
 
   Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
+  Db.do_query Migration.verify_migration_status;%lwt
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
+
+let db_migrate () = Lwt_main.run @@ Migration.migrate ()
+let db_rollback () = Lwt_main.run @@ Migration.rollback ()
 
 let db_reset () =
   let f : unit Lwt.t =
@@ -104,6 +108,8 @@ let () =
   in
   match subcommand with
   | "db:reset" -> db_reset ()
+  | "db:migrate" -> db_migrate ()
+  | "db:rollback" -> db_rollback ()
   | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
   | "user:register" -> user_register ()
   | _ -> server ()

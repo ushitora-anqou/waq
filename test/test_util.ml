@@ -2,6 +2,11 @@ open Waq.Util
 
 let test_iota () = assert (iota 10 = [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9 ])
 
+let test_take () =
+  assert (List.take 0 [ 0; 1; 2; 3 ] = []);
+  assert (List.take 1 [ 0; 1; 2; 3 ] = [ 0 ]);
+  assert (List.take 2 [ 0; 1; 2; 3; 4; 5 ] = [ 0; 1 ])
+
 let test_lwt_list_partition_map_p () =
   let left, right =
     Lwt_main.run
@@ -19,6 +24,7 @@ let () =
   run "util"
     [
       ("iota", [ test_case "case1" `Quick test_iota ]);
+      ("take", [ test_case "case1" `Quick test_take ]);
       ( "lwt_list_partition_map_p",
         [ test_case "case1" `Quick test_lwt_list_partition_map_p ] );
     ]

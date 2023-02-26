@@ -39,6 +39,14 @@ module List = struct
   include List
 
   let singleton x = [ x ]
+
+  let take n l =
+    let rec aux acc = function
+      | 0, _ -> List.rev acc
+      | n, x :: xs -> aux (x :: acc) (n - 1, xs)
+      | _ -> failwith "take: not enough elements"
+    in
+    aux [] (n, l)
 end
 
 module Lwt_option = struct
