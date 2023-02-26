@@ -34,3 +34,4 @@ config
 misc/
 Makefile
 log
+ctl
