@@ -1,4 +1,3 @@
-open Entity
 open Helper
 open Lwt.Infix
 
@@ -22,7 +21,8 @@ let get req =
   let%lwt { self_id; max_id; since_id; limit } = parse_req req in
 
   Db.get_notifications ~account_id:self_id ~max_id ~since_id ~limit
-  >>= Lwt_list.map_p (Entity.make_notification_from_model ~self_id)
-  >|= List.map yojson_of_notification
+  >|= List.map (fun (n : Db.Notification.t) -> n.id)
+  >>= Entity.serialize_notifications ~self_id
+  >|= List.map Entity.yojson_of_notification
   >|= (fun l -> `List l)
   >>= respond_yojson

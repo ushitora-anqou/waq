@@ -49,6 +49,11 @@ type account = {
 }
 [@@deriving make, yojson]
 
+let account_list_to_hash accounts =
+  accounts
+  |> List.map (fun (a : account) -> (a.id, a))
+  |> List.to_seq |> Hashtbl.of_seq
+
 let in_ints name vals =
   match vals with
   | [] -> None
@@ -141,6 +146,9 @@ type status = {
 }
 [@@deriving make, yojson]
 
+let status_list_to_hash (statuses : status list) =
+  statuses |> List.map (fun s -> (s.id, s)) |> List.to_seq |> Hashtbl.of_seq
+
 let serialize_statuses ?(visibility = "public") ?self_id (status_ids : int list)
     : status list Lwt.t =
   let reblog_of_id (s : Db.Status.t) = s.reblog_of_id in
@@ -155,11 +163,6 @@ let serialize_statuses ?(visibility = "public") ?self_id (status_ids : int list)
   let stat_model_list_to_hash stats =
     stats
     |> List.map (fun (s : Db.StatusStat.t) -> (s.status_id, s))
-    |> List.to_seq |> Hashtbl.of_seq
-  in
-  let account_list_to_hash accounts =
-    accounts
-    |> List.map (fun (a : account) -> (a.id, a))
     |> List.to_seq |> Hashtbl.of_seq
   in
   let favourited_list_to_hash favouriteds =
@@ -314,22 +317,72 @@ let yojson_of_notification (r : notification) : Yojson.Safe.t =
   in
   `Assoc l
 
+let notification_model_list_to_hash (notis : Db.Notification.t list) =
+  notis
+  |> List.map (fun (n : Db.Notification.t) -> (n.id, n))
+  |> List.to_seq |> Hashtbl.of_seq
+
+let serialize_notifications ?self_id (noti_ids : int list) :
+    notification list Lwt.t =
+  let%lwt notis =
+    match in_ints "id" noti_ids with
+    | None -> Lwt.return []
+    | Some where -> Db.Notification.get_many ~where ()
+  in
+  let notis_h = notification_model_list_to_hash notis in
+  let%lwt accounts_h =
+    notis
+    |> List.map (fun (n : Db.Notification.t) -> n.from_account_id)
+    |> serialize_accounts >|= account_list_to_hash
+  in
+  let%lwt statuses_fav_h =
+    let%lwt favs =
+      notis
+      |> List.filter_map (fun (n : Db.Notification.t) ->
+             match (n.activity_type, n.typ) with
+             | `Favourite, Some `favourite -> Some n.activity_id
+             | _ -> None)
+      |> in_ints "id"
+      |> Option.fold ~none:(Lwt.return []) ~some:(fun where ->
+             Db.Favourite.get_many ~where ()
+             >|= List.map (fun (f : Db.Favourite.t) -> (f.id, f.status_id)))
+    in
+    let%lwt statuses = favs |> List.map snd |> serialize_statuses ?self_id in
+    List.combine (List.map fst favs) statuses
+    |> List.to_seq |> Hashtbl.of_seq |> Lwt.return
+  in
+  let%lwt statuses_reblog_h =
+    notis
+    |> List.filter_map (fun (n : Db.Notification.t) ->
+           match (n.activity_type, n.typ) with
+           | `Status, Some `reblog -> Some n.activity_id
+           | _ -> None)
+    |> serialize_statuses ?self_id
+    >|= status_list_to_hash
+  in
+
+  noti_ids
+  |> List.map (fun noti_id ->
+         let m = Hashtbl.find notis_h noti_id in
+         let account =
+           Hashtbl.find accounts_h (string_of_int m.from_account_id)
+         in
+         let status =
+           match (m.activity_type, m.typ) with
+           | `Status, Some `reblog ->
+               Some
+                 (Hashtbl.find statuses_reblog_h (string_of_int m.activity_id))
+           | `Favourite, Some `favourite ->
+               Some (Hashtbl.find statuses_fav_h m.activity_id)
+           | `Follow, Some `follow -> None
+           | _ -> assert false
+         in
+         make_notification ~id:(string_of_int m.id)
+           ~typ:(Option.get m.typ |> Db.Notification.string_of_typ_t)
+           ~created_at:(Ptime.to_rfc3339 m.created_at)
+           ~account ?status ())
+  |> Lwt.return
+
 let make_notification_from_model ?self_id (m : Db.Notification.t) :
     notification Lwt.t =
-  let%lwt account = serialize_accounts [ m.from_account_id ] >|= List.hd in
-  let%lwt status =
-    match (m.activity_type, m.typ) with
-    | `Status, Some `reblog ->
-        serialize_statuses ?self_id [ m.activity_id ]
-        >|= List.hd >|= Option.some
-    | `Favourite, Some `favourite ->
-        let%lwt f = Db.Favourite.get_one ~id:m.activity_id () in
-        serialize_statuses ?self_id [ f.status_id ] >|= List.hd >|= Option.some
-    | `Follow, Some `follow -> Lwt.return_none
-    | _ -> assert false
-  in
-  make_notification ~id:(string_of_int m.id)
-    ~typ:(Option.get m.typ |> Db.Notification.string_of_typ_t)
-    ~created_at:(Ptime.to_rfc3339 m.created_at)
-    ~account ?status ()
-  |> Lwt.return
+  serialize_notifications ?self_id [ m.id ] >|= List.hd
