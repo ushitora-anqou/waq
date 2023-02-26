@@ -346,6 +346,25 @@ end
 
 (* Middlware Logger *)
 module Logger = struct
+  let string_of_request_response req res =
+    match (req, res) with
+    | Request { bare_req; raw_body; _ }, Response { status; _ } ->
+        let open Buffer in
+        let buf = create 0 in
+        let fmt = Format.formatter_of_buffer buf in
+        Bare_server.Request.pp_hum fmt bare_req;
+        Format.pp_print_flush fmt ();
+        add_string buf "\n";
+        raw_body
+        |> Option.iter (fun s ->
+               add_string buf "\n";
+               add_string buf s;
+               add_string buf "\n");
+        add_string buf "\n==============================\n";
+        add_string buf ("Status: " ^ Status.to_string status);
+        Buffer.contents buf
+    | _ -> assert false
+
   let use ?dump_req_dir (inner_handler : handler) (req : request) :
       response Lwt.t =
     let (Request { uri; meth; _ }) = req in
@@ -360,25 +379,21 @@ module Logger = struct
         Logq.info (fun m -> m "%s %s %s" (Status.to_string status) meth uri)
     | BareResponse _ -> Logq.info (fun m -> m "[bare] %s %s" meth uri));
 
-    (match (dump_req_dir, req, resp) with
-    | Some dir, Request { bare_req; raw_body; _ }, Response { status; tags; _ }
-      when List.mem "log" tags ->
-        (* NOTE: We use open_temp_file to make sure that each request is written to each file. So, this file should NOT be removed after we write the content to it. *)
-        let prefix =
-          Ptime.(now () |> to_float_s |> Printf.sprintf "%.2f") ^ "."
-        in
-        let%lwt _, oc = Lwt_io.open_temp_file ~temp_dir:dir ~prefix () in
-        (let buf = Buffer.create 1 in
-         let oc_f = Format.formatter_of_buffer buf in
-         Bare_server.Request.pp_hum oc_f bare_req;
-         Format.pp_print_newline oc_f ();
-         Lwt_io.write oc (Buffer.contents buf));%lwt
-        (match raw_body with
-        | None -> Lwt.return_unit
-        | Some s -> Lwt_io.fprintf oc "\n%s\n" s);%lwt
-        Lwt_io.fprintl oc "\n==============================\n";%lwt
-        Lwt_io.fprintf oc "Status: %s\n" (Status.to_string status);%lwt
-        Lwt_io.close oc
+    (match resp with
+    | Response { tags; _ } when List.mem "log" tags -> (
+        match dump_req_dir with
+        | None ->
+            Logq.info (fun m ->
+                m "Detail of request and response:\n%s"
+                  (string_of_request_response req resp));
+            Lwt.return_unit
+        | Some dir ->
+            (* NOTE: We use open_temp_file to make sure that each request is written to each file. So, this file should NOT be removed after we write the content to it. *)
+            let prefix =
+              Ptime.(now () |> to_float_s |> Printf.sprintf "%.2f") ^ "."
+            in
+            let%lwt _, oc = Lwt_io.open_temp_file ~temp_dir:dir ~prefix () in
+            Lwt_io.write oc (string_of_request_response req resp))
     | _ -> Lwt.return_unit);%lwt
 
     Lwt.return resp
