@@ -19,4 +19,6 @@ services:
     environment:
       POSTGRES_DB: waq_prod
       POSTGRES_PASSWORD: PASSWORD
+    volumes:
+      - ./data:/var/lib/postgresql/data
     restart: always
