@@ -48,6 +48,7 @@
   result
   safepass
   sha
+  tls
   uri
   uuidm
   websocket
