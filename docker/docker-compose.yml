@@ -3,7 +3,7 @@
 version: "3.9"
 services:
   waq:
-    build: .
+    image: "anqou/waq:99009bf"
     ports:
       - "8000:8000"
     volumes:
