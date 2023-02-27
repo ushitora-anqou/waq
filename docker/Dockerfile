@@ -10,9 +10,11 @@ RUN apt-get update && apt-get install -y \
 
 USER opam
 WORKDIR /home/opam
-RUN git clone --depth 1 https://github.com/ushitora-anqou/waq.git
-WORKDIR /home/opam/waq
+RUN git clone https://github.com/ushitora-anqou/waq.git && \
+    cd waq && \
+    git checkout 99009bf9248e5fa517baf9f8d09e96d085028760
 
+WORKDIR /home/opam/waq
 RUN opam update && opam install alcotest-lwt
 RUN opam install . --deps-only
 RUN eval $(opam env) && dune build
