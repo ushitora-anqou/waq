@@ -35,7 +35,8 @@
   jingoo
   lwt
   lwt_ppx
-  mirage-crypto-rng
+  (mirage-crypto-rng
+   (<= 0.10.7))
   multipart_form
   multipart_form-lwt
   ocaml
