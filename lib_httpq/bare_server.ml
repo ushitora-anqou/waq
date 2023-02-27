@@ -82,7 +82,6 @@ let websocket (req : Request.t) f =
         timeout :=
           Some
             ( Lwt_timeout.create timeout_seconds @@ fun () ->
-              Logq.debug (fun m -> m "Websocket: ping");
               ws_send ~opcode:Ping conn "";
               Lwt_timeout.start (Option.get !timeout) );
 
