@@ -10,6 +10,7 @@ services:
       - ./config:/root/config
     environment:
       WAQ_CONFIG_PATH: /root/config/prod.yml
+      OCAMLRUNPARAM: b
     depends_on:
       - postgres
     restart: always
