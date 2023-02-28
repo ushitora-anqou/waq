@@ -12,7 +12,7 @@ USER opam
 WORKDIR /home/opam
 RUN git clone https://github.com/ushitora-anqou/waq.git && \
     cd waq && \
-    git checkout fed9f1e
+    git checkout 685bd3a
 
 WORKDIR /home/opam/waq
 RUN opam update && opam install alcotest-lwt
