@@ -13,7 +13,7 @@ services:
       OCAMLRUNPARAM: b
     depends_on:
       - postgres
-    restart: always
+    restart: unless-stopped
   postgres:
     image: "postgres:15.2-alpine"
     environment:
@@ -21,4 +21,4 @@ services:
       POSTGRES_PASSWORD: PASSWORD
     volumes:
       - ./data:/var/lib/postgresql/data
-    restart: always
+    restart: unless-stopped
