@@ -31,7 +31,7 @@ let post req =
   if
     let open Ptime in
     grant.expires_in
-    < (diff (now ()) (Option.get app.created_at) |> Span.to_int_s |> Option.get)
+    < (diff (now ()) grant.created_at |> Span.to_int_s |> Option.get)
   then Httpq.Server.raise_error_response `Bad_request;
 
   let%lwt token =
