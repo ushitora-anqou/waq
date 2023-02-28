@@ -244,6 +244,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
   let list name = get name |> expect_list in
   let int name = get name |> expect_int in
   let string_opt name = try Some (get name |> expect_string) with _ -> None in
+  let list_opt name = try Some (get name |> expect_list) with _ -> None in
 
   let id = string Id in
   let typ = string Type in
@@ -314,7 +315,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let name = string Name in
       let summary = string Summary in
       let url = string Url in
-      let tag = list Tag |> List.map expect_string in
+      let tag =
+        list_opt Tag |> Option.value ~default:[] |> List.map expect_string
+      in
       let public_key = assoc PublicKey in
       let public_key_id = public_key |> List.assoc "id" |> expect_string in
       let public_key_owner =
