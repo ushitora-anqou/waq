@@ -36,3 +36,4 @@ Makefile
 log
 ctl
 docker/config
+docker/data

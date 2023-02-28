@@ -9,20 +9,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
-WORKDIR /home/opam
-RUN git clone https://github.com/ushitora-anqou/waq.git && \
-    cd waq && \
-    git checkout 685bd3a
-
-WORKDIR /home/opam/waq
 RUN opam update && opam install alcotest-lwt
+COPY --chown=opam . waq/
+WORKDIR /home/opam/waq
 RUN opam install . --deps-only
 RUN eval $(opam env) && dune build
 
 FROM debian:11-slim
 
 RUN apt-get update && apt-get install -y \
-    libpq5 libgmp10 netbase \
+    libpq5 libgmp10 netbase ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
