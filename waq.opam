@@ -24,6 +24,7 @@ depends: [
   "jingoo"
   "lwt"
   "lwt_ppx"
+  "lwt_ssl"
   "mirage-crypto-rng" {<= "0.10.7"}
   "multipart_form"
   "multipart_form-lwt"
@@ -36,7 +37,6 @@ depends: [
   "result"
   "safepass"
   "sha"
-  "tls"
   "uri"
   "uuidm"
   "websocket"

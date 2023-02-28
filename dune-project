@@ -35,6 +35,7 @@
   jingoo
   lwt
   lwt_ppx
+  lwt_ssl
   (mirage-crypto-rng
    (<= 0.10.7))
   multipart_form
@@ -48,7 +49,6 @@
   result
   safepass
   sha
-  tls
   uri
   uuidm
   websocket
