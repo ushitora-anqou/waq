@@ -5,14 +5,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 RUN apt-get update && apt-get install -y \
-    pkg-config libpq-dev libgmp-dev \
+    pkg-config libpq-dev libgmp-dev libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
 WORKDIR /home/opam
 RUN git clone https://github.com/ushitora-anqou/waq.git && \
     cd waq && \
-    git checkout 1e1d22e
+    git checkout fed9f1e
 
 WORKDIR /home/opam/waq
 RUN opam update && opam install alcotest-lwt
