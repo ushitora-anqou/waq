@@ -14,6 +14,11 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: '10'
   postgres:
     image: "postgres:15.2-alpine"
     environment:
