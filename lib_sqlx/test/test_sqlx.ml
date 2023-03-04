@@ -310,58 +310,9 @@ end
 module Db = struct
   include Engine.Make (Engine.PgDriver)
 
-  let global_pool = ref None
-
-  let initialize url =
-    let pool = connect_pool 10 url in
-    global_pool := Some pool
-
-  let do_query f = use (Option.get !global_pool) f
-
-  let maybe_no_row e =
-    match%lwt e with
-    | exception Engine.NoRowFound -> Lwt.return_none
-    | res -> Lwt.return_some res
-
-  class connection c =
-    object (self : 'a)
-      val mutable in_transaction = false
-      val mutable enqueued = []
-
-      method query (sql : string) (param : Value.t list)
-          : (string * Value.t) list list Lwt.t =
-        query c sql ~p:(param : Value.t list :> Value.null_t list)
-
-      method query_row (sql : string) (param : Value.t list)
-          : (string * Value.t) list Lwt.t =
-        query_row c sql ~p:(param : Value.t list :> Value.null_t list)
-
-      method execute (sql : string) (param : Value.t list) : unit Lwt.t =
-        execute c sql ~p:(param : Value.t list :> Value.null_t list)
-
-      method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
-        if in_transaction then Lwt.return (enqueued <- f :: enqueued)
-        else f self
-
-      method transaction (f : 'a -> unit Lwt.t) : bool Lwt.t =
-        if in_transaction then failwith "Detected nested transaction";
-        in_transaction <- true;
-        let%lwt res = transaction c (fun () -> f self) in
-        in_transaction <- false;
-        if res then
-          try%lwt enqueued |> Lwt_list.iter_s (fun f -> f self)
-          with _ -> Lwt.return_unit
-        else Lwt.return_unit;%lwt
-        enqueued <- [];
-        Lwt.return res
-    end
-
-  let e q = do_query @@ fun c -> q (new connection c)
-  let transaction f = e (fun c -> c#transaction f)
-
   let debug_drop_all_tables_in_db () =
-    do_query @@ fun c ->
-    execute c
+    e @@ fun c ->
+    c#execute
       {|
 -- Thanks to: https://stackoverflow.com/a/36023359
 DO $$ DECLARE
@@ -374,6 +325,7 @@ BEGIN
         EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
     END LOOP;
 END $$|}
+      []
 end
 
 let print_sql_param sql param =
@@ -408,8 +360,8 @@ let foo _ _ =
   print_sql_param sql param;
 
   Db.debug_drop_all_tables_in_db ();%lwt
-  Db.do_query (fun c ->
-      Db.execute c
+  Db.e (fun c ->
+      c#execute
         {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -418,8 +370,9 @@ CREATE TABLE accounts (
   display_name TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
-)|};%lwt
-      Db.execute c
+  )|}
+        [];%lwt
+      c#execute
         {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
@@ -433,7 +386,8 @@ CREATE TABLE notifications (
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
-  )|});%lwt
+  )|}
+        []);%lwt
 
   let%lwt [ a1'; a2' ] =
     Db.e
