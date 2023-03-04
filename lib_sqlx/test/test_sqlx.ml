@@ -308,7 +308,7 @@ module Notification = struct
 end
 
 module Db = struct
-  include Engine.Make (Engine.PgDriver)
+  include Engine.Make (Driver_pg)
 
   let debug_drop_all_tables_in_db () =
     e @@ fun c ->
@@ -333,36 +333,11 @@ let print_sql_param sql param =
   Printf.printf ">>> %s\n" (param |> List.map Value.show |> String.concat ", ");
   ()
 
-let foo _ _ =
-  let sql, param =
-    Sql.select ~table_name:"notifications"
-      ~order_by:(Some [ ("id", `ASC); ("account_id", `DESC) ])
-      ~limit:(Some 1)
-      ( [ `Eq (`C "id", `M "foo"); `InInts (`C "account_id", [ 2; 3; 4 ]) ],
-        [ (`M "foo", Value.of_int 42) ] )
-  in
-  print_sql_param sql param;
-
-  let sql, param =
-    Sql.update ~table_name:"notifications" ~columns:[ "account_id" ]
-      ~unpacked:[ ("account_id", `Int 10) ]
-      ([], [ (`M "id", Value.of_int 1) ])
-  in
-  print_sql_param sql param;
-
-  let sql, param =
-    Sql.insert ~table_name:"notifications" ~columns:[ "account_id" ]
-      ~unpacked:[ ("account_id", `Int 10) ]
-  in
-  print_sql_param sql param;
-
-  let sql, param = Sql.delete ~table_name:"notifications" ~id:10 in
-  print_sql_param sql param;
-
+let setup1 () =
   Db.debug_drop_all_tables_in_db ();%lwt
-  Db.e (fun c ->
-      c#execute
-        {|
+  Db.e @@ fun c ->
+  c#execute
+    {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
   username TEXT NOT NULL,
@@ -370,10 +345,10 @@ CREATE TABLE accounts (
   display_name TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
-  )|}
-        [];%lwt
-      c#execute
-        {|
+)|}
+    [];%lwt
+  c#execute
+    {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
   activity_id BIGINT NOT NULL,
@@ -386,9 +361,11 @@ CREATE TABLE notifications (
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
-  )|}
-        []);%lwt
+)|}
+    []
 
+let test_select_insert_update_delete_case1 _ _ =
+  setup1 ();%lwt
   let%lwt [ a1'; a2' ] =
     Db.e
       Account.(
@@ -397,7 +374,6 @@ CREATE TABLE notifications (
             new t ~username:"user1" ~display_name:"User 1" ();
             new t ~username:"user2" ~display_name:"User 2" ();
           ])
-    [@@warning "-8"]
   in
   ignore a1'#id;
   ignore a2'#id;
@@ -406,8 +382,8 @@ CREATE TABLE notifications (
   ignore a2'#created_at;
   ignore a2'#updated_at;
 
-  let%lwt [ a1 ] = Db.e Account.(select ~id:(`Eq a1'#id)) [@@warning "-8"] in
-  let%lwt [ a2 ] = Db.e Account.(select ~id:(`Eq a2'#id)) [@@warning "-8"] in
+  let%lwt [ a1 ] = Db.e Account.(select ~id:(`Eq a1'#id)) in
+  let%lwt [ a2 ] = Db.e Account.(select ~id:(`Eq a2'#id)) in
   let%lwt a12 = Db.e Account.(select ~id:(`In [ a1#id; a2#id ])) in
 
   assert (a1#id = a1'#id);
@@ -452,6 +428,14 @@ CREATE TABLE notifications (
   assert (n2'#id = n2#id);
   assert (n2#account#id = a2#id);
 
+  (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun [ x ] -> assert (x#id = a1#id));%lwt
+  Db.e Account.(delete [ a1 ]);%lwt
+  (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun r -> assert (r = []));%lwt
+
+  Lwt.return_unit
+  [@@warning "-8"]
+
+let test_transaction_case1 _ _ =
   let hook_called = ref false in
   Account.Internal.after_create_commit_callbacks :=
     [ (fun _r _c -> Lwt.return (hook_called := true)) ];
@@ -481,10 +465,19 @@ CREATE TABLE notifications (
   assert (not !hook_called);
 
   Lwt.return_unit
+  [@@warning "-8"]
 
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Db.initialize (Sys.getenv "SQLX_TEST_DB_URL");
   Lwt_main.run
   @@ Alcotest_lwt.run "sqlx"
-       [ ("foo", [ Alcotest_lwt.test_case "case1" `Quick foo ]) ]
+       [
+         ( "select/insert/update/delete",
+           [
+             Alcotest_lwt.test_case "case1" `Quick
+               test_select_insert_update_delete_case1;
+           ] );
+         ( "transaction",
+           [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );
+       ]
