@@ -11,7 +11,7 @@ let foo _ _ =
     Sql.select ~table_name:"notifications"
       ~order_by:(Some [ ("id", `ASC); ("account_id", `DESC) ])
       ~limit:(Some 1)
-      ( [ Eq (C "id", M "foo"); InInts (C "account_id", [ 2; 3; 4 ]) ],
+      ( [ `Eq (`C "id", `M "foo"); `InInts (`C "account_id", [ 2; 3; 4 ]) ],
         [ (`M "foo", Value.of_int 42) ] )
   in
   print_sql_param sql param;

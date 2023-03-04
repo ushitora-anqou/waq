@@ -407,25 +407,25 @@ class type connection =
 
 module Sql = struct
   type expr =
-    | True
-    | C of string (* column *)
-    | M of string (* marker *)
-    | UM of string (* marker made by user *)
-    | Eq of (expr * expr)
-    | And of (expr * expr)
-    | InInts of (expr * int list)
-    | IsNull of string
-    | IsNotNull of string
-    | Raw of string
+    [ `True
+    | `C of string (* column *)
+    | `M of string (* marker *)
+    | `UM of string (* marker made by user *)
+    | `Eq of expr * expr
+    | `And of expr * expr
+    | `InInts of expr * int list
+    | `IsNull of string
+    | `IsNotNull of string
+    | `Raw of string ]
 
   let expr_to_string ?const_f (e : expr) : string =
     let prec_const = (1000, 1000) in
     let prec = function
-      | True | C _ | M _ | UM _ | Raw _ -> prec_const
-      | IsNull _ | IsNotNull _ -> (100, 100)
-      | InInts _ -> (90, 90)
-      | Eq _ -> (79, 80)
-      | And _ -> (70, 69)
+      | `True | `C _ | `M _ | `UM _ | `Raw _ -> prec_const
+      | `IsNull _ | `IsNotNull _ -> (100, 100)
+      | `InInts _ -> (90, 90)
+      | `Eq _ -> (79, 80)
+      | `And _ -> (70, 69)
     in
     let paren ~p1 ~p2 ~p ~left ~right ~mid =
       (if snd p1 < fst p then "(" ^ left ^ ")" else left)
@@ -433,28 +433,28 @@ module Sql = struct
       ^ if fst p2 < snd p then "(" ^ right ^ ")" else right
     in
     let string_of_op = function
-      | Eq _ -> "="
-      | And _ -> "AND"
+      | `Eq _ -> "="
+      | `And _ -> "AND"
       | _ -> assert false
     in
     let rec f = function
-      | True -> "TRUE"
-      | C s -> s
-      | M s -> const_f |> Option.fold ~none:("~" ^ s) ~some:(fun f -> f (`M s))
-      | UM s ->
+      | `True -> "TRUE"
+      | `C s -> s
+      | `M s -> const_f |> Option.fold ~none:("~" ^ s) ~some:(fun f -> f (`M s))
+      | `UM s ->
           const_f |> Option.fold ~none:(":" ^ s) ~some:(fun f -> f (`UM s))
-      | (Eq (e1, e2) | And (e1, e2)) as op ->
+      | (`Eq (e1, e2) | `And (e1, e2)) as op ->
           paren ~p:(prec op) ~p1:(prec e1) ~p2:(prec e2) ~left:(f e1)
             ~right:(f e2) ~mid:(string_of_op op)
-      | InInts (e, vals) as v ->
+      | `InInts (e, vals) as v ->
           let right =
             "(" ^ (vals |> List.map string_of_int |> String.concat ", ") ^ ")"
           in
           paren ~p:(prec v) ~p1:(prec e) ~p2:prec_const ~left:(f e) ~mid:"IN"
             ~right
-      | IsNull c -> c ^ " IS NULL"
-      | IsNotNull c -> c ^ " IS NOT NULL"
-      | Raw s -> s
+      | `IsNull c -> c ^ " IS NULL"
+      | `IsNotNull c -> c ^ " IS NOT NULL"
+      | `Raw s -> s
     in
     f e
 
@@ -479,12 +479,12 @@ module Sql = struct
   let where_int name ptn ((where, param) as cond) =
     let rec f = function
       | `Eq (x : int) ->
-          let where = Eq (C name, M name) :: where in
+          let where = `Eq (`C name, `M name) :: where in
           let param = (`M name, `Int x) :: param in
           (where, param)
       | `In [ v ] -> f (`Eq v)
       | `In vs ->
-          let where = InInts (C name, vs) :: where in
+          let where = `InInts (`C name, vs) :: where in
           (where, param)
     in
     match ptn with None -> cond | Some ptn -> f ptn
@@ -493,10 +493,10 @@ module Sql = struct
     let f = function
       | `Eq _ | `In _ -> where_int name ptn cond
       | `EqNone ->
-          let where = IsNull name :: where in
+          let where = `IsNull name :: where in
           (where, param)
       | `NeqNone ->
-          let where = IsNotNull name :: where in
+          let where = `IsNotNull name :: where in
           (where, param)
     in
     match ptn with None -> cond | Some ptn -> f ptn
@@ -520,8 +520,8 @@ module Sql = struct
 
   let and_exprs =
     List.fold_left
-      (fun acc x -> match acc with True -> x | y -> And (y, x))
-      True
+      (fun acc x -> match acc with `True -> x | y -> `And (y, x))
+      `True
 
   let select ~table_name ~order_by ~limit
       ((where : expr list), (param : param list)) =
@@ -548,7 +548,7 @@ module Sql = struct
 
   let update ~table_name ~columns ~unpacked
       ((where : expr list), (param : param list)) =
-    let where = and_exprs (Eq (C "id", M "id") :: where) in
+    let where = and_exprs (`Eq (`C "id", `M "id") :: where) in
     let param =
       (unpacked |> List.map (fun (column, value) -> (`M column, value))) @ param
     in
@@ -556,8 +556,8 @@ module Sql = struct
       columns
       |> List.filter_map (function
            | "id" | "created_at" -> None
-           | "updated_at" -> Some ("updated_at", Raw "now()")
-           | c -> Some (c, M c))
+           | "updated_at" -> Some ("updated_at", `Raw "now()")
+           | c -> Some (c, `M c))
     in
     let table, returning = (table_name, Some "*") in
     let exprs, param =
@@ -585,8 +585,8 @@ module Sql = struct
       columns
       |> List.filter_map (function
            | "id" -> None
-           | ("created_at" | "updated_at") as c -> Some (c, Raw "now()")
-           | c -> Some (c, M c))
+           | ("created_at" | "updated_at") as c -> Some (c, `Raw "now()")
+           | c -> Some (c, `M c))
       |> List.split
     in
     let table, returning = (table_name, Some "*") in
@@ -603,7 +603,7 @@ module Sql = struct
 
   let delete ~table_name ~id =
     let table, where, param =
-      (table_name, Eq (C "id", M "id"), [ (`M "id", `Int id) ])
+      (table_name, `Eq (`C "id", `M "id"), [ (`M "id", `Int id) ])
     in
     let exprs, param = exprs_to_strings_with_numbered_markers [ where ] param in
     let where = List.hd exprs in
