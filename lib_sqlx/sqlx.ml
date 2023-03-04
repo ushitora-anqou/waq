@@ -650,17 +650,21 @@ let index_by f l =
   h
 
 module Make (M : sig
-  type id
+  module ID : sig
+    type t
+
+    val to_int : t -> int
+  end
+
   type column
   type t
 
-  val get_id : t -> id
   val columns : column list
   val string_of_column : column -> string
   val table_name : string
-  val int_of_id : id -> int
   val unpack : t -> (string * Value.t) list
   val pack : (string * Value.t) list -> t
+  val id : t -> ID.t
 end) =
 struct
   let where_id name ptn cond =
@@ -668,9 +672,10 @@ struct
     | None -> cond
     | Some ptn -> (
         match ptn with
-        | `Eq (x : M.id) -> Sql.where_int name (Some (`Eq (M.int_of_id x))) cond
-        | `In (vals : M.id list) ->
-            Sql.where_int name (Some (`In (vals |> List.map M.int_of_id))) cond)
+        | `Eq (x : M.ID.t) ->
+            Sql.where_int name (Some (`Eq (M.ID.to_int x))) cond
+        | `In (vals : M.ID.t list) ->
+            Sql.where_int name (Some (`In (vals |> List.map M.ID.to_int))) cond)
 
   let select id created_at updated_at order_by limit preload (c : connection)
       preload_spec cond =
@@ -718,17 +723,24 @@ struct
     xs
     |> Lwt_list.iter_p @@ fun x ->
        let sql, param =
-         Sql.delete ~table_name:M.table_name ~id:(x |> M.get_id |> M.int_of_id)
+         Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
        in
        c#execute sql param
 end
 
 module Account = struct
   module Internal = struct
-    type id = Id of int
+    module ID : sig
+      type t
 
-    let id_of_int n = Id n
-    let int_of_id (Id n) = n
+      val of_int : int -> t
+      val to_int : t -> int
+    end = struct
+      type t = int
+
+      let of_int = Fun.id
+      let to_int = Fun.id
+    end
 
     type column =
       [ `id | `created_at | `updated_at | `username | `domain | `display_name ]
@@ -749,9 +761,9 @@ module Account = struct
     class t ?id ?created_at ?updated_at ~username ?domain ~display_name () =
       object
         val mutable id = id
-        method id : id = expect_loaded id
-        method id_opt : id option = id
-        method set_id (x : id) = id <- Some x
+        method id : ID.t = expect_loaded id
+        method id_opt : ID.t option = id
+        method set_id (x : ID.t) = id <- Some x
         val mutable created_at = created_at
         method created_at : Ptime.t = expect_loaded created_at
         method created_at_opt : Ptime.t option = created_at
@@ -771,7 +783,7 @@ module Account = struct
 
     let pack (x : (string * Value.t) list) : t =
       new t
-        ~id:(List.assoc "id" x |> Value.expect_int |> id_of_int)
+        ~id:(List.assoc "id" x |> Value.expect_int |> ID.of_int)
         ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
         ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
         ~username:(List.assoc "username" x |> Value.expect_string)
@@ -783,7 +795,7 @@ module Account = struct
       let cons x xs = match x with None -> xs | Some x -> x :: xs in
       cons
         (x#id_opt
-        |> Option.map (fun x -> ("id", x |> int_of_id |> Value.of_int)))
+        |> Option.map (fun x -> ("id", x |> ID.to_int |> Value.of_int)))
       @@ cons
            (x#created_at_opt
            |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
@@ -796,7 +808,9 @@ module Account = struct
            ("display_name", x#display_name |> Value.of_string);
          ]
 
-    let get_id x = x#id
+    let id x = x#id
+    let created_at x = x#created_at
+    let updated_at x = x#updated_at
   end
 
   include Internal
@@ -915,8 +929,8 @@ module Notification = struct
         method updated_at : Ptime.t = expect_loaded updated_at
         method updated_at_opt : Ptime.t option = updated_at
         method set_updated_at (x : Ptime.t) = updated_at <- Some x
-        method account_id : Account.id = account_id
-        method from_account_id : Account.id = from_account_id
+        method account_id : Account.ID.t = account_id
+        method from_account_id : Account.ID.t = from_account_id
         method activity_id : int = activity_id
         method activity_type : activity_type_t = activity_type
         method typ : typ_t option = typ
@@ -944,10 +958,10 @@ module Notification = struct
           (List.assoc (string_of_column `typ) x
           |> Value.expect_string_opt |> Option.map typ_t_of_string)
         ~account_id:
-          (List.assoc "account_id" x |> Value.expect_int |> Account.id_of_int)
+          (List.assoc "account_id" x |> Value.expect_int |> Account.ID.of_int)
         ~from_account_id:
           (List.assoc "from_account_id" x
-          |> Value.expect_int |> Account.id_of_int)
+          |> Value.expect_int |> Account.ID.of_int)
         ()
 
     let unpack (x : t) : (string * Value.t) list =
@@ -967,12 +981,14 @@ module Notification = struct
              x#activity_type |> string_of_activity_type_t |> Value.of_string );
            ( string_of_column `typ,
              x#typ |> Option.map string_of_typ_t |> Value.of_string_opt );
-           ("account_id", x#account_id |> Account.int_of_id |> Value.of_int);
+           ("account_id", x#account_id |> Account.ID.to_int |> Value.of_int);
            ( "from_account_id",
-             x#from_account_id |> Account.int_of_id |> Value.of_int );
+             x#from_account_id |> Account.ID.to_int |> Value.of_int );
          ]
 
-    let get_id x = x#id
+    let id x = x#id
+    let created_at x = x#created_at
+    let updated_at x = x#updated_at
   end
 
   include Internal
