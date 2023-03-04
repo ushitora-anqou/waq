@@ -88,3 +88,5 @@ struct
        in
        c#execute sql param
 end
+
+let expect_loaded = function None -> failwith "not preloaded" | Some x -> x

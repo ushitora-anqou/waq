@@ -6,8 +6,6 @@ open Util
 
 type connection = Engine.connection
 
-let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
-
 module Account = struct
   module Internal = struct
     module ID : sig
@@ -41,13 +39,13 @@ module Account = struct
     class t ?id ?created_at ?updated_at ~username ?domain ~display_name () =
       object
         val mutable id = id
-        method id : ID.t = expect_loaded id
+        method id : ID.t = Ppx_runtime.expect_loaded id
         method id_opt : ID.t option = id
         val mutable created_at = created_at
-        method created_at : Ptime.t = expect_loaded created_at
+        method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
         method created_at_opt : Ptime.t option = created_at
         val mutable updated_at = updated_at
-        method updated_at : Ptime.t = expect_loaded updated_at
+        method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
         method updated_at_opt : Ptime.t option = updated_at
         val username : string = username
         method username : string = username
@@ -95,7 +93,7 @@ module Account = struct
   end
 
   include Internal
-  include Model.Make (Internal)
+  include Ppx_runtime.Make (Internal)
 
   let select ?id ?order_by ?limit ?created_at ?updated_at ?username ?domain
       ?display_name ?(preload = []) (c : connection) =
@@ -208,13 +206,13 @@ module Notification = struct
       ~from_account_id ?typ () =
       object
         val mutable id = id
-        method id : id = expect_loaded id
+        method id : id = Ppx_runtime.expect_loaded id
         method id_opt : id option = id
         val mutable created_at = created_at
-        method created_at : Ptime.t = expect_loaded created_at
+        method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
         method created_at_opt : Ptime.t option = created_at
         val mutable updated_at = updated_at
-        method updated_at : Ptime.t = expect_loaded updated_at
+        method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
         method updated_at_opt : Ptime.t option = updated_at
         method account_id : Account.ID.t = account_id
         method from_account_id : Account.ID.t = from_account_id
@@ -222,13 +220,16 @@ module Notification = struct
         method activity_type : activity_type_t = activity_type
         method typ : typ_t option = typ
         val mutable account = None
-        method account : Account.t = expect_loaded account
+        method account : Account.t = Ppx_runtime.expect_loaded account
         method set_account (x : Account.t) = account <- Some x
         val mutable from_account = None
-        method from_account : Account.t = expect_loaded from_account
+        method from_account : Account.t = Ppx_runtime.expect_loaded from_account
         method set_from_account (x : Account.t) = from_account <- Some x
         val mutable target_status = None
-        method target_status : Status.t = expect_loaded target_status
+
+        method target_status : Status.t =
+          Ppx_runtime.expect_loaded target_status
+
         method set_target_status (x : Status.t) = target_status <- Some x
       end
 
@@ -283,7 +284,7 @@ module Notification = struct
   end
 
   include Internal
-  include Model.Make (Internal)
+  include Ppx_runtime.Make (Internal)
 
   let load_account (xs : t list) (c : connection) =
     let ids = xs |> List.map (fun x -> x#account_id) in
