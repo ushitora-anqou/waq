@@ -320,14 +320,3 @@ module PgDriver = struct
     | Pg.Ok -> true
     | _ -> false
 end
-
-include Make (PgDriver)
-
-class type connection =
-  object ('a)
-    method query : string -> Value.t list -> (string * Value.t) list list Lwt.t
-    method query_row : string -> Value.t list -> (string * Value.t) list Lwt.t
-    method execute : string -> Value.t list -> unit Lwt.t
-    method enqueue_task_after_commit : ('a -> unit Lwt.t) -> unit Lwt.t
-    (*method enqueued_tasks_after_commit : ('a -> unit Lwt.t) list*)
-  end

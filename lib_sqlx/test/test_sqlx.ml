@@ -4,7 +4,7 @@ open Util
 
 [@@@warning "-32"]
 
-type connection = Engine.connection
+type connection = Ppx_runtime.connection
 
 module Account = struct
   module Internal = struct
@@ -306,13 +306,15 @@ module Notification = struct
 end
 
 module Db = struct
+  include Engine.Make (Engine.PgDriver)
+
   let global_pool = ref None
 
   let initialize url =
-    let pool = Engine.connect_pool 10 url in
+    let pool = connect_pool 10 url in
     global_pool := Some pool
 
-  let do_query f = Engine.use (Option.get !global_pool) f
+  let do_query f = use (Option.get !global_pool) f
 
   let maybe_no_row e =
     match%lwt e with
@@ -323,14 +325,14 @@ module Db = struct
     object (self : 'a)
       method query (sql : string) (param : Value.t list)
           : (string * Value.t) list list Lwt.t =
-        Engine.query c sql ~p:(param : Value.t list :> Value.null_t list)
+        query c sql ~p:(param : Value.t list :> Value.null_t list)
 
       method query_row (sql : string) (param : Value.t list)
           : (string * Value.t) list Lwt.t =
-        Engine.query_row c sql ~p:(param : Value.t list :> Value.null_t list)
+        query_row c sql ~p:(param : Value.t list :> Value.null_t list)
 
       method execute (sql : string) (param : Value.t list) : unit Lwt.t =
-        Engine.execute c sql ~p:(param : Value.t list :> Value.null_t list)
+        execute c sql ~p:(param : Value.t list :> Value.null_t list)
 
       method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
         (* NOTE: Currently, sqlx does not support transactions, so all tasks
@@ -342,7 +344,7 @@ module Db = struct
 
   let debug_drop_all_tables_in_db () =
     do_query @@ fun c ->
-    Engine.execute c
+    execute c
       {|
 -- Thanks to: https://stackoverflow.com/a/36023359
 DO $$ DECLARE
@@ -390,7 +392,7 @@ let foo _ _ =
 
   Db.debug_drop_all_tables_in_db ();%lwt
   Db.do_query (fun c ->
-      Engine.execute c
+      Db.execute c
         {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -400,7 +402,7 @@ CREATE TABLE accounts (
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
 )|};%lwt
-      Engine.execute c
+      Db.execute c
         {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
