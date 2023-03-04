@@ -106,6 +106,7 @@ module Account = struct
   let is_local a = Option.is_none a#domain
   let is_remote a = Option.is_some a#domain
 
+  (*
   let _ =
     Internal.after_create_commit_callbacks :=
       [
@@ -114,6 +115,7 @@ module Account = struct
           Printf.printf ">>>>>>>>>> %d %s\n" (ID.to_int r'#id) r'#username;
           Lwt.return_unit);
       ]
+      *)
 end
 
 module Status = struct
@@ -323,6 +325,9 @@ module Db = struct
 
   class connection c =
     object (self : 'a)
+      val mutable in_transaction = false
+      val mutable enqueued = []
+
       method query (sql : string) (param : Value.t list)
           : (string * Value.t) list list Lwt.t =
         query c sql ~p:(param : Value.t list :> Value.null_t list)
@@ -335,12 +340,24 @@ module Db = struct
         execute c sql ~p:(param : Value.t list :> Value.null_t list)
 
       method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
-        (* NOTE: Currently, sqlx does not support transactions, so all tasks
-           should be executed immediately after enqueued *)
-        f self
+        if in_transaction then Lwt.return (enqueued <- f :: enqueued)
+        else f self
+
+      method transaction (f : 'a -> unit Lwt.t) : bool Lwt.t =
+        if in_transaction then failwith "Detected nested transaction";
+        in_transaction <- true;
+        let%lwt res = transaction c (fun () -> f self) in
+        in_transaction <- false;
+        if res then
+          try%lwt enqueued |> Lwt_list.iter_s (fun f -> f self)
+          with _ -> Lwt.return_unit
+        else Lwt.return_unit;%lwt
+        enqueued <- [];
+        Lwt.return res
     end
 
   let e q = do_query @@ fun c -> q (new connection c)
+  let transaction f = e (fun c -> c#transaction f)
 
   let debug_drop_all_tables_in_db () =
     do_query @@ fun c ->
@@ -480,6 +497,34 @@ CREATE TABLE notifications (
   assert (n1#typ = Some `reblog);
   assert (n2'#id = n2#id);
   assert (n2#account#id = a2#id);
+
+  let hook_called = ref false in
+  Account.Internal.after_create_commit_callbacks :=
+    [ (fun _r _c -> Lwt.return (hook_called := true)) ];
+
+  let a_id = ref (Account.ID.of_int 0) in
+  let%lwt res =
+    Db.transaction (fun c ->
+        Account.(insert [ new t ~username:"user3" ~display_name:"User 3" () ]) c
+        >|= fun [ x ] -> a_id := x#id)
+  in
+  assert res;
+  let%lwt a = Db.e Account.(select ~id:(`Eq !a_id)) in
+  assert (List.length a = 1);
+  assert !hook_called;
+
+  hook_called := false;
+  let%lwt res =
+    Db.transaction (fun c ->
+        ( Account.(insert [ new t ~username:"user4" ~display_name:"User 4" () ])
+            c
+        >|= fun [ x ] -> a_id := x#id );%lwt
+        failwith "" (* Incur rollback *))
+  in
+  assert (not res);
+  let%lwt a = Db.e Account.(select ~id:(`Eq !a_id)) in
+  assert (List.length a = 0);
+  assert (not !hook_called);
 
   Lwt.return_unit
 

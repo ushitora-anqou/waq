@@ -19,6 +19,7 @@ module type Driver = sig
   val prepare : connection -> string -> statement Lwt.t
   val execute_stmt : connection -> statement -> params -> unit Lwt.t
   val query_stmt : connection -> statement -> params -> query_result Lwt.t
+  val transaction : connection -> (unit -> unit Lwt.t) -> bool Lwt.t
 end
 
 module Make (D : Driver) = struct
@@ -102,6 +103,12 @@ module Make (D : Driver) = struct
       single_query_result Lwt.t =
     let p, sql = resolve_named_sql p sql in
     query_row ~p c sql
+
+  let transaction (c : connection) (f : unit -> unit Lwt.t) : bool Lwt.t =
+    log "BEGIN TRANSACTION" [];
+    D.transaction c f >|= fun r ->
+    if r then log "COMMIT TRANSACTION" [] else log "ROLLBACK TRANSACTION" [];
+    r
 end
 
 module PgDriver = struct
@@ -319,4 +326,14 @@ module PgDriver = struct
     | exception Pg.Error _ -> false
     | Pg.Ok -> true
     | _ -> false
+
+  let transaction (c : connection) (f : unit -> unit Lwt.t) : bool Lwt.t =
+    execute_direct c "BEGIN";%lwt
+    try%lwt
+      f ();%lwt
+      execute_direct c "COMMIT";%lwt
+      Lwt.return_true
+    with _ ->
+      execute_direct c "ROLLBACK";%lwt
+      Lwt.return_false
 end
