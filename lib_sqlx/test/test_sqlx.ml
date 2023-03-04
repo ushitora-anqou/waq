@@ -84,8 +84,6 @@ module Account = struct
          ]
 
     let id x = x#id
-    let created_at x = x#created_at
-    let updated_at x = x#updated_at
 
     let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
         =
@@ -277,8 +275,6 @@ module Notification = struct
          ]
 
     let id x = x#id
-    let created_at x = x#created_at
-    let updated_at x = x#updated_at
 
     let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
         =
