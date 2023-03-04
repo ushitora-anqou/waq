@@ -453,109 +453,23 @@ module Sql = struct
     in
     f e
 
-  type t =
-    | Select of {
-        columns : string;
-        table : string;
-        where : expr;
-        order_by : (string * [ `ASC | `DESC ]) list option;
-        limit : int option;
-      }
-    | Update of {
-        table : string;
-        set : (string * expr) list;
-        where : expr;
-        returning : string option;
-      }
-    | Insert of {
-        table : string;
-        columns : string list;
-        values : expr list;
-        returning : string option;
-      }
-    | Delete of { table : string; where : expr }
-
-  let build_sql_query param s =
-    let exprs_to_strings_with_numbered_markers exprs param =
-      let param_h = Hashtbl.create 0 in
-      let const_f k =
-        match Hashtbl.find_opt param_h k with
-        | Some (i, _v) -> "$" ^ string_of_int i
-        | None ->
-            let v = List.assoc k param in
-            let i = Hashtbl.length param_h + 1 in
-            Hashtbl.add param_h k (i, v);
-            "$" ^ string_of_int i
-      in
-      let exprs = exprs |> List.map (fun e -> expr_to_string ~const_f e) in
-      let param =
-        param_h |> Hashtbl.to_seq_values |> List.of_seq |> List.sort compare
-        |> List.map snd
-      in
-      (exprs, param)
+  let exprs_to_strings_with_numbered_markers exprs param =
+    let param_h = Hashtbl.create 0 in
+    let const_f k =
+      match Hashtbl.find_opt param_h k with
+      | Some (i, _v) -> "$" ^ string_of_int i
+      | None ->
+          let v = List.assoc k param in
+          let i = Hashtbl.length param_h + 1 in
+          Hashtbl.add param_h k (i, v);
+          "$" ^ string_of_int i
     in
-    match s with
-    | Select { columns; table; where; order_by; limit } ->
-        let where, param =
-          exprs_to_strings_with_numbered_markers [ where ] param
-        in
-        let where = " WHERE " ^ List.hd where in
-        let order_by =
-          match order_by with
-          | None -> ""
-          | Some l ->
-              " ORDER BY "
-              ^ (l
-                |> List.map (function c, `ASC -> c | c, `DESC -> c ^ " DESC")
-                |> String.concat ", ")
-        in
-        let limit =
-          match limit with None -> "" | Some i -> " LIMIT " ^ string_of_int i
-        in
-        let sql =
-          "SELECT " ^ columns ^ " FROM " ^ table ^ where ^ order_by ^ limit
-        in
-        (sql, param)
-    | Update { table; set; where; returning } ->
-        let exprs, param =
-          exprs_to_strings_with_numbered_markers
-            (where :: List.map snd set)
-            param
-        in
-        let where = List.hd exprs in
-        let set =
-          List.tl exprs |> List.combine set
-          |> List.map (fun ((column, _), e) -> column ^ " = " ^ e)
-          |> String.concat ", "
-        in
-        let returning =
-          match returning with None -> "" | Some s -> " RETURNING " ^ s
-        in
-        let sql =
-          "UPDATE " ^ table ^ " SET " ^ set ^ " WHERE " ^ where ^ returning
-        in
-        (sql, param)
-    | Insert { table; columns; values; returning } ->
-        let exprs, param =
-          exprs_to_strings_with_numbered_markers values param
-        in
-        let values = "(" ^ String.concat ", " exprs ^ ")" in
-        let returning =
-          match returning with None -> "" | Some s -> " RETURNING " ^ s
-        in
-        let columns = "(" ^ String.concat "," columns ^ ")" in
-        let sql =
-          "INSERT INTO " ^ table ^ " " ^ columns ^ " VALUES " ^ values
-          ^ returning
-        in
-        (sql, param)
-    | Delete { table; where } ->
-        let exprs, param =
-          exprs_to_strings_with_numbered_markers [ where ] param
-        in
-        let where = List.hd exprs in
-        let sql = "DELETE FROM " ^ table ^ " WHERE " ^ where in
-        (sql, param)
+    let exprs = exprs |> List.map (fun e -> expr_to_string ~const_f e) in
+    let param =
+      param_h |> Hashtbl.to_seq_values |> List.of_seq |> List.sort compare
+      |> List.map snd
+    in
+    (exprs, param)
 
   let where_int name ptn ((where, param) as cond) =
     let rec f = function
@@ -607,8 +521,25 @@ module Sql = struct
   let select ~table_name ~order_by ~limit
       ((where : expr list), (param : param list)) =
     let where = and_exprs where in
-    Select { columns = "*"; table = table_name; where; order_by; limit }
-    |> build_sql_query param
+    let columns, table = ("*", table_name) in
+    let where, param = exprs_to_strings_with_numbered_markers [ where ] param in
+    let where = " WHERE " ^ List.hd where in
+    let order_by =
+      match order_by with
+      | None -> ""
+      | Some l ->
+          " ORDER BY "
+          ^ (l
+            |> List.map (function c, `ASC -> c | c, `DESC -> c ^ " DESC")
+            |> String.concat ", ")
+    in
+    let limit =
+      match limit with None -> "" | Some i -> " LIMIT " ^ string_of_int i
+    in
+    let sql =
+      "SELECT " ^ columns ^ " FROM " ^ table ^ where ^ order_by ^ limit
+    in
+    (sql, param)
 
   let update ~table_name ~columns ~unpacked
       ((where : expr list), (param : param list)) =
@@ -623,8 +554,23 @@ module Sql = struct
            | "updated_at" -> Some ("updated_at", Raw "now()")
            | c -> Some (c, M c))
     in
-    Update { table = table_name; set; where; returning = Some "*" }
-    |> build_sql_query param
+    let table, returning = (table_name, Some "*") in
+    let exprs, param =
+      exprs_to_strings_with_numbered_markers (where :: List.map snd set) param
+    in
+    let where = List.hd exprs in
+    let set =
+      List.tl exprs |> List.combine set
+      |> List.map (fun ((column, _), e) -> column ^ " = " ^ e)
+      |> String.concat ", "
+    in
+    let returning =
+      match returning with None -> "" | Some s -> " RETURNING " ^ s
+    in
+    let sql =
+      "UPDATE " ^ table ^ " SET " ^ set ^ " WHERE " ^ where ^ returning
+    in
+    (sql, param)
 
   let insert ~table_name ~columns ~unpacked =
     let param =
@@ -638,12 +584,26 @@ module Sql = struct
            | c -> Some (c, M c))
       |> List.split
     in
-    Insert { table = table_name; columns; values; returning = Some "*" }
-    |> build_sql_query param
+    let table, returning = (table_name, Some "*") in
+    let exprs, param = exprs_to_strings_with_numbered_markers values param in
+    let values = "(" ^ String.concat ", " exprs ^ ")" in
+    let returning =
+      match returning with None -> "" | Some s -> " RETURNING " ^ s
+    in
+    let columns = "(" ^ String.concat "," columns ^ ")" in
+    let sql =
+      "INSERT INTO " ^ table ^ " " ^ columns ^ " VALUES " ^ values ^ returning
+    in
+    (sql, param)
 
   let delete ~table_name ~id =
-    Delete { table = table_name; where = Eq (C "id", M "id") }
-    |> build_sql_query [ (`M "id", `Int id) ]
+    let table, where, param =
+      (table_name, Eq (C "id", M "id"), [ (`M "id", `Int id) ])
+    in
+    let exprs, param = exprs_to_strings_with_numbered_markers [ where ] param in
+    let where = List.hd exprs in
+    let sql = "DELETE FROM " ^ table ^ " WHERE " ^ where in
+    (sql, param)
 end
 
 let index_by f l =
