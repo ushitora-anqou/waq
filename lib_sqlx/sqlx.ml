@@ -392,10 +392,12 @@ module Internal = struct
 end
 
 class type connection =
-  object
+  object ('a)
     method query : string -> Value.t list -> (string * Value.t) list list Lwt.t
     method query_row : string -> Value.t list -> (string * Value.t) list Lwt.t
     method execute : string -> Value.t list -> unit Lwt.t
+    method enqueue_task_after_commit : ('a -> unit Lwt.t) -> unit Lwt.t
+    (*method enqueued_tasks_after_commit : ('a -> unit Lwt.t) list*)
   end
 
 module Sql = struct
@@ -665,6 +667,7 @@ module Make (M : sig
   val unpack : t -> (string * Value.t) list
   val pack : (string * Value.t) list -> t
   val id : t -> ID.t
+  val after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
 end) =
 struct
   let where_id name ptn cond =
@@ -709,14 +712,21 @@ struct
 
   let insert (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
-    xs
-    |> Lwt_list.map_s @@ fun x ->
-       let sql, param =
-         Sql.insert ~table_name:M.table_name
-           ~columns:M.(List.map string_of_column columns)
-           ~unpacked:(M.unpack x)
-       in
-       c#query_row sql param >|= M.pack
+    let%lwt rows =
+      xs
+      |> Lwt_list.map_s (fun x ->
+             let sql, param =
+               Sql.insert ~table_name:M.table_name
+                 ~columns:M.(List.map string_of_column columns)
+                 ~unpacked:(M.unpack x)
+             in
+             c#query_row sql param >|= M.pack)
+    in
+    rows
+    |> Lwt_list.iter_s (fun row ->
+           !M.after_create_commit_callbacks
+           |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)));%lwt
+    Lwt.return rows
 
   let delete (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
@@ -811,6 +821,10 @@ module Account = struct
     let id x = x#id
     let created_at x = x#created_at
     let updated_at x = x#updated_at
+
+    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
+        =
+      ref []
   end
 
   include Internal
@@ -826,6 +840,15 @@ module Account = struct
 
   let is_local a = Option.is_none a#domain
   let is_remote a = Option.is_some a#domain
+
+  let _ =
+    Internal.after_create_commit_callbacks :=
+      [
+        (fun r c ->
+          let%lwt [ r' ] = select ~id:(`Eq r#id) c [@@warning "-8"] in
+          Printf.printf ">>>>>>>>>> %d %s\n" (ID.to_int r'#id) r'#username;
+          Lwt.return_unit);
+      ]
 end
 
 module Status = struct
@@ -989,6 +1012,10 @@ module Notification = struct
     let id x = x#id
     let created_at x = x#created_at
     let updated_at x = x#updated_at
+
+    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
+        =
+      ref []
   end
 
   include Internal
@@ -1028,7 +1055,7 @@ module Db = struct
     | res -> Lwt.return_some res
 
   class connection c =
-    object
+    object (self : 'a)
       method query (sql : string) (param : Value.t list)
           : (string * Value.t) list list Lwt.t =
         Internal.query c sql ~p:(param : Value.t list :> Value.null_t list)
@@ -1039,6 +1066,11 @@ module Db = struct
 
       method execute (sql : string) (param : Value.t list) : unit Lwt.t =
         Internal.execute c sql ~p:(param : Value.t list :> Value.null_t list)
+
+      method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
+        (* NOTE: Currently, sqlx does not support transactions, so all tasks
+           should be executed immediately after enqueued *)
+        f self
     end
 
   let e q = do_query @@ fun c -> q (new connection c)

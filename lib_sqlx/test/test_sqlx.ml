@@ -33,8 +33,8 @@ let foo _ _ =
   print_sql_param sql param;
 
   Db.debug_drop_all_tables_in_db ();%lwt
-  Db.e (fun c ->
-      c#execute
+  Db.do_query (fun c ->
+      Internal.execute c
         {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -43,9 +43,8 @@ CREATE TABLE accounts (
   display_name TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
-)|}
-        [];%lwt
-      c#execute
+)|};%lwt
+      Internal.execute c
         {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
@@ -59,8 +58,7 @@ CREATE TABLE notifications (
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
-)|}
-        []);%lwt
+  )|});%lwt
 
   let%lwt [ a1'; a2' ] =
     Db.e
@@ -125,6 +123,7 @@ CREATE TABLE notifications (
   assert (n2'#id = n2#id);
   assert (n2#account#id = a2#id);
 
+  assert (1 <> 1);
   Lwt.return_unit
 
 let () =
