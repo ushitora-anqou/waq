@@ -1,0 +1,5 @@
+(library
+ (name sqlx)
+ (preprocess
+  (pps lwt_ppx ppx_deriving.enum ppx_deriving.make ppx_deriving.show))
+ (libraries lwt lwt.unix ptime logq postgresql re uri))
