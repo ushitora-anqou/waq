@@ -123,7 +123,6 @@ CREATE TABLE notifications (
   assert (n2'#id = n2#id);
   assert (n2#account#id = a2#id);
 
-  assert (1 <> 1);
   Lwt.return_unit
 
 let () =
