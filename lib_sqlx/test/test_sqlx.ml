@@ -1,5 +1,360 @@
 open Lwt.Infix [@@warning "-33"]
 open Sqlx
+open Util
+
+[@@@warning "-32"]
+
+type connection = Engine.connection
+
+let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
+
+module Account = struct
+  module Internal = struct
+    module ID : sig
+      type t
+
+      val of_int : int -> t
+      val to_int : t -> int
+    end = struct
+      type t = int
+
+      let of_int = Fun.id
+      let to_int = Fun.id
+    end
+
+    type column =
+      [ `id | `created_at | `updated_at | `username | `domain | `display_name ]
+
+    let columns : column list =
+      [ `id; `created_at; `updated_at; `username; `domain; `display_name ]
+
+    let string_of_column = function
+      | `id -> "id"
+      | `created_at -> "created_at"
+      | `updated_at -> "updated_at"
+      | `username -> "username"
+      | `domain -> "domain"
+      | `display_name -> "display_name"
+
+    let table_name = "accounts"
+
+    class t ?id ?created_at ?updated_at ~username ?domain ~display_name () =
+      object
+        val mutable id = id
+        method id : ID.t = expect_loaded id
+        method id_opt : ID.t option = id
+        val mutable created_at = created_at
+        method created_at : Ptime.t = expect_loaded created_at
+        method created_at_opt : Ptime.t option = created_at
+        val mutable updated_at = updated_at
+        method updated_at : Ptime.t = expect_loaded updated_at
+        method updated_at_opt : Ptime.t option = updated_at
+        val username : string = username
+        method username : string = username
+        method with_username (username : string) = {<username>}
+        val domain : string option = domain
+        method domain : string option = domain
+        method with_domain (domain : string option) = {<domain>}
+        method display_name : string = display_name
+      end
+
+    let pack (x : (string * Value.t) list) : t =
+      new t
+        ~id:(List.assoc "id" x |> Value.expect_int |> ID.of_int)
+        ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
+        ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
+        ~username:(List.assoc "username" x |> Value.expect_string)
+        ?domain:(List.assoc "domain" x |> Value.expect_string_opt)
+        ~display_name:(List.assoc "display_name" x |> Value.expect_string)
+        ()
+
+    let unpack (x : t) : (string * Value.t) list =
+      let cons x xs = match x with None -> xs | Some x -> x :: xs in
+      cons
+        (x#id_opt
+        |> Option.map (fun x -> ("id", x |> ID.to_int |> Value.of_int)))
+      @@ cons
+           (x#created_at_opt
+           |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
+      @@ cons
+           (x#updated_at_opt
+           |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
+      @@ [
+           ("username", x#username |> Value.of_string);
+           ("domain", x#domain |> Value.of_string_opt);
+           ("display_name", x#display_name |> Value.of_string);
+         ]
+
+    let id x = x#id
+    let created_at x = x#created_at
+    let updated_at x = x#updated_at
+
+    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
+        =
+      ref []
+  end
+
+  include Internal
+  include Model.Make (Internal)
+
+  let select ?id ?order_by ?limit ?created_at ?updated_at ?username ?domain
+      ?display_name ?(preload = []) (c : connection) =
+    select id created_at updated_at order_by limit preload c []
+    @@ Sql.where_string "username" username
+    @@ Sql.where_string_opt "domain" domain
+    @@ Sql.where_string "display_name" display_name
+    @@ ([], [])
+
+  let is_local a = Option.is_none a#domain
+  let is_remote a = Option.is_some a#domain
+
+  let _ =
+    Internal.after_create_commit_callbacks :=
+      [
+        (fun r c ->
+          let%lwt [ r' ] = select ~id:(`Eq r#id) c [@@warning "-8"] in
+          Printf.printf ">>>>>>>>>> %d %s\n" (ID.to_int r'#id) r'#username;
+          Lwt.return_unit);
+      ]
+end
+
+module Status = struct
+  type t = int
+end
+
+module Notification = struct
+  (* v User defined functions *)
+  type activity_type_t = [ `Status | `Favourite | `Follow ]
+
+  let string_of_activity_type_t : activity_type_t -> string = function
+    | `Status -> "Status"
+    | `Favourite -> "Favourite"
+    | `Follow -> "Follow"
+
+  let activity_type_t_of_string : string -> activity_type_t = function
+    | "Status" -> `Status
+    | "Favourite" -> `Favourite
+    | "Follow" -> `Follow
+    | _ -> failwith "activity_type_t_of_string: invalid input"
+
+  type typ_t = [ `reblog | `favourite | `follow ]
+
+  let string_of_typ_t : typ_t -> string = function
+    | `reblog -> "reblog"
+    | `favourite -> "favourite"
+    | `follow -> "follow"
+
+  let typ_t_of_string : string -> typ_t = function
+    | "reblog" -> `reblog
+    | "favourite" -> `favourite
+    | "follow" -> `follow
+    | _ -> failwith "type_t_of_string: invalid input"
+
+  (* ^ User defined functions *)
+
+  module Internal = struct
+    module ID : sig
+      type t
+
+      val of_int : int -> t
+      val to_int : t -> int
+    end = struct
+      type t = int
+
+      let of_int = Fun.id
+      let to_int = Fun.id
+    end
+
+    type id = ID.t
+
+    let id_of_int = ID.of_int
+    let int_of_id = ID.to_int
+
+    type column =
+      [ `id
+      | `created_at
+      | `updated_at
+      | `activity_id
+      | `activity_type
+      | `account_id
+      | `from_account_id
+      | `typ ]
+
+    let columns : column list =
+      [
+        `id;
+        `created_at;
+        `updated_at;
+        `activity_id;
+        `activity_type;
+        `account_id;
+        `from_account_id;
+        `typ;
+      ]
+
+    let string_of_column : column -> string = function
+      | `id -> "id"
+      | `created_at -> "created_at"
+      | `updated_at -> "updated_at"
+      | `activity_id -> "activity_id"
+      | `activity_type -> "activity_type"
+      | `account_id -> "account_id"
+      | `from_account_id -> "from_account_id"
+      | `typ -> "type"
+
+    let table_name = "notifications"
+
+    class t ?id ?created_at ?updated_at ~activity_id ~activity_type ~account_id
+      ~from_account_id ?typ () =
+      object
+        val mutable id = id
+        method id : id = expect_loaded id
+        method id_opt : id option = id
+        val mutable created_at = created_at
+        method created_at : Ptime.t = expect_loaded created_at
+        method created_at_opt : Ptime.t option = created_at
+        val mutable updated_at = updated_at
+        method updated_at : Ptime.t = expect_loaded updated_at
+        method updated_at_opt : Ptime.t option = updated_at
+        method account_id : Account.ID.t = account_id
+        method from_account_id : Account.ID.t = from_account_id
+        method activity_id : int = activity_id
+        method activity_type : activity_type_t = activity_type
+        method typ : typ_t option = typ
+        val mutable account = None
+        method account : Account.t = expect_loaded account
+        method set_account (x : Account.t) = account <- Some x
+        val mutable from_account = None
+        method from_account : Account.t = expect_loaded from_account
+        method set_from_account (x : Account.t) = from_account <- Some x
+        val mutable target_status = None
+        method target_status : Status.t = expect_loaded target_status
+        method set_target_status (x : Status.t) = target_status <- Some x
+      end
+
+    let pack (x : (string * Value.t) list) : t =
+      new t
+        ~id:(List.assoc "id" x |> Value.expect_int |> id_of_int)
+        ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
+        ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
+        ~activity_id:(List.assoc "activity_id" x |> Value.expect_int)
+        ~activity_type:
+          (List.assoc "activity_type" x
+          |> Value.expect_string |> activity_type_t_of_string)
+        ?typ:
+          (List.assoc (string_of_column `typ) x
+          |> Value.expect_string_opt |> Option.map typ_t_of_string)
+        ~account_id:
+          (List.assoc "account_id" x |> Value.expect_int |> Account.ID.of_int)
+        ~from_account_id:
+          (List.assoc "from_account_id" x
+          |> Value.expect_int |> Account.ID.of_int)
+        ()
+
+    let unpack (x : t) : (string * Value.t) list =
+      let cons x xs = match x with None -> xs | Some x -> x :: xs in
+      cons
+        (x#id_opt
+        |> Option.map (fun x -> ("id", x |> int_of_id |> Value.of_int)))
+      @@ cons
+           (x#created_at_opt
+           |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
+      @@ cons
+           (x#updated_at_opt
+           |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
+      @@ [
+           ("activity_id", x#activity_id |> Value.of_int);
+           ( "activity_type",
+             x#activity_type |> string_of_activity_type_t |> Value.of_string );
+           ( string_of_column `typ,
+             x#typ |> Option.map string_of_typ_t |> Value.of_string_opt );
+           ("account_id", x#account_id |> Account.ID.to_int |> Value.of_int);
+           ( "from_account_id",
+             x#from_account_id |> Account.ID.to_int |> Value.of_int );
+         ]
+
+    let id x = x#id
+    let created_at x = x#created_at
+    let updated_at x = x#updated_at
+
+    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
+        =
+      ref []
+  end
+
+  include Internal
+  include Model.Make (Internal)
+
+  let load_account (xs : t list) (c : connection) =
+    let ids = xs |> List.map (fun x -> x#account_id) in
+    Account.select ~id:(`In ids) c >|= index_by (fun y -> y#id) >|= fun tbl ->
+    xs |> List.iter (fun x -> Hashtbl.find tbl x#account_id |> x#set_account)
+
+  let select ?id ?created_at ?updated_at ?account_id ?from_account_id
+      ?activity_id ?activity_type ?typ ?order_by ?limit
+      ?(preload : [ `account ] list = []) c =
+    select id created_at updated_at order_by limit preload c
+      [ (`account, load_account) ]
+    @@ Account.where_id "account_id" account_id
+    @@ Account.where_id "from_account_id" from_account_id
+    @@ Sql.where_int "activity_id" activity_id
+    @@ Sql.where_string ~encode:string_of_activity_type_t "activity_type"
+         activity_type
+    @@ Sql.where_string_opt ~encode:string_of_typ_t (string_of_column `typ) typ
+    @@ ([], [])
+end
+
+module Db = struct
+  let global_pool = ref None
+
+  let initialize url =
+    let pool = Engine.connect_pool 10 url in
+    global_pool := Some pool
+
+  let do_query f = Engine.use (Option.get !global_pool) f
+
+  let maybe_no_row e =
+    match%lwt e with
+    | exception Engine.NoRowFound -> Lwt.return_none
+    | res -> Lwt.return_some res
+
+  class connection c =
+    object (self : 'a)
+      method query (sql : string) (param : Value.t list)
+          : (string * Value.t) list list Lwt.t =
+        Engine.query c sql ~p:(param : Value.t list :> Value.null_t list)
+
+      method query_row (sql : string) (param : Value.t list)
+          : (string * Value.t) list Lwt.t =
+        Engine.query_row c sql ~p:(param : Value.t list :> Value.null_t list)
+
+      method execute (sql : string) (param : Value.t list) : unit Lwt.t =
+        Engine.execute c sql ~p:(param : Value.t list :> Value.null_t list)
+
+      method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
+        (* NOTE: Currently, sqlx does not support transactions, so all tasks
+           should be executed immediately after enqueued *)
+        f self
+    end
+
+  let e q = do_query @@ fun c -> q (new connection c)
+
+  let debug_drop_all_tables_in_db () =
+    do_query @@ fun c ->
+    Engine.execute c
+      {|
+-- Thanks to: https://stackoverflow.com/a/36023359
+DO $$ DECLARE
+    r RECORD;
+BEGIN
+    -- if the schema you operate on is not "current", you will want to
+    -- replace current_schema() in query with 'schematodeletetablesfrom'
+    -- *and* update the generate 'DROP...' accordingly.
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = current_schema()) LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$|}
+end
 
 let print_sql_param sql param =
   Printf.printf ">>> %s\n" sql;
@@ -34,7 +389,7 @@ let foo _ _ =
 
   Db.debug_drop_all_tables_in_db ();%lwt
   Db.do_query (fun c ->
-      Internal.execute c
+      Engine.execute c
         {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -44,7 +399,7 @@ CREATE TABLE accounts (
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
 )|};%lwt
-      Internal.execute c
+      Engine.execute c
         {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
