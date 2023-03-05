@@ -7,91 +7,121 @@ open Util
 type connection = Ppx_runtime.connection
 
 module Account = struct
-  module Internal = struct
-    module ID : sig
-      type t
+  module ID : sig
+    type t
 
-      val of_int : int -> t
-      val to_int : t -> int
-    end = struct
-      type t = int
+    val of_int : int -> t
+    val to_int : t -> int
+  end = struct
+    type t = int
 
-      let of_int = Fun.id
-      let to_int = Fun.id
-    end
-
-    type column =
-      [ `id | `created_at | `updated_at | `username | `domain | `display_name ]
-
-    let columns : column list =
-      [ `id; `created_at; `updated_at; `username; `domain; `display_name ]
-
-    let string_of_column = function
-      | `id -> "id"
-      | `created_at -> "created_at"
-      | `updated_at -> "updated_at"
-      | `username -> "username"
-      | `domain -> "domain"
-      | `display_name -> "display_name"
-
-    let table_name = "accounts"
-
-    class t ?id ?created_at ?updated_at ~username ?domain ~display_name () =
-      object
-        val mutable id = id
-        method id : ID.t = Ppx_runtime.expect_loaded id
-        method id_opt : ID.t option = id
-        val mutable created_at = created_at
-        method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
-        method created_at_opt : Ptime.t option = created_at
-        val mutable updated_at = updated_at
-        method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
-        method updated_at_opt : Ptime.t option = updated_at
-        val username : string = username
-        method username : string = username
-        method with_username (username : string) = {<username>}
-        val domain : string option = domain
-        method domain : string option = domain
-        method with_domain (domain : string option) = {<domain>}
-        method display_name : string = display_name
-      end
-
-    let pack (x : (string * Value.t) list) : t =
-      new t
-        ~id:(List.assoc "id" x |> Value.expect_int |> ID.of_int)
-        ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
-        ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
-        ~username:(List.assoc "username" x |> Value.expect_string)
-        ?domain:(List.assoc "domain" x |> Value.expect_string_opt)
-        ~display_name:(List.assoc "display_name" x |> Value.expect_string)
-        ()
-
-    let unpack (x : t) : (string * Value.t) list =
-      let cons x xs = match x with None -> xs | Some x -> x :: xs in
-      cons
-        (x#id_opt
-        |> Option.map (fun x -> ("id", x |> ID.to_int |> Value.of_int)))
-      @@ cons
-           (x#created_at_opt
-           |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
-      @@ cons
-           (x#updated_at_opt
-           |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
-      @@ [
-           ("username", x#username |> Value.of_string);
-           ("domain", x#domain |> Value.of_string_opt);
-           ("display_name", x#display_name |> Value.of_string);
-         ]
-
-    let id x = x#id
-
-    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
-        =
-      ref []
+    let of_int = Fun.id
+    let to_int = Fun.id
   end
 
-  include Internal
-  include Ppx_runtime.Make (Internal)
+  type column =
+    [ `id | `created_at | `updated_at | `username | `domain | `display_name ]
+
+  let columns : column list =
+    [ `id; `created_at; `updated_at; `username; `domain; `display_name ]
+
+  let string_of_column = function
+    | `id -> "id"
+    | `created_at -> "created_at"
+    | `updated_at -> "updated_at"
+    | `username -> "username"
+    | `domain -> "domain"
+    | `display_name -> "display_name"
+
+  let table_name = "accounts"
+
+  type args = {
+    id : ID.t option;
+    created_at : Ptime.t option;
+    updated_at : Ptime.t option;
+    username : string;
+    domain : string option;
+    display_name : string;
+  }
+
+  class model (a : args) =
+    object
+      val mutable id = a.id
+      method id : ID.t = Ppx_runtime.expect_loaded id
+      method id_opt : ID.t option = id
+      val mutable created_at = a.created_at
+      method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
+      method created_at_opt : Ptime.t option = created_at
+      val mutable updated_at = a.updated_at
+      method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
+      method updated_at_opt : Ptime.t option = updated_at
+      val username : string = a.username
+      method username : string = username
+      method with_username (username : string) = {<username>}
+      val domain : string option = a.domain
+      method domain : string option = domain
+      method with_domain (domain : string option) = {<domain>}
+      method display_name : string = a.display_name
+    end
+
+  class t (a : args) =
+    object
+      inherit model a
+      method is_local = Option.is_none domain
+      method is_remote = Option.is_some domain
+    end
+
+  let make ?id ?created_at ?updated_at ~username ?domain ~display_name () : t =
+    new t { id; created_at; updated_at; username; domain; display_name }
+
+  let pack (x : (string * Value.t) list) : t =
+    make
+      ~id:(List.assoc "id" x |> Value.expect_int |> ID.of_int)
+      ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
+      ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
+      ~username:(List.assoc "username" x |> Value.expect_string)
+      ?domain:(List.assoc "domain" x |> Value.expect_string_opt)
+      ~display_name:(List.assoc "display_name" x |> Value.expect_string)
+      ()
+
+  let unpack (x : t) : (string * Value.t) list =
+    let cons x xs = match x with None -> xs | Some x -> x :: xs in
+    cons
+      (x#id_opt |> Option.map (fun x -> ("id", x |> ID.to_int |> Value.of_int)))
+    @@ cons
+         (x#created_at_opt
+         |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
+    @@ cons
+         (x#updated_at_opt
+         |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
+    @@ [
+         ("username", x#username |> Value.of_string);
+         ("domain", x#domain |> Value.of_string_opt);
+         ("display_name", x#display_name |> Value.of_string);
+       ]
+
+  let id x = x#id
+
+  let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref =
+    ref []
+
+  include Ppx_runtime.Make (struct
+    module ID = ID
+
+    (* Avoid cyclic definitions *)
+    type t' = t
+    type t = t'
+    type column' = column
+    type column = column'
+
+    let columns = columns
+    let string_of_column = string_of_column
+    let table_name = table_name
+    let unpack = unpack
+    let pack = pack
+    let id = id
+    let after_create_commit_callbacks = after_create_commit_callbacks
+  end)
 
   let select ?id ?order_by ?limit ?created_at ?updated_at ?username ?domain
       ?display_name ?(preload = []) (c : connection) =
@@ -100,9 +130,6 @@ module Account = struct
     @@ Sql.where_string_opt "domain" domain
     @@ Sql.where_string "display_name" display_name
     @@ ([], [])
-
-  let is_local a = Option.is_none a#domain
-  let is_remote a = Option.is_some a#domain
 
   (*
   let _ =
@@ -150,139 +177,175 @@ module Notification = struct
 
   (* ^ User defined functions *)
 
-  module Internal = struct
-    module ID : sig
-      type t
+  module ID : sig
+    type t
 
-      val of_int : int -> t
-      val to_int : t -> int
-    end = struct
-      type t = int
+    val of_int : int -> t
+    val to_int : t -> int
+  end = struct
+    type t = int
 
-      let of_int = Fun.id
-      let to_int = Fun.id
-    end
-
-    type id = ID.t
-
-    let id_of_int = ID.of_int
-    let int_of_id = ID.to_int
-
-    type column =
-      [ `id
-      | `created_at
-      | `updated_at
-      | `activity_id
-      | `activity_type
-      | `account_id
-      | `from_account_id
-      | `typ ]
-
-    let columns : column list =
-      [
-        `id;
-        `created_at;
-        `updated_at;
-        `activity_id;
-        `activity_type;
-        `account_id;
-        `from_account_id;
-        `typ;
-      ]
-
-    let string_of_column : column -> string = function
-      | `id -> "id"
-      | `created_at -> "created_at"
-      | `updated_at -> "updated_at"
-      | `activity_id -> "activity_id"
-      | `activity_type -> "activity_type"
-      | `account_id -> "account_id"
-      | `from_account_id -> "from_account_id"
-      | `typ -> "type"
-
-    let table_name = "notifications"
-
-    class t ?id ?created_at ?updated_at ~activity_id ~activity_type ~account_id
-      ~from_account_id ?typ () =
-      object
-        val mutable id = id
-        method id : id = Ppx_runtime.expect_loaded id
-        method id_opt : id option = id
-        val mutable created_at = created_at
-        method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
-        method created_at_opt : Ptime.t option = created_at
-        val mutable updated_at = updated_at
-        method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
-        method updated_at_opt : Ptime.t option = updated_at
-        method account_id : Account.ID.t = account_id
-        method from_account_id : Account.ID.t = from_account_id
-        method activity_id : int = activity_id
-        method activity_type : activity_type_t = activity_type
-        method typ : typ_t option = typ
-        val mutable account = None
-        method account : Account.t = Ppx_runtime.expect_loaded account
-        method set_account (x : Account.t) = account <- Some x
-        val mutable from_account = None
-        method from_account : Account.t = Ppx_runtime.expect_loaded from_account
-        method set_from_account (x : Account.t) = from_account <- Some x
-        val mutable target_status = None
-
-        method target_status : Status.t =
-          Ppx_runtime.expect_loaded target_status
-
-        method set_target_status (x : Status.t) = target_status <- Some x
-      end
-
-    let pack (x : (string * Value.t) list) : t =
-      new t
-        ~id:(List.assoc "id" x |> Value.expect_int |> id_of_int)
-        ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
-        ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
-        ~activity_id:(List.assoc "activity_id" x |> Value.expect_int)
-        ~activity_type:
-          (List.assoc "activity_type" x
-          |> Value.expect_string |> activity_type_t_of_string)
-        ?typ:
-          (List.assoc (string_of_column `typ) x
-          |> Value.expect_string_opt |> Option.map typ_t_of_string)
-        ~account_id:
-          (List.assoc "account_id" x |> Value.expect_int |> Account.ID.of_int)
-        ~from_account_id:
-          (List.assoc "from_account_id" x
-          |> Value.expect_int |> Account.ID.of_int)
-        ()
-
-    let unpack (x : t) : (string * Value.t) list =
-      let cons x xs = match x with None -> xs | Some x -> x :: xs in
-      cons
-        (x#id_opt
-        |> Option.map (fun x -> ("id", x |> int_of_id |> Value.of_int)))
-      @@ cons
-           (x#created_at_opt
-           |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
-      @@ cons
-           (x#updated_at_opt
-           |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
-      @@ [
-           ("activity_id", x#activity_id |> Value.of_int);
-           ( "activity_type",
-             x#activity_type |> string_of_activity_type_t |> Value.of_string );
-           ( string_of_column `typ,
-             x#typ |> Option.map string_of_typ_t |> Value.of_string_opt );
-           ("account_id", x#account_id |> Account.ID.to_int |> Value.of_int);
-           ( "from_account_id",
-             x#from_account_id |> Account.ID.to_int |> Value.of_int );
-         ]
-
-    let id x = x#id
-
-    let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
-        =
-      ref []
+    let of_int = Fun.id
+    let to_int = Fun.id
   end
 
-  include Internal
-  include Ppx_runtime.Make (Internal)
+  type id = ID.t
+
+  let id_of_int = ID.of_int
+  let int_of_id = ID.to_int
+
+  type column =
+    [ `id
+    | `created_at
+    | `updated_at
+    | `activity_id
+    | `activity_type
+    | `account_id
+    | `from_account_id
+    | `typ ]
+
+  let columns : column list =
+    [
+      `id;
+      `created_at;
+      `updated_at;
+      `activity_id;
+      `activity_type;
+      `account_id;
+      `from_account_id;
+      `typ;
+    ]
+
+  let string_of_column : column -> string = function
+    | `id -> "id"
+    | `created_at -> "created_at"
+    | `updated_at -> "updated_at"
+    | `activity_id -> "activity_id"
+    | `activity_type -> "activity_type"
+    | `account_id -> "account_id"
+    | `from_account_id -> "from_account_id"
+    | `typ -> "type"
+
+  let table_name = "notifications"
+
+  type args = {
+    id : ID.t option;
+    created_at : Ptime.t option;
+    updated_at : Ptime.t option;
+    account_id : Account.ID.t;
+    from_account_id : Account.ID.t;
+    activity_id : int;
+    activity_type : activity_type_t;
+    typ : typ_t option;
+  }
+
+  class model (a : args) =
+    object
+      val mutable id = a.id
+      method id : id = Ppx_runtime.expect_loaded id
+      method id_opt : id option = id
+      val mutable created_at = a.created_at
+      method created_at : Ptime.t = Ppx_runtime.expect_loaded created_at
+      method created_at_opt : Ptime.t option = created_at
+      val mutable updated_at = a.updated_at
+      method updated_at : Ptime.t = Ppx_runtime.expect_loaded updated_at
+      method updated_at_opt : Ptime.t option = updated_at
+      method account_id : Account.ID.t = a.account_id
+      method from_account_id : Account.ID.t = a.from_account_id
+      method activity_id : int = a.activity_id
+      method activity_type : activity_type_t = a.activity_type
+      method typ : typ_t option = a.typ
+      val mutable account = None
+      method account : Account.t = Ppx_runtime.expect_loaded account
+      method set_account (x : Account.t) = account <- Some x
+      val mutable from_account = None
+      method from_account : Account.t = Ppx_runtime.expect_loaded from_account
+      method set_from_account (x : Account.t) = from_account <- Some x
+      val mutable target_status = None
+      method target_status : Status.t = Ppx_runtime.expect_loaded target_status
+      method set_target_status (x : Status.t) = target_status <- Some x
+    end
+
+  class t (a : args) =
+    object
+      inherit model a
+    end
+
+  let make ?id ?created_at ?updated_at ~account_id ~from_account_id ~activity_id
+      ~activity_type ?typ () =
+    new t
+      {
+        id;
+        created_at;
+        updated_at;
+        account_id;
+        from_account_id;
+        activity_id;
+        activity_type;
+        typ;
+      }
+
+  let pack (x : (string * Value.t) list) : t =
+    make
+      ~id:(List.assoc "id" x |> Value.expect_int |> id_of_int)
+      ~created_at:(List.assoc "created_at" x |> Value.expect_timestamp)
+      ~updated_at:(List.assoc "updated_at" x |> Value.expect_timestamp)
+      ~activity_id:(List.assoc "activity_id" x |> Value.expect_int)
+      ~activity_type:
+        (List.assoc "activity_type" x
+        |> Value.expect_string |> activity_type_t_of_string)
+      ?typ:
+        (List.assoc (string_of_column `typ) x
+        |> Value.expect_string_opt |> Option.map typ_t_of_string)
+      ~account_id:
+        (List.assoc "account_id" x |> Value.expect_int |> Account.ID.of_int)
+      ~from_account_id:
+        (List.assoc "from_account_id" x |> Value.expect_int |> Account.ID.of_int)
+      ()
+
+  let unpack (x : t) : (string * Value.t) list =
+    let cons x xs = match x with None -> xs | Some x -> x :: xs in
+    cons
+      (x#id_opt |> Option.map (fun x -> ("id", x |> int_of_id |> Value.of_int)))
+    @@ cons
+         (x#created_at_opt
+         |> Option.map (fun x -> ("created_at", Value.of_timestamp x)))
+    @@ cons
+         (x#updated_at_opt
+         |> Option.map (fun x -> ("updated_at", Value.of_timestamp x)))
+    @@ [
+         ("activity_id", x#activity_id |> Value.of_int);
+         ( "activity_type",
+           x#activity_type |> string_of_activity_type_t |> Value.of_string );
+         ( string_of_column `typ,
+           x#typ |> Option.map string_of_typ_t |> Value.of_string_opt );
+         ("account_id", x#account_id |> Account.ID.to_int |> Value.of_int);
+         ( "from_account_id",
+           x#from_account_id |> Account.ID.to_int |> Value.of_int );
+       ]
+
+  let id x = x#id
+
+  let after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref =
+    ref []
+
+  include Ppx_runtime.Make (struct
+    module ID = ID
+
+    (* Avoid cyclic definitions *)
+    type t' = t
+    type t = t'
+    type column' = column
+    type column = column'
+
+    let columns = columns
+    let string_of_column = string_of_column
+    let table_name = table_name
+    let unpack = unpack
+    let pack = pack
+    let id = id
+    let after_create_commit_callbacks = after_create_commit_callbacks
+  end)
 
   let load_account (xs : t list) (c : connection) =
     let ids = xs |> List.map (fun x -> x#account_id) in
@@ -367,8 +430,8 @@ let test_select_insert_update_delete_case1 _ _ =
       Account.(
         insert
           [
-            new t ~username:"user1" ~display_name:"User 1" ();
-            new t ~username:"user2" ~display_name:"User 2" ();
+            make ~username:"user1" ~display_name:"User 1" ();
+            make ~username:"user2" ~display_name:"User 2" ();
           ])
   in
   ignore a1'#id;
@@ -387,6 +450,7 @@ let test_select_insert_update_delete_case1 _ _ =
   assert ([ a1#id; a2#id ] = (a12 |> List.map (fun a -> a#id)));
   assert (a1#username = "user1");
   assert (a2#username = "user2");
+  assert (a1#is_local && a2#is_local);
 
   let%lwt [ a1'; a2' ] =
     Db.e
@@ -404,11 +468,9 @@ let test_select_insert_update_delete_case1 _ _ =
       Notification.(
         insert
           [
-            new t
-              ~activity_id:1 ~activity_type:`Status ~account_id:a1#id
+            make ~activity_id:1 ~activity_type:`Status ~account_id:a1#id
               ~from_account_id:a2#id ~typ:`reblog ();
-            new t
-              ~activity_id:1 ~activity_type:`Status ~account_id:a2#id
+            make ~activity_id:1 ~activity_type:`Status ~account_id:a2#id
               ~from_account_id:a1#id ~typ:`reblog ();
           ])
     [@@warning "-8"]
@@ -433,13 +495,13 @@ let test_select_insert_update_delete_case1 _ _ =
 
 let test_transaction_case1 _ _ =
   let hook_called = ref false in
-  Account.Internal.after_create_commit_callbacks :=
+  Account.after_create_commit_callbacks :=
     [ (fun _r _c -> Lwt.return (hook_called := true)) ];
 
   let a_id = ref (Account.ID.of_int 0) in
   let%lwt res =
     Db.transaction (fun c ->
-        Account.(insert [ new t ~username:"user3" ~display_name:"User 3" () ]) c
+        Account.(insert [ make ~username:"user3" ~display_name:"User 3" () ]) c
         >|= fun [ x ] -> a_id := x#id)
   in
   assert res;
@@ -450,8 +512,7 @@ let test_transaction_case1 _ _ =
   hook_called := false;
   let%lwt res =
     Db.transaction (fun c ->
-        ( Account.(insert [ new t ~username:"user4" ~display_name:"User 4" () ])
-            c
+        ( Account.(insert [ make ~username:"user4" ~display_name:"User 4" () ]) c
         >|= fun [ x ] -> a_id := x#id );%lwt
         failwith "" (* Incur rollback *))
   in
