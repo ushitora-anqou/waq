@@ -147,6 +147,55 @@ module Status = struct
   type t = int
 end
 
+module Notification' = struct
+  (* v User defined functions *)
+  type activity_type_t = [ `Status | `Favourite | `Follow ]
+
+  let string_of_activity_type_t : activity_type_t -> string = function
+    | `Status -> "Status"
+    | `Favourite -> "Favourite"
+    | `Follow -> "Follow"
+
+  let activity_type_t_of_string : string -> activity_type_t = function
+    | "Status" -> `Status
+    | "Favourite" -> `Favourite
+    | "Follow" -> `Follow
+    | _ -> failwith "activity_type_t_of_string: invalid input"
+
+  type typ_t = [ `reblog | `favourite | `follow ]
+
+  let string_of_typ_t : typ_t -> string = function
+    | `reblog -> "reblog"
+    | `favourite -> "favourite"
+    | `follow -> "follow"
+
+  let typ_t_of_string : string -> typ_t = function
+    | "reblog" -> `reblog
+    | "favourite" -> `favourite
+    | "follow" -> `follow
+    | _ -> failwith "type_t_of_string: invalid input"
+
+  (* ^ User defined functions *)
+
+  [%%sqlx.schema
+  name "notifications"
+
+  val activity_id : int
+  val activity_type : activity_type_t
+  val account_id : Account.ID.t
+  val from_account_id : Account.ID.t
+  val typ : typ_t option [@@column "type"]]
+
+  class t a =
+    object
+      inherit schema a
+    end
+
+  (*
+  [%%sqlx.gen t]
+  *)
+end
+
 module Notification = struct
   (* v User defined functions *)
   type activity_type_t = [ `Status | `Favourite | `Follow ]

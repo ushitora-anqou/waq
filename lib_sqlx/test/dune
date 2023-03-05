@@ -1,5 +1,5 @@
 (tests
  (names test_sqlx)
  (preprocess
-  (pps lwt_ppx))
+  (pps lwt_ppx ppx_sqlx))
  (libraries alcotest alcotest-lwt sqlx))
