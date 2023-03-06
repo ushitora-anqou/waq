@@ -151,7 +151,7 @@ module Notification' = struct
   (* v User defined functions *)
   type activity_type_t = [ `Status | `Favourite | `Follow ]
 
-  let string_of_activity_type_t : activity_type_t -> string = function
+  let activity_type_t_to_string : activity_type_t -> string = function
     | `Status -> "Status"
     | `Favourite -> "Favourite"
     | `Follow -> "Follow"
@@ -164,7 +164,7 @@ module Notification' = struct
 
   type typ_t = [ `reblog | `favourite | `follow ]
 
-  let string_of_typ_t : typ_t -> string = function
+  let typ_t_to_string : typ_t -> string = function
     | `reblog -> "reblog"
     | `favourite -> "favourite"
     | `follow -> "follow"

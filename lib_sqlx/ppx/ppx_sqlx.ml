@@ -199,7 +199,8 @@ module Schema = struct
                   [%expr
                     fun [%p ppat_var ~loc (wloc x)] ->
                       [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
-             ])
+             ]
+             @ if opt then [ obj_method (name ^ "_opt") e_name ] else [])
       |> List.flatten
     in
     pstr_class ~loc
@@ -298,9 +299,7 @@ module Operation = struct
            | "id", _ ->
                [%expr
                  fun x -> x |> Value.expect_int |> ID.of_int |> Option.some]
-           | "created_at", _ ->
-               [%expr fun x -> x |> Value.expect_timestamp |> Option.some]
-           | "updated_at", _ ->
+           | "created_at", _ | "updated_at", _ ->
                [%expr fun x -> x |> Value.expect_timestamp |> Option.some]
            | _, `Int -> [%expr fun x -> x |> Value.expect_int]
            | _, `Option `Int -> [%expr fun x -> x |> Value.expect_int_opt]
@@ -336,6 +335,67 @@ module Operation = struct
     let body = pexp_apply ~loc [%expr make] args in
     [%stri let pack [%p ppat_var ~loc (wloc x)] = [%e body]]
 
+  let expand_let_unpack loc schema =
+    let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
+    let x = gen_symbol () in
+    let body =
+      schema.s_columns
+      |> List.map @@ fun c ->
+         let decode =
+           let encode_id = function
+             | Ldot (prefix, _) ->
+                 pexp_ident ~loc (wloc (Ldot (prefix, "to_int")))
+             | _ -> assert false
+           in
+           let encode_user = function
+             | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
+             | _ -> assert false
+           in
+           match (c.c_sql_name, c.c_typ) with
+           | "id", _ ->
+               [%expr fun x -> x |> Option.get |> ID.to_int |> Value.of_int]
+           | "created_at", _ | "updated_at", _ ->
+               [%expr fun x -> x |> Option.get |> Value.of_timestamp]
+           | _, `Int -> [%expr fun x -> x |> Value.of_int]
+           | _, `String -> [%expr fun x -> x |> Value.of_string]
+           | _, `Ptime -> [%expr fun x -> x |> Value.of_timestamp]
+           | _, `ID l -> [%expr fun x -> x |> [%e encode_id l] |> Value.of_int]
+           | _, `User l ->
+               [%expr fun x -> x |> [%e encode_user l] |> Value.of_string]
+           | _, `Option `Int -> [%expr fun x -> x |> Value.of_int_opt]
+           | _, `Option `String -> [%expr fun x -> x |> Value.of_string_opt]
+           (*
+           | _, `Option `Ptime -> [%expr fun x -> x |> Value.of_timestamp_opt]
+           *)
+           | _, `Option (`ID l) ->
+               [%expr
+                 fun x -> x |> Option.map [%e encode_id l] |> Value.of_int_opt]
+           | _, `Option (`User l) ->
+               [%expr
+                 fun x ->
+                   x |> Option.map [%e encode_user l] |> Value.of_string_opt]
+           | _ -> assert false
+         in
+         pexp_tuple ~loc
+           [
+             estring ~loc c.c_sql_name;
+             pexp_apply ~loc decode
+               [
+                 ( Nolabel,
+                   pexp_send ~loc (evar ~loc x)
+                     (wloc
+                        (match c.c_typ with
+                        | `Option _ -> c.c_ocaml_name ^ "_opt"
+                        | _ -> c.c_ocaml_name)) );
+               ];
+           ]
+    in
+    let body = elist ~loc body in
+    [%stri
+      let unpack ([%p ppat_var ~loc (wloc x)] : t) : (string * Value.t) list =
+        [%e body]]
+
   let expand ~ctxt (_xs : structure_item list) =
     let schema =
       Hashtbl.find state
@@ -347,6 +407,7 @@ module Operation = struct
       include struct
         [%%i expand_let_make loc schema]
         [%%i expand_let_pack loc schema]
+        [%%i expand_let_unpack loc schema]
       end]
 end
 
