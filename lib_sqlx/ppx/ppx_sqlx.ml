@@ -277,6 +277,65 @@ module Operation = struct
     in
     [%stri let make = [%e body]]
 
+  let expand_let_pack loc schema =
+    let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
+    let x = gen_symbol () in
+    let args =
+      schema.s_columns
+      |> List.map @@ fun c ->
+         let decode =
+           let decode_id = function
+             | Ldot (prefix, _) ->
+                 pexp_ident ~loc (wloc (Ldot (prefix, "of_int")))
+             | _ -> assert false
+           in
+           let decode_user = function
+             | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_of_string")))
+             | _ -> assert false
+           in
+           match (c.c_sql_name, c.c_typ) with
+           | "id", _ ->
+               [%expr
+                 fun x -> x |> Value.expect_int |> ID.of_int |> Option.some]
+           | "created_at", _ ->
+               [%expr fun x -> x |> Value.expect_timestamp |> Option.some]
+           | "updated_at", _ ->
+               [%expr fun x -> x |> Value.expect_timestamp |> Option.some]
+           | _, `Int -> [%expr fun x -> x |> Value.expect_int]
+           | _, `Option `Int -> [%expr fun x -> x |> Value.expect_int_opt]
+           | _, `String -> [%expr fun x -> x |> Value.expect_string]
+           | _, `Option `String -> [%expr fun x -> x |> Value.expect_string_opt]
+           | _, `Ptime -> [%expr fun x -> x |> Value.expect_timestmap]
+           | _, `Option `Ptime ->
+               [%expr fun x -> x |> Value.expect_timestamp_opt]
+           | _, `ID l ->
+               [%expr fun x -> x |> Value.expect_int |> [%e decode_id l]]
+           | _, `Option (`ID l) ->
+               [%expr
+                 fun x -> x |> Value.expect_int |> Option.map [%e decode_id l]]
+           | _, `User l ->
+               [%expr fun x -> x |> Value.expect_string |> [%e decode_user l]]
+           | _, `Option (`User l) ->
+               [%expr
+                 fun x ->
+                   x |> Value.expect_string_opt |> Option.map [%e decode_user l]]
+           | _ -> assert false
+         in
+         let e =
+           [%expr
+             [%e evar ~loc x]
+             |> List.assoc [%e estring ~loc c.c_sql_name]
+             |> [%e decode]]
+         in
+         match c.c_typ with
+         | `Option _ -> (Optional c.c_ocaml_name, e)
+         | _ -> (Labelled c.c_ocaml_name, e)
+    in
+    let args = (Nolabel, [%expr ()]) :: args in
+    let body = pexp_apply ~loc [%expr make] args in
+    [%stri let pack [%p ppat_var ~loc (wloc x)] = [%e body]]
+
   let expand ~ctxt (_xs : structure_item list) =
     let schema =
       Hashtbl.find state
@@ -287,6 +346,7 @@ module Operation = struct
     [%stri
       include struct
         [%%i expand_let_make loc schema]
+        [%%i expand_let_pack loc schema]
       end]
 end
 
