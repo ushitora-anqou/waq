@@ -4,9 +4,19 @@ type typ =
   [ `Int
   | `String
   | `Ptime
-  | `ID of string (* module name *)
+  | `ID of longident (* M.ID.t *)
   | `User of longident
   | `Option of typ ]
+
+let rec core_type_of_typ loc : typ -> core_type =
+  let open Ast_builder.Default in
+  function
+  | `Int -> [%type: int]
+  | `String -> [%type: string]
+  | `Ptime -> [%type: Ptime.t]
+  | `ID l | `User l -> ptyp_constr ~loc { loc; txt = l } []
+  | `Option t ->
+      ptyp_constr ~loc { loc; txt = lident "option" } [ core_type_of_typ loc t ]
 
 type column = { c_ocaml_name : string; c_sql_name : string; c_typ : typ }
 
@@ -45,7 +55,7 @@ module Schema = struct
         | Lident "int" -> `Int
         | Lident "string" -> `String
         | Ldot (Lident "Ptime", "t") -> `Ptime
-        | Ldot (Ldot (Lident s, "ID"), "t") -> `ID s
+        | Ldot (Ldot (Lident _, "ID"), "t") as s -> `ID s
         | s -> `User s
       in
       match x.pval_type.ptyp_desc with
@@ -68,8 +78,27 @@ module Schema = struct
 
   let construct_schema ctxt xs =
     let sql_name = ref "" in
-    let columns = ref [] in
     let code_path = Expansion_context.Extension.code_path ctxt in
+    let columns =
+      ref
+        [
+          {
+            c_ocaml_name = "id";
+            c_sql_name = "id";
+            c_typ = `Option (`ID (Ldot (lident "ID", "t")));
+          };
+          {
+            c_ocaml_name = "created_at";
+            c_sql_name = "created_at";
+            c_typ = `Option `Ptime;
+          };
+          {
+            c_ocaml_name = "updated_at";
+            c_sql_name = "updated_at";
+            c_typ = `Option `Ptime;
+          };
+        ]
+    in
     xs
     |> List.iter (fun x ->
            match parse_config x with
@@ -83,7 +112,7 @@ module Schema = struct
       s_code_path = code_path;
     }
 
-  let expand_type_column' loc schema =
+  let expand_type_column loc schema =
     let open Ast_builder.Default in
     let rtags =
       schema.s_columns
@@ -91,8 +120,8 @@ module Schema = struct
     in
     pstr_type ~loc Nonrecursive
       [
-        type_declaration ~loc ~name:{ txt = "column'"; loc } ~params:[]
-          ~cstrs:[] ~kind:Ptype_abstract ~private_:Public
+        type_declaration ~loc ~name:{ txt = "column"; loc } ~params:[] ~cstrs:[]
+          ~kind:Ptype_abstract ~private_:Public
           ~manifest:(Some (ptyp_variant ~loc rtags Closed None));
       ]
 
@@ -103,9 +132,99 @@ module Schema = struct
       |> List.map (fun c -> pexp_variant ~loc c.c_ocaml_name None)
       |> elist ~loc
     in
+    [%stri let columns : column list = [%e columns]]
+
+  let expand_let_string_of_column loc schema =
+    let open Ast_builder.Default in
+    let cases =
+      schema.s_columns
+      |> List.map (fun c ->
+             case
+               ~lhs:(ppat_variant ~loc c.c_ocaml_name None)
+               ~guard:None
+               ~rhs:(estring ~loc c.c_ocaml_name))
+    in
     [%stri
-      let columns : column list =
-        `id :: `created_at :: `updated_at :: [%e columns]]
+      let string_of_column : column -> string = [%e pexp_function ~loc cases]]
+
+  let expand_type_args loc schema =
+    let open Ast_builder.Default in
+    let decls =
+      schema.s_columns
+      |> List.map (fun c ->
+             label_declaration ~loc
+               ~name:{ txt = c.c_ocaml_name; loc }
+               ~mutable_:Immutable
+               ~type_:(core_type_of_typ loc c.c_typ))
+    in
+    pstr_type ~loc Nonrecursive
+      [
+        type_declaration ~loc ~name:{ txt = "args"; loc } ~params:[] ~cstrs:[]
+          ~private_:Public ~manifest:None ~kind:(Ptype_record decls);
+      ]
+
+  let expand_class_model loc schema =
+    let open Ast_builder.Default in
+    (*
+    let m = [%stri method f = ()] in
+    [%stri
+      class model (a : args) =
+        object
+          (*
+          val mutable id = a.id
+          method id : id = Sqlx.Ppx_runtime.expect_loaded id
+          method id_opt = id
+          method set_id (x : id) = id <- x
+          method with_id (x : id) = {< id >}
+          [%%i pcf_method ~loc (loc, Public, Cfk_concrete (Fresh, pc))]
+          *)
+          [%%i m]
+        end]
+        *)
+    let a = gen_symbol ~prefix:"a" () in
+    let fields =
+      let obj_val name e =
+        pcf_val ~loc ({ loc; txt = name }, Mutable, Cfk_concrete (Fresh, e))
+      in
+      let obj_method name e =
+        pcf_method ~loc
+          ( { loc; txt = name },
+            Public,
+            Cfk_concrete (Fresh, pexp_poly ~loc e None) )
+      in
+      schema.s_columns
+      |> List.map (fun c ->
+             let name = c.c_ocaml_name in
+             let e_name = evar ~loc name in
+             let opt = match c.c_typ with `Option _ -> true | _ -> false in
+             let wloc txt = { loc; txt } in
+             [
+               obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
+               obj_method name
+                 (if opt then [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]]
+                 else e_name);
+               obj_method ("set_" ^ name)
+                 (let x = gen_symbol () in
+                  [%expr
+                    fun [%p ppat_var ~loc (wloc x)] ->
+                      [%e pexp_setinstvar ~loc (wloc name) (evar ~loc x)]]);
+               obj_method ("with_" ^ name)
+                 (let x = gen_symbol () in
+                  [%expr
+                    fun [%p ppat_var ~loc (wloc x)] ->
+                      [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
+             ])
+      |> List.flatten
+    in
+    pstr_class ~loc
+      [
+        class_infos ~loc ~virt:Concrete ~params:[] ~name:{ loc; txt = "schema" }
+          ~expr:
+            (pcl_fun ~loc Nolabel None
+               (ppat_var ~loc { loc; txt = a })
+               (pcl_structure ~loc
+                  (class_structure ~self:(ppat_any ~loc) ~fields)));
+      ]
 
   let expand ~ctxt (xs : structure_item list) =
     let schema = construct_schema ctxt xs in
@@ -128,11 +247,11 @@ module Schema = struct
 
         let table_name = [%e estring ~loc schema.s_sql_name]
 
-        [%%i expand_type_column' loc schema]
-
-        type column = [ `id | `created_at | `updated_at | column' ]
-
+        [%%i expand_type_column loc schema]
         [%%i expand_let_columns loc schema]
+        [%%i expand_let_string_of_column loc schema]
+        [%%i expand_type_args loc schema]
+        [%%i expand_class_model loc schema]
       end]
 end
 

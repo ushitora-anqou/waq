@@ -186,9 +186,10 @@ module Notification' = struct
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]]
 
-  class t a =
+  class t (a : args) =
     object
-      inherit schema a
+      inherit schema a as super
+      method fooo = super#with_id
     end
 
   (*
