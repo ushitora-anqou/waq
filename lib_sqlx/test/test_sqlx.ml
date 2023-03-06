@@ -188,13 +188,10 @@ module Notification' = struct
 
   class t (a : args) =
     object
-      inherit schema a as super
-      method fooo = super#with_id
+      inherit schema a
     end
 
-  (*
   [%%sqlx.gen t]
-  *)
 end
 
 module Notification = struct

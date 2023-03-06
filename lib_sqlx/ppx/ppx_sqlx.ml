@@ -26,6 +26,8 @@ type schema = {
   s_code_path : Code_path.t;
 }
 
+let state = Hashtbl.create 0
+
 module Schema = struct
   let parse_config (x : structure_item) =
     (* Parse config e.g., `name "notifications"` *)
@@ -165,22 +167,6 @@ module Schema = struct
 
   let expand_class_model loc schema =
     let open Ast_builder.Default in
-    (*
-    let m = [%stri method f = ()] in
-    [%stri
-      class model (a : args) =
-        object
-          (*
-          val mutable id = a.id
-          method id : id = Sqlx.Ppx_runtime.expect_loaded id
-          method id_opt = id
-          method set_id (x : id) = id <- x
-          method with_id (x : id) = {< id >}
-          [%%i pcf_method ~loc (loc, Public, Cfk_concrete (Fresh, pc))]
-          *)
-          [%%i m]
-        end]
-        *)
     let a = gen_symbol ~prefix:"a" () in
     let fields =
       let obj_val name e =
@@ -228,6 +214,10 @@ module Schema = struct
 
   let expand ~ctxt (xs : structure_item list) =
     let schema = construct_schema ctxt xs in
+    Hashtbl.add state
+      (Expansion_context.Extension.code_path ctxt
+      |> Code_path.fully_qualified_path)
+      schema;
 
     let open Ast_builder.Default in
     let loc = !Ast_helper.default_loc in
@@ -255,7 +245,50 @@ module Schema = struct
       end]
 end
 
-let expand_gen ~ctxt:_ (_xs : structure_item list) = assert false
+module Operation = struct
+  let expand_let_make loc schema =
+    let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
+    let xs =
+      schema.s_columns
+      |> List.map (fun c ->
+             (c.c_ocaml_name, gen_symbol ~prefix:c.c_ocaml_name ()))
+      |> List.to_seq |> Hashtbl.of_seq
+    in
+    let body =
+      schema.s_columns
+      |> List.map (fun c ->
+             ( wloc (lident c.c_ocaml_name),
+               evar ~loc (Hashtbl.find xs c.c_ocaml_name) ))
+    in
+    let body = [%expr fun () -> new t [%e pexp_record ~loc body None]] in
+    let body =
+      schema.s_columns
+      |> List.fold_left
+           (fun body c ->
+             pexp_fun ~loc
+               (match c.c_typ with
+               | `Option _ -> Optional c.c_ocaml_name
+               | _ -> Labelled c.c_ocaml_name)
+               None
+               (ppat_var ~loc (wloc (Hashtbl.find xs c.c_ocaml_name)))
+               body)
+           body
+    in
+    [%stri let make = [%e body]]
+
+  let expand ~ctxt (_xs : structure_item list) =
+    let schema =
+      Hashtbl.find state
+        (Expansion_context.Extension.code_path ctxt
+        |> Code_path.fully_qualified_path)
+    in
+    let loc = !Ast_helper.default_loc in
+    [%stri
+      include struct
+        [%%i expand_let_make loc schema]
+      end]
+end
 
 let sqlx_schema =
   Extension.V3.declare "sqlx.schema" Extension.Context.structure_item
@@ -265,7 +298,7 @@ let sqlx_schema =
 let sqlx_gen =
   Extension.V3.declare "sqlx.gen" Extension.Context.structure_item
     Ast_pattern.(pstr __)
-    expand_gen
+    Operation.expand
 
 let () =
   Driver.register_transformation
