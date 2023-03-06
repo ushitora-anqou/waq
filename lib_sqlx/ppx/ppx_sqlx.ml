@@ -298,27 +298,31 @@ module Operation = struct
            match (c.c_sql_name, c.c_typ) with
            | "id", _ ->
                [%expr
-                 fun x -> x |> Value.expect_int |> ID.of_int |> Option.some]
+                 fun x -> x |> Sqlx.Value.expect_int |> ID.of_int |> Option.some]
            | "created_at", _ | "updated_at", _ ->
-               [%expr fun x -> x |> Value.expect_timestamp |> Option.some]
-           | _, `Int -> [%expr fun x -> x |> Value.expect_int]
-           | _, `Option `Int -> [%expr fun x -> x |> Value.expect_int_opt]
-           | _, `String -> [%expr fun x -> x |> Value.expect_string]
-           | _, `Option `String -> [%expr fun x -> x |> Value.expect_string_opt]
-           | _, `Ptime -> [%expr fun x -> x |> Value.expect_timestmap]
+               [%expr fun x -> x |> Sqlx.Value.expect_timestamp |> Option.some]
+           | _, `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int]
+           | _, `Option `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int_opt]
+           | _, `String -> [%expr fun x -> x |> Sqlx.Value.expect_string]
+           | _, `Option `String ->
+               [%expr fun x -> x |> Sqlx.Value.expect_string_opt]
+           | _, `Ptime -> [%expr fun x -> x |> Sqlx.Value.expect_timestmap]
            | _, `Option `Ptime ->
-               [%expr fun x -> x |> Value.expect_timestamp_opt]
+               [%expr fun x -> x |> Sqlx.Value.expect_timestamp_opt]
            | _, `ID l ->
-               [%expr fun x -> x |> Value.expect_int |> [%e decode_id l]]
+               [%expr fun x -> x |> Sqlx.Value.expect_int |> [%e decode_id l]]
            | _, `Option (`ID l) ->
                [%expr
-                 fun x -> x |> Value.expect_int |> Option.map [%e decode_id l]]
+                 fun x ->
+                   x |> Sqlx.Value.expect_int |> Option.map [%e decode_id l]]
            | _, `User l ->
-               [%expr fun x -> x |> Value.expect_string |> [%e decode_user l]]
+               [%expr
+                 fun x -> x |> Sqlx.Value.expect_string |> [%e decode_user l]]
            | _, `Option (`User l) ->
                [%expr
                  fun x ->
-                   x |> Value.expect_string_opt |> Option.map [%e decode_user l]]
+                   x |> Sqlx.Value.expect_string_opt
+                   |> Option.map [%e decode_user l]]
            | _ -> assert false
          in
          let e =
@@ -354,27 +358,33 @@ module Operation = struct
            in
            match (c.c_sql_name, c.c_typ) with
            | "id", _ ->
-               [%expr fun x -> x |> Option.get |> ID.to_int |> Value.of_int]
+               [%expr
+                 fun x -> x |> Option.get |> ID.to_int |> Sqlx.Value.of_int]
            | "created_at", _ | "updated_at", _ ->
-               [%expr fun x -> x |> Option.get |> Value.of_timestamp]
-           | _, `Int -> [%expr fun x -> x |> Value.of_int]
-           | _, `String -> [%expr fun x -> x |> Value.of_string]
-           | _, `Ptime -> [%expr fun x -> x |> Value.of_timestamp]
-           | _, `ID l -> [%expr fun x -> x |> [%e encode_id l] |> Value.of_int]
+               [%expr fun x -> x |> Option.get |> Sqlx.Value.of_timestamp]
+           | _, `Int -> [%expr fun x -> x |> Sqlx.Value.of_int]
+           | _, `String -> [%expr fun x -> x |> Sqlx.Value.of_string]
+           | _, `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
+           | _, `ID l ->
+               [%expr fun x -> x |> [%e encode_id l] |> Sqlx.Value.of_int]
            | _, `User l ->
-               [%expr fun x -> x |> [%e encode_user l] |> Value.of_string]
-           | _, `Option `Int -> [%expr fun x -> x |> Value.of_int_opt]
-           | _, `Option `String -> [%expr fun x -> x |> Value.of_string_opt]
+               [%expr fun x -> x |> [%e encode_user l] |> Sqlx.Value.of_string]
+           | _, `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
+           | _, `Option `String ->
+               [%expr fun x -> x |> Sqlx.Value.of_string_opt]
            (*
-           | _, `Option `Ptime -> [%expr fun x -> x |> Value.of_timestamp_opt]
+           | _, `Option `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
            *)
            | _, `Option (`ID l) ->
                [%expr
-                 fun x -> x |> Option.map [%e encode_id l] |> Value.of_int_opt]
+                 fun x ->
+                   x |> Option.map [%e encode_id l] |> Sqlx.Value.of_int_opt]
            | _, `Option (`User l) ->
                [%expr
                  fun x ->
-                   x |> Option.map [%e encode_user l] |> Value.of_string_opt]
+                   x
+                   |> Option.map [%e encode_user l]
+                   |> Sqlx.Value.of_string_opt]
            | _ -> assert false
          in
          pexp_tuple ~loc
@@ -393,7 +403,8 @@ module Operation = struct
     in
     let body = elist ~loc body in
     [%stri
-      let unpack ([%p ppat_var ~loc (wloc x)] : t) : (string * Value.t) list =
+      let unpack ([%p ppat_var ~loc (wloc x)] : t) :
+          (string * Sqlx.Value.t) list =
         [%e body]]
 
   let expand ~ctxt (_xs : structure_item list) =
@@ -408,6 +419,30 @@ module Operation = struct
         [%%i expand_let_make loc schema]
         [%%i expand_let_pack loc schema]
         [%%i expand_let_unpack loc schema]
+
+        let id x = x#id
+
+        let after_create_commit_callbacks :
+            (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
+          ref []
+
+        include Sqlx.Ppx_runtime.Make (struct
+          module ID = ID
+
+          (* Avoid cyclic definitions *)
+          type t' = t
+          type t = t'
+          type column' = column
+          type column = column'
+
+          let columns = columns
+          let string_of_column = string_of_column
+          let table_name = table_name
+          let unpack = unpack
+          let pack = pack
+          let id = id
+          let after_create_commit_callbacks = after_create_commit_callbacks
+        end)
       end]
 end
 
