@@ -49,5 +49,11 @@ let of_int (n : int) = `Int n
 let of_string (s : string) = `String s
 let of_timestamp (t : Ptime.t) = `Timestamp t
 
+let of_int_opt (i : int option) =
+  match i with None -> `Null | Some i -> `Int i
+
 let of_string_opt (s : string option) =
   match s with None -> `Null | Some s -> `String s
+
+let of_timestamp_opt (t : Ptime.t option) =
+  match t with None -> `Null | Some t -> `Timestamp t

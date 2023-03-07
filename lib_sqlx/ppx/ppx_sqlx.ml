@@ -19,10 +19,12 @@ let rec core_type_of_typ loc : typ -> core_type =
       ptyp_constr ~loc { loc; txt = lident "option" } [ core_type_of_typ loc t ]
 
 type column = { c_ocaml_name : string; c_sql_name : string; c_typ : typ }
+type derived_column = { d_name : string; d_type : core_type }
 
 type schema = {
   s_sql_name : string;
   s_columns : column list;
+  s_derived : derived_column list;
   s_code_path : Code_path.t;
 }
 
@@ -79,6 +81,9 @@ module Schema = struct
     }
 
   let construct_schema ctxt xs =
+    let open Ast_builder.Default in
+    let loc = !Ast_helper.default_loc in
+    let wloc txt = { loc; txt } in
     let sql_name = ref "" in
     let code_path = Expansion_context.Extension.code_path ctxt in
     let columns =
@@ -108,10 +113,26 @@ module Schema = struct
            | exception _ ->
                let column = parse_column x in
                columns := column :: !columns);
+    let derived =
+      !columns
+      |> List.filter_map (fun c ->
+             match c.c_typ with
+             | `ID (Ldot (Ldot (l, "ID"), "t")) ->
+                 let d_type = ptyp_constr ~loc (wloc (Ldot (l, "t"))) [] in
+                 let d_name =
+                   let s = c.c_ocaml_name in
+                   let open String in
+                   if ends_with ~suffix:"_id" s then sub s 0 (length s - 3)
+                   else assert false
+                 in
+                 Some { d_type; d_name }
+             | _ -> None)
+    in
     {
       s_sql_name = !sql_name;
       s_columns = List.rev !columns;
       s_code_path = code_path;
+      s_derived = derived;
     }
 
   let expand_type_column loc schema =
@@ -144,7 +165,7 @@ module Schema = struct
              case
                ~lhs:(ppat_variant ~loc c.c_ocaml_name None)
                ~guard:None
-               ~rhs:(estring ~loc c.c_ocaml_name))
+               ~rhs:(estring ~loc c.c_sql_name))
     in
     [%stri
       let string_of_column : column -> string = [%e pexp_function ~loc cases]]
@@ -167,6 +188,7 @@ module Schema = struct
 
   let expand_class_model loc schema =
     let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
     let a = gen_symbol ~prefix:"a" () in
     let fields =
       let obj_val name e =
@@ -178,12 +200,11 @@ module Schema = struct
             Public,
             Cfk_concrete (Fresh, pexp_poly ~loc e None) )
       in
-      schema.s_columns
+      (schema.s_columns
       |> List.map (fun c ->
              let name = c.c_ocaml_name in
              let e_name = evar ~loc name in
              let opt = match c.c_typ with `Option _ -> true | _ -> false in
-             let wloc txt = { loc; txt } in
              [
                obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
                obj_method name
@@ -201,7 +222,24 @@ module Schema = struct
                       [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
              ]
              @ if opt then [ obj_method (name ^ "_opt") e_name ] else [])
-      |> List.flatten
+      |> List.flatten)
+      @ (schema.s_derived
+        |> List.map (fun d ->
+               let name = d.d_name in
+               let e_name = evar ~loc d.d_name in
+               [
+                 obj_val name [%expr None];
+                 obj_method ("set_" ^ name)
+                   (let x = gen_symbol () in
+                    [%expr
+                      fun ([%p ppat_var ~loc (wloc x)] : [%t d.d_type]) ->
+                        [%e
+                          pexp_setinstvar ~loc (wloc name)
+                            [%expr Some [%e evar ~loc x]]]]);
+                 obj_method name
+                   [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]];
+               ])
+        |> List.flatten)
     in
     pstr_class ~loc
       [
@@ -346,7 +384,7 @@ module Operation = struct
     let body =
       schema.s_columns
       |> List.map @@ fun c ->
-         let decode =
+         let encode =
            let encode_id = function
              | Ldot (prefix, _) ->
                  pexp_ident ~loc (wloc (Ldot (prefix, "to_int")))
@@ -357,11 +395,6 @@ module Operation = struct
              | _ -> assert false
            in
            match (c.c_sql_name, c.c_typ) with
-           | "id", _ ->
-               [%expr
-                 fun x -> x |> Option.get |> ID.to_int |> Sqlx.Value.of_int]
-           | "created_at", _ | "updated_at", _ ->
-               [%expr fun x -> x |> Option.get |> Sqlx.Value.of_timestamp]
            | _, `Int -> [%expr fun x -> x |> Sqlx.Value.of_int]
            | _, `String -> [%expr fun x -> x |> Sqlx.Value.of_string]
            | _, `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
@@ -372,9 +405,8 @@ module Operation = struct
            | _, `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
            | _, `Option `String ->
                [%expr fun x -> x |> Sqlx.Value.of_string_opt]
-           (*
-           | _, `Option `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
-           *)
+           | _, `Option `Ptime ->
+               [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
            | _, `Option (`ID l) ->
                [%expr
                  fun x ->
@@ -390,7 +422,7 @@ module Operation = struct
          pexp_tuple ~loc
            [
              estring ~loc c.c_sql_name;
-             pexp_apply ~loc decode
+             pexp_apply ~loc encode
                [
                  ( Nolabel,
                    pexp_send ~loc (evar ~loc x)
@@ -406,6 +438,136 @@ module Operation = struct
       let unpack ([%p ppat_var ~loc (wloc x)] : t) :
           (string * Sqlx.Value.t) list =
         [%e body]]
+
+  let expand_let_load_column loc col =
+    let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
+    let id_t = match col.c_typ with `ID l -> l | _ -> assert false in
+    let column_wo_id =
+      let s = col.c_ocaml_name in
+      let open String in
+      if ends_with ~suffix:"_id" s then sub s 0 (length s - 3) else assert false
+    in
+    let funname = "load_" ^ column_wo_id in
+    let select =
+      match id_t with
+      | Ldot (Ldot (l, "ID"), "t") ->
+          pexp_ident ~loc (wloc (Ldot (l, "select")))
+      | _ -> assert false
+    in
+    let x_column_id =
+      (* e.g., x#account_id *)
+      pexp_send ~loc [%expr x] (wloc col.c_ocaml_name)
+    in
+    let x_set_column =
+      (* e.g., x#set_account *)
+      pexp_send ~loc [%expr x] (wloc ("set_" ^ column_wo_id))
+    in
+    value_binding ~loc
+      ~pat:(ppat_var ~loc (wloc funname))
+      ~expr:
+        [%expr
+          fun (xs : t list) (c : Sqlx.Ppx_runtime.connection) ->
+            let ids = xs |> List.map (fun x -> [%e x_column_id]) in
+            Lwt.map
+              (fun tbl ->
+                xs
+                |> List.iter (fun x ->
+                       Hashtbl.find tbl [%e x_column_id] |> [%e x_set_column]))
+              (Lwt.map (index_by (fun y -> y#id)) ([%e select] ~id:(`In ids) c))]
+
+  let expand_let_select loc schema =
+    let open Ast_builder.Default in
+    let wloc txt = { loc; txt } in
+    let body = [%expr [], []] in
+    let body =
+      schema.s_columns
+      |> List.fold_left
+           (fun body c ->
+             match c.c_ocaml_name with
+             | "id" | "created_at" | "updated_at" -> body
+             | _ ->
+                 let ident = pexp_ident ~loc (wloc (lident c.c_ocaml_name)) in
+                 let estr = estring ~loc c.c_sql_name in
+                 let where_id = function
+                   | Ldot (Ldot (l, "ID"), "t") ->
+                       pexp_ident ~loc (wloc (Ldot (l, "where_id")))
+                   | _ -> assert false
+                 in
+                 let encode_user = function
+                   | Lident s ->
+                       pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
+                   | _ -> assert false
+                 in
+                 let where =
+                   match c.c_typ with
+                   | `Int -> [%expr Sqlx.Sql.where_int]
+                   | `String -> [%expr Sqlx.Sql.where_string]
+                   | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
+                   | `ID l -> where_id l
+                   | `User l ->
+                       [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
+                   | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
+                   | `Option `String -> [%expr Sqlx.Sql.where_string_opt]
+                   | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
+                   | `Option (`ID _l) -> assert false
+                   | `Option (`User l) ->
+                       [%expr
+                         Sqlx.Sql.where_string_opt ~encode:[%e encode_user l]]
+                   | _ -> assert false
+                 in
+                 [%expr [%e where] [%e estr] [%e ident] [%e body]])
+           body
+    in
+    let preload_spec_src =
+      schema.s_columns
+      |> List.filter_map @@ fun c ->
+         match c.c_typ with
+         | `ID _ ->
+             let column_wo_id =
+               let s = c.c_ocaml_name in
+               let open String in
+               if ends_with ~suffix:"_id" s then sub s 0 (length s - 3)
+               else assert false
+             in
+             Some
+               ( pexp_variant ~loc column_wo_id None,
+                 pexp_ident ~loc (wloc (lident ("load_" ^ column_wo_id))) )
+         | _ -> None
+    in
+    let preload_all = preload_spec_src |> List.map fst |> elist ~loc in
+    let preload_spec =
+      preload_spec_src
+      |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
+      |> elist ~loc
+    in
+    let body =
+      [%expr
+        select' id created_at updated_at order_by limit preload c
+          [%e preload_spec] [%e body]]
+    in
+    value_binding ~loc
+      ~pat:(ppat_var ~loc (wloc "select"))
+      ~expr:
+        (schema.s_columns
+        |> List.fold_left
+             (fun body c ->
+               pexp_fun ~loc (Optional c.c_ocaml_name) None
+                 (ppat_var ~loc (wloc c.c_ocaml_name))
+                 body)
+             [%expr
+               fun ?order_by ?limit ?(preload = [%e preload_all]) c -> [%e body]]
+        )
+
+  let expand_let_select_and_load_columns loc schema =
+    let open Ast_builder.Default in
+    schema.s_columns
+    |> List.filter_map (fun c ->
+           match c.c_typ with
+           | `ID _ -> Some (expand_let_load_column loc c)
+           | _ -> None)
+    |> List.cons (expand_let_select loc schema)
+    |> pstr_value ~loc Recursive
 
   let expand ~ctxt (_xs : structure_item list) =
     let schema =
@@ -443,6 +605,10 @@ module Operation = struct
           let id = id
           let after_create_commit_callbacks = after_create_commit_callbacks
         end)
+
+        let select' = select
+
+        [%%i expand_let_select_and_load_columns loc schema]
       end]
 end
 
