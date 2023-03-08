@@ -11,8 +11,6 @@ module Account = struct
   val username : string
   val domain : string option
   val display_name : string]
-
-  [%%sqlx.gen t]
 end
 
 module Status = struct
@@ -27,8 +25,6 @@ module Status = struct
   val in_reply_to_id : ID.t option
   val reblog_of_id : ID.t option
   *)]
-
-  [%%sqlx.gen t]
 end
 
 module Notification = struct
@@ -69,8 +65,6 @@ module Notification = struct
   val account_id : Account.ID.t
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]]
-
-  [%%sqlx.gen t]
 end
 
 module Db = struct
