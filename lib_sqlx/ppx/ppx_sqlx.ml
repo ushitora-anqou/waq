@@ -1,4 +1,9 @@
 open Ppxlib
+open Ast_builder.Default
+
+let wloc txt =
+  let loc = !Ast_helper.default_loc in
+  { loc; txt }
 
 type typ =
   [ `Int
@@ -8,9 +13,7 @@ type typ =
   | `User of longident
   | `Option of typ ]
 
-let rec core_type_of_typ loc : typ -> core_type =
-  let open Ast_builder.Default in
-  function
+let rec core_type_of_typ loc : typ -> core_type = function
   | `Int -> [%type: int]
   | `String -> [%type: string]
   | `Ptime -> [%type: Ptime.t]
@@ -81,9 +84,7 @@ module Schema = struct
     }
 
   let construct_schema ctxt xs =
-    let open Ast_builder.Default in
     let loc = !Ast_helper.default_loc in
-    let wloc txt = { loc; txt } in
     let sql_name = ref "" in
     let code_path = Expansion_context.Extension.code_path ctxt in
     let columns =
@@ -136,7 +137,6 @@ module Schema = struct
     }
 
   let expand_type_column loc schema =
-    let open Ast_builder.Default in
     let rtags =
       schema.s_columns
       |> List.map (fun c -> rtag ~loc { txt = c.c_ocaml_name; loc } true [])
@@ -149,7 +149,6 @@ module Schema = struct
       ]
 
   let expand_let_columns loc schema =
-    let open Ast_builder.Default in
     let columns =
       schema.s_columns
       |> List.map (fun c -> pexp_variant ~loc c.c_ocaml_name None)
@@ -158,7 +157,6 @@ module Schema = struct
     [%stri let columns : column list = [%e columns]]
 
   let expand_let_string_of_column loc schema =
-    let open Ast_builder.Default in
     let cases =
       schema.s_columns
       |> List.map (fun c ->
@@ -171,7 +169,6 @@ module Schema = struct
       let string_of_column : column -> string = [%e pexp_function ~loc cases]]
 
   let expand_type_args loc schema =
-    let open Ast_builder.Default in
     let decls =
       schema.s_columns
       |> List.map (fun c ->
@@ -187,8 +184,6 @@ module Schema = struct
       ]
 
   let expand_class_model loc schema =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let a = gen_symbol ~prefix:"a" () in
     let fields =
       let obj_val name e =
@@ -258,7 +253,6 @@ module Schema = struct
       |> Code_path.fully_qualified_path)
       schema;
 
-    let open Ast_builder.Default in
     let loc = !Ast_helper.default_loc in
     [%stri
       include struct
@@ -286,8 +280,6 @@ end
 
 module Operation = struct
   let expand_let_make loc schema =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let xs =
       schema.s_columns
       |> List.map (fun c ->
@@ -317,8 +309,6 @@ module Operation = struct
     [%stri let make = [%e body]]
 
   let expand_let_pack loc schema =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let x = gen_symbol () in
     let args =
       schema.s_columns
@@ -378,8 +368,6 @@ module Operation = struct
     [%stri let pack [%p ppat_var ~loc (wloc x)] = [%e body]]
 
   let expand_let_unpack loc schema =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let x = gen_symbol () in
     let body =
       schema.s_columns
@@ -440,8 +428,6 @@ module Operation = struct
         [%e body]]
 
   let expand_let_load_column loc col =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let id_t = match col.c_typ with `ID l -> l | _ -> assert false in
     let column_wo_id =
       let s = col.c_ocaml_name in
@@ -477,8 +463,6 @@ module Operation = struct
               (Lwt.map (index_by (fun y -> y#id)) ([%e select] ~id:(`In ids) c))]
 
   let expand_let_select loc schema =
-    let open Ast_builder.Default in
-    let wloc txt = { loc; txt } in
     let body = [%expr [], []] in
     let body =
       schema.s_columns
@@ -560,7 +544,6 @@ module Operation = struct
         )
 
   let expand_let_select_and_load_columns loc schema =
-    let open Ast_builder.Default in
     schema.s_columns
     |> List.filter_map (fun c ->
            match c.c_typ with
