@@ -5,11 +5,13 @@ let wloc txt =
   let loc = !Ast_helper.default_loc in
   { loc; txt }
 
+type id_ident = { mod_ident : longident option }
+
 type typ =
   [ `Int
   | `String
   | `Ptime
-  | `ID of longident (* M.ID.t *)
+  | `ID of id_ident
   | `User of longident
   | `Option of typ ]
 
@@ -17,13 +19,16 @@ let rec core_type_of_typ loc : typ -> core_type = function
   | `Int -> [%type: int]
   | `String -> [%type: string]
   | `Ptime -> [%type: Ptime.t]
-  | `ID l | `User l -> ptyp_constr ~loc { loc; txt = l } []
+  | `ID { mod_ident = None; _ } ->
+      ptyp_constr ~loc { loc; txt = Ldot (Lident "ID", "t") } []
+  | `ID { mod_ident = Some m; _ } ->
+      ptyp_constr ~loc { loc; txt = Ldot (Ldot (m, "ID"), "t") } []
+  | `User l -> ptyp_constr ~loc { loc; txt = l } []
   | `Option t ->
       ptyp_constr ~loc { loc; txt = lident "option" } [ core_type_of_typ loc t ]
 
-let module_lident_of_typ_id = function
-  | Ldot (Ldot (l, "ID"), "t") -> l
-  | _ -> assert false
+let in_mod_ident l s =
+  match l.mod_ident with None -> Lident s | Some m -> Ldot (m, s)
 
 let column_name_wo_suffix_id s =
   let open String in
@@ -70,7 +75,8 @@ module Schema = struct
         | Lident "int" -> `Int
         | Lident "string" -> `String
         | Ldot (Lident "Ptime", "t") -> `Ptime
-        | Ldot (Ldot (Lident _, "ID"), "t") as s -> `ID s
+        | Ldot (Lident "ID", "t") -> `ID { mod_ident = None }
+        | Ldot (Ldot (l, "ID"), "t") -> `ID { mod_ident = Some l }
         | s -> `User s
       in
       match x.pval_type.ptyp_desc with
@@ -101,7 +107,7 @@ module Schema = struct
           {
             c_ocaml_name = "id";
             c_sql_name = "id";
-            c_typ = `Option (`ID (Ldot (lident "ID", "t")));
+            c_typ = `Option (`ID { mod_ident = None });
           };
           {
             c_ocaml_name = "created_at";
@@ -129,10 +135,7 @@ module Schema = struct
              | `ID l ->
                  Some
                    {
-                     d_type =
-                       ptyp_constr ~loc
-                         (wloc (Ldot (module_lident_of_typ_id l, "t")))
-                         [];
+                     d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
                      d_name = column_name_wo_suffix_id c.c_ocaml_name;
                    }
              | _ -> None)
@@ -325,10 +328,8 @@ module Operation = struct
       schema.s_columns
       |> List.map @@ fun c ->
          let decode =
-           let decode_id = function
-             | Ldot (prefix, _) ->
-                 pexp_ident ~loc (wloc (Ldot (prefix, "of_int")))
-             | _ -> assert false
+           let decode_id l =
+             Ldot (in_mod_ident l "ID", "of_int") |> wloc |> pexp_ident ~loc
            in
            let decode_user = function
              | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_of_string")))
@@ -384,10 +385,8 @@ module Operation = struct
       schema.s_columns
       |> List.map @@ fun c ->
          let encode =
-           let encode_id = function
-             | Ldot (prefix, _) ->
-                 pexp_ident ~loc (wloc (Ldot (prefix, "to_int")))
-             | _ -> assert false
+           let encode_id l =
+             Ldot (in_mod_ident l "ID", "to_int") |> wloc |> pexp_ident ~loc
            in
            let encode_user = function
              | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
@@ -440,9 +439,7 @@ module Operation = struct
     let id_t = match col.c_typ with `ID l -> l | _ -> assert false in
     let column_wo_id = column_name_wo_suffix_id col.c_ocaml_name in
     let funname = "load_" ^ column_wo_id in
-    let select =
-      pexp_ident ~loc (wloc (Ldot (module_lident_of_typ_id id_t, "select")))
-    in
+    let select = in_mod_ident id_t "select" |> wloc |> pexp_ident ~loc in
     let x_column_id =
       (* e.g., x#account_id *)
       pexp_send ~loc [%expr x] (wloc col.c_ocaml_name)
@@ -476,8 +473,7 @@ module Operation = struct
                  let ident = pexp_ident ~loc (wloc (lident c.c_ocaml_name)) in
                  let estr = estring ~loc c.c_sql_name in
                  let where_id l =
-                   pexp_ident ~loc
-                     (wloc (Ldot (module_lident_of_typ_id l, "where_id")))
+                   in_mod_ident l "where_id" |> wloc |> pexp_ident ~loc
                  in
                  let encode_user = function
                    | Lident s ->

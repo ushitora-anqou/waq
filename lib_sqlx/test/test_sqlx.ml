@@ -22,11 +22,26 @@ module Account = struct
   [%%sqlx.gen t]
 end
 
-(*
 module Status = struct
-  type t = int
+  [%%sqlx.schema
+  name "statuses"
+
+  val text : string
+  val account_id : Account.ID.t
+
+  (*
+  val in_reply_to_id : ID.t
+  val in_reply_to_id : ID.t option
+  val reblog_of_id : ID.t option
+  *)]
+
+  class t (a : args) =
+    object
+      inherit schema a
+    end
+
+  [%%sqlx.gen t]
 end
-*)
 
 module Notification = struct
   (* v User defined functions *)
@@ -95,11 +110,6 @@ BEGIN
 END $$|}
       []
 end
-
-let print_sql_param sql param =
-  Printf.printf ">>> %s\n" sql;
-  Printf.printf ">>> %s\n" (param |> List.map Value.show |> String.concat ", ");
-  ()
 
 let setup1 () =
   Db.debug_drop_all_tables_in_db ();%lwt
