@@ -67,6 +67,15 @@ let exprs_to_strings_with_numbered_markers exprs param =
   in
   (exprs, param)
 
+let where_nullable name ptn (where, param) =
+  match ptn with
+  | `EqNone ->
+      let where = `IsNull name :: where in
+      (where, param)
+  | `NeqNone ->
+      let where = `IsNotNull name :: where in
+      (where, param)
+
 let where_int name ptn ((where, param) as cond) =
   let rec f = function
     | `Eq (x : int) ->
@@ -80,15 +89,10 @@ let where_int name ptn ((where, param) as cond) =
   in
   match ptn with None -> cond | Some ptn -> f ptn
 
-let where_int_opt name ptn ((where, param) as cond) =
+let where_int_opt name ptn cond =
   let f = function
     | `Eq _ | `In _ -> where_int name ptn cond
-    | `EqNone ->
-        let where = `IsNull name :: where in
-        (where, param)
-    | `NeqNone ->
-        let where = `IsNotNull name :: where in
-        (where, param)
+    | (`EqNone | `NeqNone) as ptn -> where_nullable name ptn cond
   in
   match ptn with None -> cond | Some ptn -> f ptn
 

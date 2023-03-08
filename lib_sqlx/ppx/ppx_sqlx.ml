@@ -321,7 +321,7 @@ let expand_let_pack loc schema =
          | _, `Option (`ID l) ->
              [%expr
                fun x ->
-                 x |> Sqlx.Value.expect_int |> Option.map [%e decode_id l]]
+                 x |> Sqlx.Value.expect_int_opt |> Option.map [%e decode_id l]]
          | _, `Option (`User l) ->
              [%expr
                fun x ->
@@ -436,6 +436,9 @@ let expand_let_select loc schema =
                let where_id l =
                  in_mod_ident l "where_id" |> wloc |> pexp_ident ~loc
                in
+               let where_id_opt l =
+                 in_mod_ident l "where_id_opt" |> wloc |> pexp_ident ~loc
+               in
                let encode_user = function
                  | Lident s ->
                      pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
@@ -452,7 +455,7 @@ let expand_let_select loc schema =
                  | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
                  | `Option `String -> [%expr Sqlx.Sql.where_string_opt]
                  | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
-                 | `Option (`ID _l) -> assert false
+                 | `Option (`ID l) -> where_id_opt l
                  | `Option (`User l) ->
                      [%expr
                        Sqlx.Sql.where_string_opt ~encode:[%e encode_user l]]

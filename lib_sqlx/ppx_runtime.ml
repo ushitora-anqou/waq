@@ -39,6 +39,12 @@ struct
         | `In (vals : M.ID.t list) ->
             Sql.where_int name (Some (`In (vals |> List.map M.ID.to_int))) cond)
 
+  let where_id_opt name ptn cond =
+    match ptn with
+    | None -> cond
+    | Some (`Eq _ | `In _) as x -> where_id name x cond
+    | Some ((`EqNone | `NeqNone) as x) -> Sql.where_nullable name x cond
+
   let select id created_at updated_at order_by limit preload (c : connection)
       preload_spec cond =
     let sql, param =

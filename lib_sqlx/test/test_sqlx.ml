@@ -19,10 +19,8 @@ module Status = struct
 
   val text : string
   val account_id : Account.ID.t
-
-  (*
-  val in_reply_to_id : ID.t
   val in_reply_to_id : ID.t option
+  (*
   val reblog_of_id : ID.t option
   *)]
 end
