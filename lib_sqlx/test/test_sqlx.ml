@@ -12,13 +12,6 @@ module Account = struct
   val domain : string option
   val display_name : string]
 
-  class t (a : args) =
-    object
-      inherit schema a
-      method is_local = Option.is_none domain
-      method is_remote = Option.is_some domain
-    end
-
   [%%sqlx.gen t]
 end
 
@@ -34,11 +27,6 @@ module Status = struct
   val in_reply_to_id : ID.t option
   val reblog_of_id : ID.t option
   *)]
-
-  class t (a : args) =
-    object
-      inherit schema a
-    end
 
   [%%sqlx.gen t]
 end
@@ -81,11 +69,6 @@ module Notification = struct
   val account_id : Account.ID.t
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]]
-
-  class t (a : args) =
-    object
-      inherit schema a
-    end
 
   [%%sqlx.gen t]
 end
@@ -169,8 +152,10 @@ let test_select_insert_update_delete_case1 _ _ =
   assert ([ a1#id; a2#id ] = (a12 |> List.map (fun a -> a#id)));
   assert (a1#username = "user1");
   assert (a2#username = "user2");
-  assert (a1#is_local && a2#is_local);
 
+  (*
+  assert (a1#is_local && a2#is_local);
+  *)
   let%lwt [ a1'; a2' ] =
     Db.e
       Account.(update [ a1#with_username "foo"; a2#with_domain (Some "bar") ])

@@ -252,7 +252,7 @@ module Schema = struct
     in
     pstr_class ~loc
       [
-        class_infos ~loc ~virt:Concrete ~params:[] ~name:{ loc; txt = "schema" }
+        class_infos ~loc ~virt:Concrete ~params:[] ~name:{ loc; txt = "t" }
           ~expr:
             (pcl_fun ~loc Nolabel None
                (ppat_var ~loc { loc; txt = a })
