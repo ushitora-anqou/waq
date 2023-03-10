@@ -195,6 +195,7 @@ let test_account_basic_ops_case1 _ _ =
 
 let test_status_preload _ _ =
   setup1 ();%lwt
+
   let%lwt [ a1; a2 ] =
     Db.e
       Account.(
@@ -205,37 +206,50 @@ let test_status_preload _ _ =
               ();
           ])
   in
-  let%lwt [ s1' ] =
+
+  let%lwt [ s1 ] =
     Db.e Status.(insert [ make ~account_id:a1#id ~text:"foo" () ])
   in
-  let%lwt [ s2' ] =
+  let%lwt [ s2 ] =
     Db.e
       Status.(
-        insert [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1'#id () ])
+        insert [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1#id () ])
   in
-  let%lwt [ s3' ] =
+  let%lwt [ s3 ] =
     Db.e
       Status.(
-        insert [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2'#id () ])
+        insert [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2#id () ])
   in
-  let%lwt [ s3; s2; s1 ] =
-    Db.e
-      Status.(
-        select ~id:(`In [ s1'#id; s2'#id; s3'#id ]) ~order_by:[ (`id, `DESC) ])
-  in
-
-  assert (s1#id = s1'#id);
-  assert (s2#id = s2'#id);
-  assert (s3#id = s3'#id);
   assert (s1#account#id = a1#id);
   assert (s2#account#id = a2#id);
   assert (s3#account#id = a1#id);
-
   assert (s2#in_reply_to#id = s1#id);
   assert (s3#reblog_of#id = s2#id);
 
+  let%lwt [ s3'; s2'; s1' ] =
+    Db.e
+      Status.(
+        select ~id:(`In [ s1#id; s2#id; s3#id ]) ~order_by:[ (`id, `DESC) ])
+  in
+  assert (s1#id = s1'#id);
+  assert (s2#id = s2'#id);
+  assert (s3#id = s3'#id);
+  assert (s1'#account#id = a1#id);
+  assert (s2'#account#id = a2#id);
+  assert (s3'#account#id = a1#id);
+  assert (s2'#in_reply_to#id = s1#id);
+  assert (s3'#reblog_of#id = s2#id);
+
+  let%lwt [ s1 ] = Db.e Status.(select ~id:(`Eq s1#id) ~preload:[]) in
+  assert (Option.is_none s1#in_reply_to_opt);
+  assert (Option.is_none s1#reblog_of_opt);
+  let%lwt [ s1' ] = Db.e Status.(update [ s1#with_text "foo modified" ]) in
+  assert (s1#id = s1'#id);
+  assert (s1'#text <> s1#text);
+  assert (Ptime.is_earlier s1#updated_at ~than:s1'#updated_at);
+
   Lwt.return_unit
-  [@@warning "-8-21"]
+  [@@warning "-8"]
 
 let test_select_insert_update_delete_case1 _ _ =
   setup1 ();%lwt
