@@ -45,8 +45,21 @@ struct
     | Some (`Eq _ | `In _) as x -> where_id name x cond
     | Some ((`EqNone | `NeqNone) as x) -> Sql.where_nullable name x cond
 
-  let select id created_at updated_at order_by limit preload (c : connection)
-      preload_spec cond =
+  let preload chosen spec (c : connection) rows =
+    match rows with
+    | [] ->
+        (* Prevent infinite loops. *)
+        (* NOTE: It will NOT prevent all infinite loops,
+           if there are any mutual recursive reference. *)
+        Lwt.return []
+    | _ ->
+        spec
+        |> Lwt_list.iter_s (fun (column, f) ->
+               if List.mem column chosen then f rows c else Lwt.return_unit);%lwt
+        Lwt.return rows
+
+  let select id created_at updated_at order_by limit preload_chosen
+      (c : connection) preload_spec cond =
     let sql, param =
       Sql.select ~table_name:M.table_name
         ~order_by:
@@ -58,31 +71,22 @@ struct
       @@ Sql.where_timestamp "updated_at" updated_at
       @@ cond
     in
-    let%lwt rows = c#query sql param >|= List.map M.pack in
-    match rows with
-    | [] ->
-        (* Prevent infinite loops. *)
-        (* NOTE: It will NOT prevent all infinite loops,
-           if there are any mutual recursive reference. *)
-        Lwt.return []
-    | _ ->
-        preload_spec
-        |> Lwt_list.iter_s (fun (column, f) ->
-               if List.mem column preload then f rows c else Lwt.return_unit);%lwt
-        Lwt.return rows
+    c#query sql param >|= List.map M.pack
+    >>= preload preload_chosen preload_spec c
 
-  let update (xs : M.t list) (c : connection) =
+  let update (xs : M.t list) (c : connection) preload_chosen preload_spec =
     xs
-    |> Lwt_list.map_s @@ fun x ->
-       let sql, param =
-         Sql.update ~table_name:M.table_name
-           ~columns:M.(columns |> List.map string_of_column)
-           ~unpacked:(M.unpack x)
-         @@ ([], [])
-       in
-       c#query_row sql param >|= M.pack
+    |> Lwt_list.map_s (fun x ->
+           let sql, param =
+             Sql.update ~table_name:M.table_name
+               ~columns:M.(columns |> List.map string_of_column)
+               ~unpacked:(M.unpack x)
+             @@ ([], [])
+           in
+           c#query_row sql param >|= M.pack)
+    >>= preload preload_chosen preload_spec c
 
-  let insert (xs : M.t list) (c : connection) =
+  let insert (xs : M.t list) (c : connection) preload_chosen preload_spec =
     (* FIXME: Efficient impl *)
     let%lwt rows =
       xs
@@ -98,7 +102,7 @@ struct
     |> Lwt_list.iter_s (fun row ->
            !M.after_create_commit_callbacks
            |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)));%lwt
-    Lwt.return rows
+    preload preload_chosen preload_spec c rows
 
   let delete (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)

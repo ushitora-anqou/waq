@@ -251,6 +251,7 @@ let expand_class_model loc schema =
                       [%expr Some [%e evar ~loc x]]]]);
            obj_method name [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]];
          ]
+         @ if d.d_opt then [ obj_method (name ^ "_opt") e_name ] else []
     in
     obj_vals_and_methods_for_columns @ obj_vals_and_methods_for_derived
     |> List.flatten
@@ -457,6 +458,26 @@ let expand_let_load_column loc col =
                      [%expr
                        [%e x_set_column] (Hashtbl.find tbl [%e x_column_id])]]]
 
+let preload_info_of_schema loc schema =
+  let preload_spec_src =
+    schema.s_columns
+    |> List.filter_map @@ fun c ->
+       match c.c_typ with
+       | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
+           let column_wo_id = column_name_wo_suffix_id c.c_ocaml_name in
+           Some
+             ( pexp_variant ~loc column_wo_id None,
+               pexp_ident ~loc (wloc (lident ("load_" ^ column_wo_id))) )
+       | _ -> None
+  in
+  let preload_all = preload_spec_src |> List.map fst |> elist ~loc in
+  let preload_spec =
+    preload_spec_src
+    |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
+    |> elist ~loc
+  in
+  (preload_spec, preload_all)
+
 let expand_let_select loc schema =
   let body = [%expr [], []] in
   let body =
@@ -500,23 +521,7 @@ let expand_let_select loc schema =
                [%expr [%e where] [%e estr] [%e ident] [%e body]])
          body
   in
-  let preload_spec_src =
-    schema.s_columns
-    |> List.filter_map @@ fun c ->
-       match c.c_typ with
-       | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
-           let column_wo_id = column_name_wo_suffix_id c.c_ocaml_name in
-           Some
-             ( pexp_variant ~loc column_wo_id None,
-               pexp_ident ~loc (wloc (lident ("load_" ^ column_wo_id))) )
-       | _ -> None
-  in
-  let preload_all = preload_spec_src |> List.map fst |> elist ~loc in
-  let preload_spec =
-    preload_spec_src
-    |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
-    |> elist ~loc
-  in
+  let preload_spec, preload_all = preload_info_of_schema loc schema in
   let body =
     [%expr
       select' id created_at updated_at order_by limit preload c
@@ -544,6 +549,18 @@ let expand_let_select_and_load_columns loc schema =
          | _ -> None)
   |> List.cons (expand_let_select loc schema)
   |> pstr_value ~loc Recursive
+
+let expand_let_update loc schema =
+  let preload_spec, preload_all = preload_info_of_schema loc schema in
+  [%stri
+    let update ?(preload = [%e preload_all]) xs c =
+      update xs c preload [%e preload_spec]]
+
+let expand_let_insert loc schema =
+  let preload_spec, preload_all = preload_info_of_schema loc schema in
+  [%stri
+    let insert ?(preload = [%e preload_all]) xs c =
+      insert xs c preload [%e preload_spec]]
 
 let expand ~ctxt (xs : structure_item list) =
   let loc = !Ast_helper.default_loc in
@@ -600,6 +617,8 @@ let expand ~ctxt (xs : structure_item list) =
       let select' = select
 
       [%%i expand_let_select_and_load_columns loc schema]
+      [%%i expand_let_update loc schema]
+      [%%i expand_let_insert loc schema]
     end]
 
 let sqlx_schema =
