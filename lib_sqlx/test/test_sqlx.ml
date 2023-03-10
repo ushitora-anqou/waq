@@ -20,9 +20,7 @@ module Status = struct
   val text : string
   val account_id : Account.ID.t
   val in_reply_to_id : ID.t option
-  (*
-  val reblog_of_id : ID.t option
-  *)]
+  val reblog_of_id : ID.t option]
 end
 
 module Notification = struct
@@ -102,6 +100,22 @@ CREATE TABLE accounts (
     [];%lwt
   c#execute
     {|
+CREATE TABLE statuses (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  text TEXT NOT NULL,
+  account_id BIGINT NOT NULL,
+  in_reply_to_id BIGINT,
+  reblog_of_id BIGINT,
+
+  FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
+  FOREIGN KEY (in_reply_to_id) REFERENCES statuses (id) ON DELETE SET NULL,
+  FOREIGN KEY (reblog_of_id) REFERENCES statuses (id) ON DELETE CASCADE
+)|}
+    [];%lwt
+  c#execute
+    {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
   activity_id BIGINT NOT NULL,
@@ -116,6 +130,60 @@ CREATE TABLE notifications (
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
 )|}
     []
+
+let test_account_basic_ops_case1 _ _ =
+  setup1 ();%lwt
+  let%lwt [ a1'; a2' ] =
+    Db.e
+      Account.(
+        insert
+          [
+            make ~username:"user1" ~display_name:"User 1" ();
+            make ~username:"user2" ~display_name:"User 2" ~domain:"example.com"
+              ();
+          ])
+  in
+  ignore a1'#id;
+  ignore a2'#id;
+  ignore a1'#created_at;
+  ignore a1'#updated_at;
+  ignore a2'#created_at;
+  ignore a2'#updated_at;
+  assert (a1'#username = "user1");
+  assert (a2'#username = "user2");
+  assert (a1'#domain_opt = None);
+  assert (a2'#domain_opt = Some "example.com");
+
+  let%lwt [ a1 ] = Db.e Account.(select ~id:(`Eq a1'#id)) in
+  let%lwt [ a2 ] = Db.e Account.(select ~id:(`Eq a2'#id)) in
+  let%lwt a12 = Db.e Account.(select ~id:(`In [ a1#id; a2#id ])) in
+  assert (a1#id = a1'#id);
+  assert (a2#id = a2'#id);
+  assert (
+    List.sort compare [ a1#id; a2#id ]
+    = List.sort compare (a12 |> List.map (fun a -> a#id)));
+  assert (a1#username = "user1");
+  assert (a2#username = "user2");
+  assert (a1#domain_opt = None);
+  assert (a2#domain_opt = Some "example.com");
+
+  let%lwt [ a1'; a2' ] =
+    Db.e
+      Account.(update [ a1#with_username "foo"; a2#with_domain (Some "bar") ])
+  in
+  assert (a1#created_at = a1'#created_at);
+  assert (a2#created_at = a2'#created_at);
+  assert (Ptime.is_earlier a1#updated_at ~than:a1'#updated_at);
+  assert (Ptime.is_earlier a2#updated_at ~than:a2'#updated_at);
+  assert (a1'#username = "foo");
+  assert (a2'#domain = "bar");
+
+  (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun [ x ] -> assert (x#id = a1#id));%lwt
+  Db.e Account.(delete [ a1 ]);%lwt
+  (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun r -> assert (r = []));%lwt
+
+  Lwt.return_unit
+  [@@warning "-8"]
 
 let test_select_insert_update_delete_case1 _ _ =
   setup1 ();%lwt
@@ -228,6 +296,8 @@ let () =
        [
          ( "select/insert/update/delete",
            [
+             Alcotest_lwt.test_case "account" `Quick
+               test_account_basic_ops_case1;
              Alcotest_lwt.test_case "case1" `Quick
                test_select_insert_update_delete_case1;
            ] );
