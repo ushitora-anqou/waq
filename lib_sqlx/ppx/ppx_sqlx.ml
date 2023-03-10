@@ -135,6 +135,15 @@ let construct_schema ctxt xs =
                    d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
                    d_name = column_name_wo_suffix_id c.c_ocaml_name;
                  }
+           | `Option (`ID l) when c.c_ocaml_name <> "id" ->
+               Some
+                 {
+                   d_type =
+                     [%type:
+                       [%t ptyp_constr ~loc (wloc (in_mod_ident l "t")) []]
+                       option];
+                   d_name = column_name_wo_suffix_id c.c_ocaml_name;
+                 }
            | _ -> None)
   in
   {
@@ -397,29 +406,51 @@ let expand_let_unpack loc schema =
       [%e body]]
 
 let expand_let_load_column loc col =
-  let id_t = match col.c_typ with `ID l -> l | _ -> assert false in
+  let opt, id_t =
+    match col.c_typ with
+    | `ID l -> (false, l)
+    | `Option (`ID l) -> (true, l)
+    | _ -> assert false
+  in
   let column_wo_id = column_name_wo_suffix_id col.c_ocaml_name in
   let funname = "load_" ^ column_wo_id in
   let select = in_mod_ident id_t "select" |> wloc |> pexp_ident ~loc in
+  let x_set_column =
+    (* e.g., x#set_account *)
+    pexp_send ~loc [%expr x] (wloc ("set_" ^ column_wo_id))
+  in
   let x_column_id =
     (* e.g., x#account_id *)
     pexp_send ~loc [%expr x] (wloc col.c_ocaml_name)
   in
-  let x_set_column =
-    (* e.g., x#set_account *)
-    pexp_send ~loc [%expr x] (wloc ("set_" ^ column_wo_id))
+  let x_column_id_opt =
+    (* e.g., x#account_id *)
+    pexp_send ~loc [%expr x] (wloc (col.c_ocaml_name ^ "_opt"))
   in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc funname))
     ~expr:
       [%expr
         fun (xs : t list) (c : Sqlx.Ppx_runtime.connection) ->
-          let ids = xs |> List.map (fun x -> [%e x_column_id]) in
+          let ids =
+            [%e
+              if opt then
+                [%expr xs |> List.filter_map (fun x -> [%e x_column_id_opt])]
+              else [%expr xs |> List.map (fun x -> [%e x_column_id])]]
+          in
           Lwt.map
             (fun tbl ->
               xs
               |> List.iter (fun x ->
-                     Hashtbl.find tbl [%e x_column_id] |> [%e x_set_column]))
+                     [%e
+                       if opt then
+                         [%expr
+                           [%e x_column_id_opt]
+                           |> Option.map (fun y ->
+                                  [%e x_set_column] (Hashtbl.find tbl y))]
+                       else
+                         [%expr
+                           [%e x_set_column] (Hashtbl.find tbl [%e x_column_id])]]))
             (Lwt.map (index_by (fun y -> y#id)) ([%e select] ~id:(`In ids) c))]
 
 let expand_let_select loc schema =
