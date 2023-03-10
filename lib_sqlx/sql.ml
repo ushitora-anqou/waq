@@ -96,15 +96,19 @@ let where_int_opt name ptn cond =
   in
   match ptn with None -> cond | Some ptn -> f ptn
 
-let where_string ?encode:_ _name ptn cond =
+let where_string ~encode name ptn ((where, param) as cond) =
   match ptn with
   | None -> cond
-  | Some `NotImplemented -> failwith "where_string: not implemented"
+  | Some (`Eq s) ->
+      let where = `Eq (`C name, `M name) :: where in
+      let param = (`M name, `String (encode s)) :: param in
+      (where, param)
 
-let where_string_opt ?encode:_ _name ptn cond =
+let where_string_opt ~encode name ptn cond =
   match ptn with
   | None -> cond
-  | Some `NotImplemented -> failwith "where_string: not implemented"
+  | Some ((`EqNone | `NeqNone) as ptn) -> where_nullable name ptn cond
+  | Some (`Eq _ as ptn) -> where_string ~encode name (Some ptn) cond
 
 let where_timestamp _name ptn cond =
   match ptn with

@@ -447,13 +447,14 @@ let expand_let_select loc schema =
                let where =
                  match c.c_typ with
                  | `Int -> [%expr Sqlx.Sql.where_int]
-                 | `String -> [%expr Sqlx.Sql.where_string]
+                 | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
                  | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
                  | `ID l -> where_id l
                  | `User l ->
                      [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
                  | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
-                 | `Option `String -> [%expr Sqlx.Sql.where_string_opt]
+                 | `Option `String ->
+                     [%expr Sqlx.Sql.where_string_opt ~encode:Fun.id]
                  | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
                  | `Option (`ID l) -> where_id_opt l
                  | `Option (`User l) ->

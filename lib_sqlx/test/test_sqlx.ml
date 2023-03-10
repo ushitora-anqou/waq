@@ -159,6 +159,7 @@ let test_account_basic_ops_case1 _ _ =
   let%lwt a12 = Db.e Account.(select ~id:(`In [ a1#id; a2#id ])) in
   assert (a1#id = a1'#id);
   assert (a2#id = a2'#id);
+  assert (a1#id <> a2#id);
   assert (
     List.sort compare [ a1#id; a2#id ]
     = List.sort compare (a12 |> List.map (fun a -> a#id)));
@@ -166,6 +167,13 @@ let test_account_basic_ops_case1 _ _ =
   assert (a2#username = "user2");
   assert (a1#domain_opt = None);
   assert (a2#domain_opt = Some "example.com");
+
+  let%lwt [ a2' ] = Db.e Account.(select ~domain:(`Eq "example.com")) in
+  assert (a2#id = a2'#id);
+  let%lwt [ a2' ] = Db.e Account.(select ~domain:`NeqNone) in
+  assert (a2#id = a2'#id);
+  let%lwt [ a1' ] = Db.e Account.(select ~domain:`EqNone) in
+  assert (a1#id = a1'#id);
 
   let%lwt [ a1'; a2' ] =
     Db.e
