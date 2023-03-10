@@ -193,6 +193,50 @@ let test_account_basic_ops_case1 _ _ =
   Lwt.return_unit
   [@@warning "-8"]
 
+let test_status_preload _ _ =
+  setup1 ();%lwt
+  let%lwt [ a1; a2 ] =
+    Db.e
+      Account.(
+        insert
+          [
+            make ~username:"user1" ~display_name:"User 1" ();
+            make ~username:"user2" ~display_name:"User 2" ~domain:"example.com"
+              ();
+          ])
+  in
+  let%lwt [ s1' ] =
+    Db.e Status.(insert [ make ~account_id:a1#id ~text:"foo" () ])
+  in
+  let%lwt [ s2' ] =
+    Db.e
+      Status.(
+        insert [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1'#id () ])
+  in
+  let%lwt [ s3' ] =
+    Db.e
+      Status.(
+        insert [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2'#id () ])
+  in
+  let%lwt [ s3; s2; s1 ] =
+    Db.e
+      Status.(
+        select ~id:(`In [ s1'#id; s2'#id; s3'#id ]) ~order_by:[ (`id, `DESC) ])
+  in
+  assert (s1#id = s1'#id);
+  assert (s2#id = s2'#id);
+  assert (s3#id = s3'#id);
+  assert (s1#account#id = a1#id);
+  assert (s2#account#id = a2#id);
+  assert (s3#account#id = a1#id);
+
+  (*
+  assert (s2#in_reply_to#id = s1#id);
+  assert (s3#reblog_of#id = s1#id);
+  *)
+  Lwt.return_unit
+  [@@warning "-8"]
+
 let test_select_insert_update_delete_case1 _ _ =
   setup1 ();%lwt
   let%lwt [ a1'; a2' ] =
@@ -309,6 +353,8 @@ let () =
              Alcotest_lwt.test_case "case1" `Quick
                test_select_insert_update_delete_case1;
            ] );
+         ( "preoad",
+           [ Alcotest_lwt.test_case "status" `Quick test_status_preload ] );
          ( "transaction",
            [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );
        ]
