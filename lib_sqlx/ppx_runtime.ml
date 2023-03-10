@@ -59,10 +59,17 @@ struct
       @@ cond
     in
     let%lwt rows = c#query sql param >|= List.map M.pack in
-    preload_spec
-    |> Lwt_list.iter_s (fun (column, f) ->
-           if List.mem column preload then f rows c else Lwt.return_unit);%lwt
-    Lwt.return rows
+    match rows with
+    | [] ->
+        (* Prevent infinite loops. *)
+        (* NOTE: It will NOT prevent all infinite loops,
+           if there are any mutual recursive reference. *)
+        Lwt.return []
+    | _ ->
+        preload_spec
+        |> Lwt_list.iter_s (fun (column, f) ->
+               if List.mem column preload then f rows c else Lwt.return_unit);%lwt
+        Lwt.return rows
 
   let update (xs : M.t list) (c : connection) =
     xs

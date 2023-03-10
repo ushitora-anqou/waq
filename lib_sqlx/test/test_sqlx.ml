@@ -223,6 +223,7 @@ let test_status_preload _ _ =
       Status.(
         select ~id:(`In [ s1'#id; s2'#id; s3'#id ]) ~order_by:[ (`id, `DESC) ])
   in
+
   assert (s1#id = s1'#id);
   assert (s2#id = s2'#id);
   assert (s3#id = s3'#id);
@@ -230,12 +231,11 @@ let test_status_preload _ _ =
   assert (s2#account#id = a2#id);
   assert (s3#account#id = a1#id);
 
-  (*
   assert (s2#in_reply_to#id = s1#id);
-  assert (s3#reblog_of#id = s1#id);
-  *)
+  assert (s3#reblog_of#id = s2#id);
+
   Lwt.return_unit
-  [@@warning "-8"]
+  [@@warning "-8-21"]
 
 let test_select_insert_update_delete_case1 _ _ =
   setup1 ();%lwt
@@ -353,7 +353,7 @@ let () =
              Alcotest_lwt.test_case "case1" `Quick
                test_select_insert_update_delete_case1;
            ] );
-         ( "preoad",
+         ( "preload",
            [ Alcotest_lwt.test_case "status" `Quick test_status_preload ] );
          ( "transaction",
            [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );

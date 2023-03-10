@@ -35,7 +35,7 @@ let column_name_wo_suffix_id s =
   if ends_with ~suffix:"_id" s then sub s 0 (length s - 3) else assert false
 
 type column = { c_ocaml_name : string; c_sql_name : string; c_typ : typ }
-type derived_column = { d_name : string; d_type : core_type }
+type derived_column = { d_name : string; d_type : core_type; d_opt : bool }
 
 type schema = {
   s_sql_name : string;
@@ -134,15 +134,14 @@ let construct_schema ctxt xs =
                  {
                    d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
                    d_name = column_name_wo_suffix_id c.c_ocaml_name;
+                   d_opt = false;
                  }
            | `Option (`ID l) when c.c_ocaml_name <> "id" ->
                Some
                  {
-                   d_type =
-                     [%type:
-                       [%t ptyp_constr ~loc (wloc (in_mod_ident l "t")) []]
-                       option];
+                   d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
                    d_name = column_name_wo_suffix_id c.c_ocaml_name;
+                   d_opt = true;
                  }
            | _ -> None)
   in
@@ -438,20 +437,25 @@ let expand_let_load_column loc col =
                 [%expr xs |> List.filter_map (fun x -> [%e x_column_id_opt])]
               else [%expr xs |> List.map (fun x -> [%e x_column_id])]]
           in
-          Lwt.map
-            (fun tbl ->
+          match ids with
+          | [] ->
+              (* Prevent casting useless 'WHERE FALSE' queries *)
+              Lwt.return_unit
+          | _ ->
+              let ( >|= ) x f = Lwt.map f x in
+              [%e select] ~id:(`In ids) c >|= index_by (fun y -> y#id)
+              >|= fun tbl ->
               xs
-              |> List.iter (fun x ->
-                     [%e
-                       if opt then
-                         [%expr
-                           [%e x_column_id_opt]
-                           |> Option.map (fun y ->
-                                  [%e x_set_column] (Hashtbl.find tbl y))]
-                       else
-                         [%expr
-                           [%e x_set_column] (Hashtbl.find tbl [%e x_column_id])]]))
-            (Lwt.map (index_by (fun y -> y#id)) ([%e select] ~id:(`In ids) c))]
+              |> List.iter @@ fun x ->
+                 [%e
+                   if opt then
+                     [%expr
+                       match [%e x_column_id_opt] with
+                       | None -> ()
+                       | Some y -> [%e x_set_column] (Hashtbl.find tbl y)]
+                   else
+                     [%expr
+                       [%e x_set_column] (Hashtbl.find tbl [%e x_column_id])]]]
 
 let expand_let_select loc schema =
   let body = [%expr [], []] in
@@ -500,7 +504,7 @@ let expand_let_select loc schema =
     schema.s_columns
     |> List.filter_map @@ fun c ->
        match c.c_typ with
-       | `ID _ ->
+       | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
            let column_wo_id = column_name_wo_suffix_id c.c_ocaml_name in
            Some
              ( pexp_variant ~loc column_wo_id None,
@@ -535,7 +539,8 @@ let expand_let_select_and_load_columns loc schema =
   schema.s_columns
   |> List.filter_map (fun c ->
          match c.c_typ with
-         | `ID _ -> Some (expand_let_load_column loc c)
+         | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
+             Some (expand_let_load_column loc c)
          | _ -> None)
   |> List.cons (expand_let_select loc schema)
   |> pstr_value ~loc Recursive

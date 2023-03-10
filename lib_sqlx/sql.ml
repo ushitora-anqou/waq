@@ -1,5 +1,6 @@
 type expr =
   [ `True
+  | `False
   | `C of string (* column *)
   | `M of string (* marker *)
   | `UM of string (* marker made by user *)
@@ -13,7 +14,7 @@ type expr =
 let expr_to_string ?const_f (e : expr) : string =
   let prec_const = (1000, 1000) in
   let prec = function
-    | `True | `C _ | `M _ | `UM _ | `Raw _ -> prec_const
+    | `True | `False | `C _ | `M _ | `UM _ | `Raw _ -> prec_const
     | `IsNull _ | `IsNotNull _ -> (100, 100)
     | `InInts _ -> (90, 90)
     | `Eq _ -> (79, 80)
@@ -31,12 +32,14 @@ let expr_to_string ?const_f (e : expr) : string =
   in
   let rec f = function
     | `True -> "TRUE"
+    | `False -> "FALSE"
     | `C s -> s
     | `M s -> const_f |> Option.fold ~none:("~" ^ s) ~some:(fun f -> f (`M s))
     | `UM s -> const_f |> Option.fold ~none:(":" ^ s) ~some:(fun f -> f (`UM s))
     | (`Eq (e1, e2) | `And (e1, e2)) as op ->
         paren ~p:(prec op) ~p1:(prec e1) ~p2:(prec e2) ~left:(f e1)
           ~right:(f e2) ~mid:(string_of_op op)
+    | `InInts (_, []) -> f `False
     | `InInts (e, vals) as v ->
         let right =
           "(" ^ (vals |> List.map string_of_int |> String.concat ", ") ^ ")"
