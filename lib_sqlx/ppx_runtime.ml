@@ -61,7 +61,7 @@ struct
   let select id created_at updated_at order_by limit preload_chosen
       (c : connection) preload_spec cond =
     let sql, param =
-      Sql.select ~table_name:M.table_name
+      Sql.select ~columns:`Star ~table_name:M.table_name
         ~order_by:
           (order_by
           |> Option.map (List.map (fun (k, ad) -> (M.string_of_column k, ad))))
@@ -73,6 +73,17 @@ struct
     in
     c#query sql param >|= List.map M.pack
     >>= preload preload_chosen preload_spec c
+
+  let count id created_at updated_at (c : connection) cond =
+    let sql, param =
+      Sql.select ~columns:`Count_star ~table_name:M.table_name ~order_by:None
+        ~limit:None
+      @@ where_id "id" id
+      @@ Sql.where_timestamp "created_at" created_at
+      @@ Sql.where_timestamp "updated_at" updated_at
+      @@ cond
+    in
+    c#query_row sql param >|= List.hd >|= snd >|= Value.expect_int
 
   let update (xs : M.t list) (c : connection) preload_chosen preload_spec =
     xs
