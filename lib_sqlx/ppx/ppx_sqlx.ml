@@ -35,12 +35,13 @@ let column_name_wo_suffix_id s =
   if ends_with ~suffix:"_id" s then sub s 0 (length s - 3) else assert false
 
 type column = { c_ocaml_name : string; c_sql_name : string; c_typ : typ }
-type derived_column = { d_name : string; d_type : core_type; d_opt : bool }
+type dummy_column = { d_name : string; d_type : core_type; d_opt : bool }
 
 type schema = {
   s_sql_name : string;
   s_columns : column list;
-  s_derived : derived_column list;
+  s_derived : dummy_column list;
+  s_user_defined : dummy_column list;
   s_code_path : Code_path.t;
 }
 
@@ -55,16 +56,19 @@ let parse_config (x : structure_item) =
   | "name", Pexp_constant (Pconst_string (name, _, _)) -> `Name name
   | _ -> assert false
 
-let parse_column (x : structure_item) =
-  (* Parse column e.g., val typ : typ_t [@@column "type"] *)
+let parse_val (x : structure_item) =
+  (* Parse one value declaration e.g., val typ : typ_t [@@column "type"] *)
   let open Ast_pattern in
   let parse_attr (x : attribute) =
-    parse
-      (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
-      x.attr_loc x.attr_payload
-    @@ fun v ->
-    match (x.attr_name.txt, v) with
-    | "column", Pconst_string (v, _, _) -> (`Column, v)
+    match x.attr_name.txt with
+    | "not_column" -> `Not_column
+    | "column" -> (
+        parse
+          (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
+          x.attr_loc x.attr_payload
+        @@ function
+        | Pconst_string (v, _, _) -> `Column v
+        | _ -> assert false)
     | _ -> assert false
   in
   let parse_type x =
@@ -86,13 +90,24 @@ let parse_column (x : structure_item) =
   in
   parse (pstr_primitive __) x.pstr_loc x @@ fun x ->
   let name = x.pval_name.txt in
-  {
-    c_ocaml_name = name;
-    c_typ = parse_type x;
-    c_sql_name =
-      x.pval_attributes |> List.map parse_attr |> List.assoc_opt `Column
-      |> Option.value ~default:name;
-  }
+  let attrs = x.pval_attributes |> List.map parse_attr in
+  if attrs |> List.mem `Not_column then
+    match x.pval_type.ptyp_desc with
+    | Ptyp_constr (_, []) ->
+        `User_defined { d_name = name; d_type = x.pval_type; d_opt = false }
+    | Ptyp_constr ({ txt = Lident "option"; _ }, [ typ ]) ->
+        `User_defined { d_name = name; d_type = typ; d_opt = true }
+    | _ -> assert false
+  else
+    `Column
+      {
+        c_ocaml_name = name;
+        c_typ = parse_type x;
+        c_sql_name =
+          attrs
+          |> List.find_map (function `Column s -> Some s | _ -> None)
+          |> Option.value ~default:name;
+      }
 
 let construct_schema ctxt xs =
   let loc = !Ast_helper.default_loc in
@@ -118,13 +133,15 @@ let construct_schema ctxt xs =
         };
       ]
   in
+  let user_defined = ref [] in
   xs
   |> List.iter (fun x ->
          match parse_config x with
          | `Name name -> sql_name := name
-         | exception _ ->
-             let column = parse_column x in
-             columns := column :: !columns);
+         | exception _ -> (
+             match parse_val x with
+             | `User_defined r -> user_defined := r :: !user_defined
+             | `Column column -> columns := column :: !columns));
   let derived =
     !columns
     |> List.filter_map (fun c ->
@@ -148,6 +165,7 @@ let construct_schema ctxt xs =
   {
     s_sql_name = !sql_name;
     s_columns = List.rev !columns;
+    s_user_defined = !user_defined;
     s_code_path = code_path;
     s_derived = derived;
   }
@@ -236,12 +254,17 @@ let expand_class_model loc schema =
          @ if opt then [ obj_method (name ^ "_opt") e_name ] else []
     in
     let obj_vals_and_methods_for_derived =
-      schema.s_derived
+      schema.s_derived @ schema.s_user_defined
       |> List.map @@ fun d ->
          let name = d.d_name in
          let e_name = evar ~loc d.d_name in
          [
            obj_val name [%expr None];
+           obj_method ("with_" ^ name)
+             (let x = gen_symbol () in
+              [%expr
+                fun [%p ppat_var ~loc (wloc x)] ->
+                  [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
            obj_method ("set_" ^ name)
              (let x = gen_symbol () in
               [%expr
