@@ -501,67 +501,64 @@ let preload_info_of_schema loc schema =
   in
   (preload_spec, preload_all)
 
+let expand_where loc schema =
+  schema.s_columns
+  |> List.fold_left
+       (fun body c ->
+         match c.c_ocaml_name with
+         | "id" | "created_at" | "updated_at" -> body
+         | _ ->
+             let ident = pexp_ident ~loc (wloc (lident c.c_ocaml_name)) in
+             let estr = estring ~loc c.c_sql_name in
+             let where_id l =
+               in_mod_ident l "where_id" |> wloc |> pexp_ident ~loc
+             in
+             let where_id_opt l =
+               in_mod_ident l "where_id_opt" |> wloc |> pexp_ident ~loc
+             in
+             let encode_user = function
+               | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
+               | _ -> assert false
+             in
+             let where =
+               match c.c_typ with
+               | `Int -> [%expr Sqlx.Sql.where_int]
+               | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
+               | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
+               | `ID l -> where_id l
+               | `User l ->
+                   [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
+               | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
+               | `Option `String ->
+                   [%expr Sqlx.Sql.where_string_opt ~encode:Fun.id]
+               | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
+               | `Option (`ID l) -> where_id_opt l
+               | `Option (`User l) ->
+                   [%expr Sqlx.Sql.where_string_opt ~encode:[%e encode_user l]]
+               | _ -> assert false
+             in
+             [%expr [%e where] [%e estr] [%e ident] [%e body]])
+       [%expr [], []]
+
+let expand_optionally_labelled_columns loc schema body =
+  schema.s_columns
+  |> List.fold_left
+       (fun body c ->
+         pexp_fun ~loc (Optional c.c_ocaml_name) None
+           (ppat_var ~loc (wloc c.c_ocaml_name))
+           body)
+       body
+
 let expand_let_select loc schema =
-  let body = [%expr [], []] in
-  let body =
-    schema.s_columns
-    |> List.fold_left
-         (fun body c ->
-           match c.c_ocaml_name with
-           | "id" | "created_at" | "updated_at" -> body
-           | _ ->
-               let ident = pexp_ident ~loc (wloc (lident c.c_ocaml_name)) in
-               let estr = estring ~loc c.c_sql_name in
-               let where_id l =
-                 in_mod_ident l "where_id" |> wloc |> pexp_ident ~loc
-               in
-               let where_id_opt l =
-                 in_mod_ident l "where_id_opt" |> wloc |> pexp_ident ~loc
-               in
-               let encode_user = function
-                 | Lident s ->
-                     pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
-                 | _ -> assert false
-               in
-               let where =
-                 match c.c_typ with
-                 | `Int -> [%expr Sqlx.Sql.where_int]
-                 | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
-                 | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
-                 | `ID l -> where_id l
-                 | `User l ->
-                     [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
-                 | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
-                 | `Option `String ->
-                     [%expr Sqlx.Sql.where_string_opt ~encode:Fun.id]
-                 | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
-                 | `Option (`ID l) -> where_id_opt l
-                 | `Option (`User l) ->
-                     [%expr
-                       Sqlx.Sql.where_string_opt ~encode:[%e encode_user l]]
-                 | _ -> assert false
-               in
-               [%expr [%e where] [%e estr] [%e ident] [%e body]])
-         body
-  in
   let preload_spec, preload_all = preload_info_of_schema loc schema in
-  let body =
-    [%expr
-      select' id created_at updated_at order_by limit preload c
-        [%e preload_spec] [%e body]]
-  in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc "select"))
     ~expr:
-      (schema.s_columns
-      |> List.fold_left
-           (fun body c ->
-             pexp_fun ~loc (Optional c.c_ocaml_name) None
-               (ppat_var ~loc (wloc c.c_ocaml_name))
-               body)
-           [%expr
-             fun ?order_by ?limit ?(preload = [%e preload_all]) c -> [%e body]]
-      )
+      (expand_optionally_labelled_columns loc schema
+         [%expr
+           fun ?order_by ?limit ?(preload = [%e preload_all]) c ->
+             select' id created_at updated_at order_by limit preload c
+               [%e preload_spec] [%e expand_where loc schema]])
 
 let expand_let_select_and_load_columns loc schema =
   schema.s_columns
@@ -584,6 +581,15 @@ let expand_let_insert loc schema =
   [%stri
     let insert ?(preload = [%e preload_all]) xs c =
       insert xs c preload [%e preload_spec]]
+
+let expand_let_count loc schema =
+  [%stri
+    let count =
+      [%e
+        expand_optionally_labelled_columns loc schema
+          [%expr
+            fun c ->
+              count id created_at updated_at c [%e expand_where loc schema]]]]
 
 let expand ~ctxt (xs : structure_item list) =
   let loc = !Ast_helper.default_loc in
@@ -642,6 +648,7 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_let_select_and_load_columns loc schema]
       [%%i expand_let_update loc schema]
       [%%i expand_let_insert loc schema]
+      [%%i expand_let_count loc schema]
     end]
 
 let sqlx_schema =

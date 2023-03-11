@@ -125,10 +125,11 @@ let and_exprs =
     (fun acc x -> match acc with `True -> x | y -> `And (y, x))
     `True
 
-let select ~table_name ~order_by ~limit
+let select ~columns ~table_name ~order_by ~limit
     ((where : expr list), (param : param list)) =
   let where = and_exprs where in
-  let columns, table = ("*", table_name) in
+  let columns = match columns with `Star -> "*" | `Count_star -> "COUNT(*)" in
+  let table = table_name in
   let where, param = exprs_to_strings_with_numbered_markers [ where ] param in
   let where = " WHERE " ^ List.hd where in
   let order_by =

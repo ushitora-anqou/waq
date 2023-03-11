@@ -389,6 +389,48 @@ let test_transaction_case1 _ _ =
   Lwt.return_unit
   [@@warning "-8"]
 
+let test_count_status _ _ =
+  setup1 ();%lwt
+  let%lwt [ a1; a2 ] =
+    Db.e
+      Account.(
+        insert
+          [
+            make ~username:"user1" ~display_name:"User 1" ();
+            make ~username:"user2" ~display_name:"User 2" ~domain:"example.com"
+              ();
+          ])
+  in
+  let%lwt [ s1 ] =
+    Db.e Status.(insert [ make ~account_id:a1#id ~text:"foo" () ])
+  in
+  let%lwt [ s2 ] =
+    Db.e
+      Status.(
+        insert [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1#id () ])
+  in
+  let%lwt [ _ ] =
+    Db.e
+      Status.(
+        insert [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2#id () ])
+  in
+
+  let%lwt statuses_count = Db.e Status.(count) in
+  assert (statuses_count = 3);
+
+  let%lwt reblogs_count = Db.e Status.(count ~reblog_of_id:(`Eq s1#id)) in
+  assert (reblogs_count = 0);
+  let%lwt reblogs_count = Db.e Status.(count ~reblog_of_id:(`Eq s2#id)) in
+  assert (reblogs_count = 1);
+
+  let%lwt replies_count = Db.e Status.(count ~in_reply_to_id:(`Eq s1#id)) in
+  assert (replies_count = 1);
+  let%lwt replies_count = Db.e Status.(count ~in_reply_to_id:(`Eq s2#id)) in
+  assert (replies_count = 0);
+
+  Lwt.return_unit
+  [@@warning "-8"]
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Db.initialize (Sys.getenv "SQLX_TEST_DB_URL");
@@ -408,4 +450,5 @@ let () =
            ] );
          ( "transaction",
            [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );
+         ("count", [ Alcotest_lwt.test_case "status" `Quick test_count_status ]);
        ]
