@@ -127,3 +127,8 @@ end
 
 let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
 let expect_single_row = function [] -> failwith "no row found" | x :: _ -> x
+
+let index_by f l =
+  let h = Hashtbl.create (List.length l) in
+  l |> List.iter (fun x -> Hashtbl.replace h (f x) x);
+  h
