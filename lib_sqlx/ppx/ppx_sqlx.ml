@@ -501,7 +501,7 @@ let preload_info_of_schema loc schema =
   in
   (preload_spec, preload_all)
 
-let expand_where loc schema =
+let expand_where loc schema where p =
   schema.s_columns
   |> List.fold_left
        (fun body c ->
@@ -538,7 +538,32 @@ let expand_where loc schema =
                | _ -> assert false
              in
              [%expr [%e where] [%e estr] [%e ident] [%e body]])
-       [%expr [], []]
+       [%expr
+         let sym_tbl = Hashtbl.create 0 in
+         let parse x =
+           let rec f = function
+             | #column as c -> `C (string_of_column c)
+             | `Or (e1, e2) -> `Or (f e1, f e2)
+             | `And (e1, e2) -> `And (f e1, f e2)
+             | `Eq (e1, e2) -> `Eq (f e1, f e2)
+             | `IsNull (#column as c) -> `IsNull (string_of_column c)
+             | `IsNotNull (#column as c) -> `IsNotNull (string_of_column c)
+             | `Raw s -> `Raw s
+             | k -> (
+                 match Hashtbl.find_opt sym_tbl k with
+                 | Some x -> `UM x
+                 | None ->
+                     let sym = Hashtbl.length sym_tbl |> string_of_int in
+                     Hashtbl.add sym_tbl k sym;
+                     `UM sym)
+           in
+           [ f x ]
+         in
+         let where = [%e where] |> Option.fold ~none:[] ~some:parse in
+         let p =
+           [%e p] |> List.map (fun (k, v) -> (`UM (Hashtbl.find sym_tbl k), v))
+         in
+         (where, p)]
 
 let expand_optionally_labelled_columns loc schema body =
   schema.s_columns
@@ -556,9 +581,10 @@ let expand_let_select loc schema =
     ~expr:
       (expand_optionally_labelled_columns loc schema
          [%expr
-           fun ?order_by ?limit ?(preload = [%e preload_all]) c ->
+           fun ?where ?(p = []) ?order_by ?limit ?(preload = [%e preload_all]) c ->
              select' id created_at updated_at order_by limit preload c
-               [%e preload_spec] [%e expand_where loc schema]])
+               [%e preload_spec]
+               [%e expand_where loc schema [%expr where] [%expr p]]])
 
 let expand_let_select_and_load_columns loc schema =
   schema.s_columns
@@ -588,8 +614,9 @@ let expand_let_count loc schema =
       [%e
         expand_optionally_labelled_columns loc schema
           [%expr
-            fun c ->
-              count id created_at updated_at c [%e expand_where loc schema]]]]
+            fun ?where ?(p = []) c ->
+              count id created_at updated_at c
+                [%e expand_where loc schema [%expr where] [%expr p]]]]]
 
 let expand ~ctxt (xs : structure_item list) =
   let loc = !Ast_helper.default_loc in

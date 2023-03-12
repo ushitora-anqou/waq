@@ -6,6 +6,7 @@ type expr =
   | `UM of string (* marker made by user *)
   | `Eq of expr * expr
   | `And of expr * expr
+  | `Or of expr * expr
   | `InInts of expr * int list
   | `IsNull of string
   | `IsNotNull of string
@@ -19,6 +20,7 @@ let expr_to_string ?const_f (e : expr) : string =
     | `InInts _ -> (90, 90)
     | `Eq _ -> (79, 80)
     | `And _ -> (70, 69)
+    | `Or _ -> (60, 59)
   in
   let paren ~p1 ~p2 ~p ~left ~right ~mid =
     (if snd p1 < fst p then "(" ^ left ^ ")" else left)
@@ -28,6 +30,7 @@ let expr_to_string ?const_f (e : expr) : string =
   let string_of_op = function
     | `Eq _ -> "="
     | `And _ -> "AND"
+    | `Or _ -> "OR"
     | _ -> assert false
   in
   let rec f = function
@@ -36,7 +39,7 @@ let expr_to_string ?const_f (e : expr) : string =
     | `C s -> s
     | `M s -> const_f |> Option.fold ~none:("~" ^ s) ~some:(fun f -> f (`M s))
     | `UM s -> const_f |> Option.fold ~none:(":" ^ s) ~some:(fun f -> f (`UM s))
-    | (`Eq (e1, e2) | `And (e1, e2)) as op ->
+    | (`Eq (e1, e2) | `And (e1, e2) | `Or (e1, e2)) as op ->
         paren ~p:(prec op) ~p1:(prec e1) ~p2:(prec e2) ~left:(f e1)
           ~right:(f e2) ~mid:(string_of_op op)
     | `InInts (_, []) -> f `False
