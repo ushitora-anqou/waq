@@ -239,7 +239,7 @@ let expand_class_model loc schema =
            obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
            obj_method name
              (if opt then [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]]
-             else e_name);
+              else e_name);
            obj_method ("set_" ^ name)
              (let x = gen_symbol () in
               [%expr
@@ -618,6 +618,44 @@ let expand_let_count loc schema =
               count id created_at updated_at c
                 [%e expand_where loc schema [%expr where] [%expr p]]]]]
 
+let expand_let_all_derived_columns loc schema =
+  let _preload_spec, preload_all = preload_info_of_schema loc schema in
+  [%stri let all_derived_columns = [%e preload_all]]
+
+let expand_let_get_many loc schema =
+  [%stri
+    let get_many =
+      [%e
+        expand_optionally_labelled_columns loc schema
+          [%expr
+            fun ?where ?(p = []) ?order_by ?limit
+                ?(preload = all_derived_columns) c ->
+              [%e
+                pexp_apply ~loc [%expr select]
+                  (schema.s_columns
+                  |> List.map @@ fun c ->
+                     ( Optional c.c_ocaml_name,
+                       [%expr
+                         [%e pexp_ident ~loc (wloc (lident c.c_ocaml_name))]
+                         |> Option.map (fun x -> `Eq x)] ))]
+                ?where ?order_by ?limit ~p ~preload c]]]
+
+let expand_let_get_one loc schema =
+  [%stri
+    let get_one =
+      [%e
+        expand_optionally_labelled_columns loc schema
+          [%expr
+            fun ?where ?(p = []) ?order_by ?(preload = all_derived_columns) c ->
+              [%e
+                pexp_apply ~loc [%expr get_many]
+                  (schema.s_columns
+                  |> List.map @@ fun c ->
+                     ( Optional c.c_ocaml_name,
+                       pexp_ident ~loc (wloc (lident c.c_ocaml_name)) ))]
+                ~limit:1 ?where ?order_by ~p ~preload c
+              |> Lwt.map Sqlx.Ppx_runtime.expect_single_row]]]
+
 let expand ~ctxt (xs : structure_item list) =
   let loc = !Ast_helper.default_loc in
   let schema = construct_schema ctxt xs in
@@ -640,6 +678,7 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_type_column loc schema]
       [%%i expand_let_columns loc schema]
       [%%i expand_let_string_of_column loc schema]
+      [%%i expand_let_all_derived_columns loc schema]
       [%%i expand_type_args loc schema]
       [%%i expand_class_model loc schema]
       [%%i expand_let_make loc schema]
@@ -676,6 +715,13 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_let_update loc schema]
       [%%i expand_let_insert loc schema]
       [%%i expand_let_count loc schema]
+      [%%i expand_let_get_many loc schema]
+      [%%i expand_let_get_one loc schema]
+
+      let save_one ?(preload = all_derived_columns) (x : t) c =
+        match x#id_opt with
+        | None -> insert ~preload [ x ] c >|= List.hd
+        | Some _ -> update ~preload [ x ] c >|= List.hd
     end]
 
 let sqlx_schema =

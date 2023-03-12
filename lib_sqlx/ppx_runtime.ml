@@ -126,3 +126,4 @@ struct
 end
 
 let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
+let expect_single_row = function [] -> failwith "no row found" | x :: _ -> x
