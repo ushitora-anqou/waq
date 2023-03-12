@@ -446,6 +446,37 @@ let test_count_status _ _ =
   Lwt.return_unit
   [@@warning "-8"]
 
+let test_account_derived_ops _ _ =
+  setup1 ();%lwt
+
+  let%lwt a1 =
+    Db.e Account.(save_one (make ~username:"user1" ~display_name:"foo" ()))
+  in
+
+  let%lwt _ =
+    Db.e Account.(get_one ~username:"user1") >|= fun a ->
+    assert (a#id = a1#id);
+    assert (a#display_name = "foo")
+  in
+
+  let%lwt a1 = Db.e Account.(save_one (a1#with_display_name "mod")) in
+  assert (a1#display_name = "mod");
+  let%lwt _ =
+    Db.e Account.(get_one ~username:"user1") >|= fun a ->
+    assert (a#display_name = "mod")
+  in
+
+  let%lwt a2 =
+    Db.e Account.(save_one (make ~username:"user2" ~display_name:"bar" ()))
+  in
+  let%lwt _ =
+    Db.e Account.(get_many ~username:"user2") >|= function
+    | [ a ] -> assert (a#id = a2#id)
+  in
+
+  Lwt.return_unit
+  [@@warning "-8"]
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Db.initialize (Sys.getenv "SQLX_TEST_DB_URL");
@@ -466,4 +497,7 @@ let () =
          ( "transaction",
            [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );
          ("count", [ Alcotest_lwt.test_case "status" `Quick test_count_status ]);
+         ( "*_one, *_many",
+           [ Alcotest_lwt.test_case "account" `Quick test_account_derived_ops ]
+         );
        ]

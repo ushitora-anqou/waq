@@ -116,10 +116,13 @@ let where_string_opt ~encode name ptn cond =
   | Some ((`EqNone | `NeqNone) as ptn) -> where_nullable name ptn cond
   | Some (`Eq _ as ptn) -> where_string ~encode name (Some ptn) cond
 
-let where_timestamp _name ptn cond =
+let where_timestamp name ptn ((where, param) as cond) =
   match ptn with
   | None -> cond
-  | Some `NotImplemented -> failwith "where_timestamp: not implemented"
+  | Some (`Eq t) ->
+      let where = `Eq (`C name, `M name) :: where in
+      let param = (`M name, `Timestamp t) :: param in
+      (where, param)
 
 type param = [ `M of string | `UM of string ] * Value.t
 
