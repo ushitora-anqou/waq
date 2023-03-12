@@ -720,8 +720,8 @@ let expand ~ctxt (xs : structure_item list) =
 
       let save_one ?(preload = all_derived_columns) (x : t) c =
         match x#id_opt with
-        | None -> insert ~preload [ x ] c >|= List.hd
-        | Some _ -> update ~preload [ x ] c >|= List.hd
+        | None -> insert ~preload [ x ] c |> Lwt.map List.hd
+        | Some _ -> update ~preload [ x ] c |> Lwt.map List.hd
     end]
 
 let sqlx_schema =
