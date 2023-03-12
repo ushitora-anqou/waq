@@ -228,6 +228,21 @@ let test_account_basic_ops_case1 _ _ =
   let%lwt [ a1' ] = Db.e Account.(select ~domain:`EqNone) in
   assert (a1#id = a1'#id);
 
+  let%lwt _ =
+    Db.e
+      Account.(
+        select
+          ~where:(`Or (`Eq (`username, `_name1), `Eq (`username, `_name2)))
+          ~p:[ (`_name1, `String "user1"); (`_name2, `String "user2") ])
+    >|= List.map (fun a -> a#id)
+    >|= List.sort compare
+    >|= fun ids -> assert (ids = List.sort compare [ a1#id; a2#id ])
+  in
+  let%lwt _ =
+    Db.e Account.(select ~username:(`Eq "user1") ~where:(`IsNull `domain))
+    >|= fun [ a ] -> assert (a#id = a1#id)
+  in
+
   let%lwt [ a1'; a2' ] =
     Db.e
       Account.(update [ a1#with_username "foo"; a2#with_domain (Some "bar") ])
