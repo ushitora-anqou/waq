@@ -124,6 +124,12 @@ let where_timestamp name ptn ((where, param) as cond) =
       let param = (`M name, `Timestamp t) :: param in
       (where, param)
 
+let where_timestamp_opt name ptn cond =
+  match ptn with
+  | None -> cond
+  | Some ((`EqNone | `NeqNone) as ptn) -> where_nullable name ptn cond
+  | Some (`Eq _ as ptn) -> where_timestamp name (Some ptn) cond
+
 type param = [ `M of string | `UM of string ] * Value.t
 
 let and_exprs =

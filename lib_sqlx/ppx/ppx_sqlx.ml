@@ -467,7 +467,8 @@ let expand_let_load_column loc col =
               Lwt.return_unit
           | _ ->
               let ( >|= ) x f = Lwt.map f x in
-              [%e select] ~id:(`In ids) c >|= index_by (fun y -> y#id)
+              [%e select] ~id:(`In ids) c
+              >|= Sqlx.Ppx_runtime.index_by (fun y -> y#id)
               >|= fun tbl ->
               xs
               |> List.iter @@ fun x ->
