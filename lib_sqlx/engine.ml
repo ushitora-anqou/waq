@@ -132,6 +132,17 @@ module Make (D : Driver) = struct
       method execute ?(p = []) (sql : string) : unit Lwt.t =
         Internal.execute c sql ~p
 
+      method named_query ?(p = []) (sql : string)
+          : (string * Value.t) list list Lwt.t =
+        Internal.named_query c sql ~p
+
+      method named_query_row ?(p = []) (sql : string)
+          : (string * Value.t) list Lwt.t =
+        Internal.named_query_row c sql ~p
+
+      method named_execute ?(p = []) (sql : string) : unit Lwt.t =
+        Internal.named_execute c sql ~p
+
       method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
         if in_transaction then Lwt.return (enqueued <- f :: enqueued)
         else f self

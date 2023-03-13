@@ -703,6 +703,10 @@ let expand ~ctxt (xs : structure_item list) =
           (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
         ref []
 
+      let after_destroy_commit_callbacks :
+          (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
+        ref []
+
       include Sqlx.Ppx_runtime.Make (struct
         module ID = ID
 
@@ -719,6 +723,7 @@ let expand ~ctxt (xs : structure_item list) =
         let pack = pack
         let id = id
         let after_create_commit_callbacks = after_create_commit_callbacks
+        let after_destroy_commit_callbacks = after_destroy_commit_callbacks
       end)
 
       let select' = select
