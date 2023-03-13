@@ -2,9 +2,13 @@ open Util
 
 class type connection =
   object ('a)
-    method query : string -> Value.t list -> (string * Value.t) list list Lwt.t
-    method query_row : string -> Value.t list -> (string * Value.t) list Lwt.t
-    method execute : string -> Value.t list -> unit Lwt.t
+    method query :
+      ?p:Value.null_t list -> string -> (string * Value.t) list list Lwt.t
+
+    method query_row :
+      ?p:Value.null_t list -> string -> (string * Value.t) list Lwt.t
+
+    method execute : ?p:Value.null_t list -> string -> unit Lwt.t
     method enqueue_task_after_commit : ('a -> unit Lwt.t) -> unit Lwt.t
     method transaction : ('a -> unit Lwt.t) -> bool Lwt.t
     (*method enqueued_tasks_after_commit : ('a -> unit Lwt.t) list*)
@@ -71,7 +75,8 @@ struct
       @@ Sql.where_timestamp "updated_at" updated_at
       @@ cond
     in
-    c#query sql param >|= List.map M.pack
+    c#query sql ~p:(param : Value.t list :> Value.null_t list)
+    >|= List.map M.pack
     >>= preload preload_chosen preload_spec c
 
   let count id created_at updated_at (c : connection) cond =
@@ -83,7 +88,8 @@ struct
       @@ Sql.where_timestamp "updated_at" updated_at
       @@ cond
     in
-    c#query_row sql param >|= List.hd >|= snd >|= Value.expect_int
+    c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
+    >|= List.hd >|= snd >|= Value.expect_int
 
   let update (xs : M.t list) (c : connection) preload_chosen preload_spec =
     xs
@@ -94,7 +100,8 @@ struct
                ~unpacked:(M.unpack x)
              @@ ([], [])
            in
-           c#query_row sql param >|= M.pack)
+           c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
+           >|= M.pack)
     >>= preload preload_chosen preload_spec c
 
   let insert (xs : M.t list) (c : connection) preload_chosen preload_spec =
@@ -107,7 +114,8 @@ struct
                  ~columns:M.(List.map string_of_column columns)
                  ~unpacked:(M.unpack x)
              in
-             c#query_row sql param >|= M.pack)
+             c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
+             >|= M.pack)
     in
     rows
     |> Lwt_list.iter_s (fun row ->
@@ -122,7 +130,7 @@ struct
        let sql, param =
          Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
        in
-       c#execute sql param
+       c#execute sql ~p:param
 end
 
 let expect_loaded = function None -> failwith "not preloaded" | Some x -> x

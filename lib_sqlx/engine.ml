@@ -121,16 +121,16 @@ module Make (D : Driver) = struct
       val mutable in_transaction = false
       val mutable enqueued = []
 
-      method query (sql : string) (param : Value.t list)
-          : (string * Value.t) list list Lwt.t =
-        Internal.query c sql ~p:(param : Value.t list :> Value.null_t list)
+      method query ?(p = []) (sql : string) : (string * Value.t) list list Lwt.t
+          =
+        Internal.query c sql ~p
 
-      method query_row (sql : string) (param : Value.t list)
-          : (string * Value.t) list Lwt.t =
-        Internal.query_row c sql ~p:(param : Value.t list :> Value.null_t list)
+      method query_row ?(p = []) (sql : string) : (string * Value.t) list Lwt.t
+          =
+        Internal.query_row c sql ~p
 
-      method execute (sql : string) (param : Value.t list) : unit Lwt.t =
-        Internal.execute c sql ~p:(param : Value.t list :> Value.null_t list)
+      method execute ?(p = []) (sql : string) : unit Lwt.t =
+        Internal.execute c sql ~p
 
       method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
         if in_transaction then Lwt.return (enqueued <- f :: enqueued)
