@@ -638,7 +638,18 @@ let expand_let_get_many loc schema =
                      ( Optional c.c_ocaml_name,
                        [%expr
                          [%e pexp_ident ~loc (wloc (lident c.c_ocaml_name))]
-                         |> Option.map (fun x -> `Eq x)] ))]
+                         |> Option.map @@ fun x ->
+                            [%e
+                              match c.c_typ with
+                              | `Option _
+                                when c.c_ocaml_name <> "id"
+                                     && c.c_ocaml_name <> "created_at"
+                                     && c.c_ocaml_name <> "updated_at" ->
+                                  [%expr
+                                    match x with
+                                    | None -> `EqNone
+                                    | Some x -> `Eq x]
+                              | _ -> [%expr `Eq x]]] ))]
                 ?where ?order_by ?limit ~p ~preload c]]]
 
 let expand_let_get_one loc schema =
