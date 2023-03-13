@@ -120,7 +120,6 @@ BEGIN
         EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
     END LOOP;
 END $$|}
-      []
 end
 
 let setup1 () =
@@ -135,8 +134,7 @@ CREATE TABLE accounts (
   display_name TEXT NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
-)|}
-    [];%lwt
+)|};%lwt
   c#execute
     {|
 CREATE TABLE statuses (
@@ -151,8 +149,7 @@ CREATE TABLE statuses (
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE,
   FOREIGN KEY (in_reply_to_id) REFERENCES statuses (id) ON DELETE SET NULL,
   FOREIGN KEY (reblog_of_id) REFERENCES statuses (id) ON DELETE CASCADE
-)|}
-    [];%lwt
+)|};%lwt
   c#execute
     {|
 CREATE TABLE notifications (
@@ -167,8 +164,7 @@ CREATE TABLE notifications (
 
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE,
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
-)|}
-    [];%lwt
+)|};%lwt
   c#execute
     {|
 CREATE TABLE favourites (
@@ -182,7 +178,6 @@ CREATE TABLE favourites (
   FOREIGN KEY (status_id) REFERENCES statuses(id) ON DELETE CASCADE,
   UNIQUE (account_id, status_id)
 )|}
-    []
 
 let test_account_basic_ops_case1 _ _ =
   setup1 ();%lwt
