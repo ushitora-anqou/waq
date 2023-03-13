@@ -1,18 +1,6 @@
 open Util
 
-class type connection =
-  object ('a)
-    method query :
-      ?p:Value.null_t list -> string -> (string * Value.t) list list Lwt.t
-
-    method query_row :
-      ?p:Value.null_t list -> string -> (string * Value.t) list Lwt.t
-
-    method execute : ?p:Value.null_t list -> string -> unit Lwt.t
-    method enqueue_task_after_commit : ('a -> unit Lwt.t) -> unit Lwt.t
-    method transaction : ('a -> unit Lwt.t) -> bool Lwt.t
-    (*method enqueued_tasks_after_commit : ('a -> unit Lwt.t) list*)
-  end
+class type connection = Connection.t
 
 module Make (M : sig
   module ID : sig
@@ -31,6 +19,7 @@ module Make (M : sig
   val pack : (string * Value.t) list -> t
   val id : t -> ID.t
   val after_create_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
+  val after_destroy_commit_callbacks : (t -> connection -> unit Lwt.t) list ref
 end) =
 struct
   let where_id name ptn cond =
@@ -126,11 +115,21 @@ struct
   let delete (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
     xs
-    |> Lwt_list.iter_p @@ fun x ->
-       let sql, param =
-         Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
-       in
-       c#execute sql ~p:param
+    |> Lwt_list.iter_p (fun x ->
+           let sql, param =
+             Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
+           in
+           c#execute sql ~p:param);%lwt
+    xs
+    |> Lwt_list.iter_s (fun row ->
+           !M.after_destroy_commit_callbacks
+           |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)))
+
+  let after_create_commit f =
+    M.after_create_commit_callbacks := f :: !M.after_create_commit_callbacks
+
+  let after_destroy_commit f =
+    M.after_destroy_commit_callbacks := f :: !M.after_destroy_commit_callbacks
 end
 
 let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
