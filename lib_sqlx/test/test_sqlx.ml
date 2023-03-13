@@ -453,6 +453,9 @@ let test_account_derived_ops _ _ =
     assert (a#id = a1#id);
     assert (a#display_name = "foo")
   in
+  let%lwt _ =
+    Db.e Account.(get_one ~domain:None) >|= fun a -> assert (a#id = a1#id)
+  in
 
   let%lwt a1 = Db.e Account.(save_one (a1#with_display_name "mod")) in
   assert (a1#display_name = "mod");
