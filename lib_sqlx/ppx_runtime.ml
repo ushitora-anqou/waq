@@ -132,8 +132,8 @@ struct
     M.after_destroy_commit_callbacks := f :: !M.after_destroy_commit_callbacks
 end
 
-let expect_loaded = function None -> failwith "not preloaded" | Some x -> x
-let expect_single_row = function [] -> failwith "no row found" | x :: _ -> x
+let expect_loaded = function None -> raise Error.NotLoaded | Some x -> x
+let expect_single_row = function [] -> raise Error.NoRowFound | x :: _ -> x
 
 let index_by f l =
   let h = Hashtbl.create (List.length l) in

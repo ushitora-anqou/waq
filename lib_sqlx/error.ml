@@ -1,0 +1,2 @@
+exception NoRowFound
+exception NotLoaded

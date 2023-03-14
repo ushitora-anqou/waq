@@ -3,26 +3,6 @@ open Lwt.Infix
 
 [@@@warning "-39"]
 
-module Db = struct
-  include Sqlx.Engine.Make (Sqlx.Driver_pg)
-
-  let debug_drop_all_tables_in_db () =
-    e @@ fun c ->
-    c#execute
-      {|
--- Thanks to: https://stackoverflow.com/a/36023359
-DO $$ DECLARE
-    r RECORD;
-BEGIN
-    -- if the schema you operate on is not "current", you will want to
-    -- replace current_schema() in query with 'schematodeletetablesfrom'
-    -- *and* update the generate 'DROP...' accordingly.
-    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = current_schema()) LOOP
-        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-    END LOOP;
-END $$|}
-end
-
 module Account = struct
   [%%sqlx.schema
   name "accounts"
@@ -70,7 +50,7 @@ module Status = struct
     let self = s#account in
     let uri = self#uri ^/ "statuses" ^/ string_of_int (ID.to_int s#id) in
     let s = s#with_uri uri in
-    update [ s ] c
+    update [ s ] c >|= Sqlx.Ppx_runtime.expect_single_row
 
   let get_reblogs_count id c : int Lwt.t =
     count ~deleted_at:`EqNone ~reblog_of_id:(`Eq id) c
@@ -285,7 +265,7 @@ module OAuthAccessGrant = struct
   val redirect_uri : string
   val scopes : string option
   val application_id : OAuthApplication.ID.t option
-  val resource_owner_id : Account.ID.t option]
+  val resource_owner_id : User.ID.t option]
 end
 
 module OAuthAccessToken = struct
@@ -295,7 +275,7 @@ module OAuthAccessToken = struct
   val token : string
   val scopes : string option
   val application_id : OAuthApplication.ID.t option
-  val resource_owner_id : Account.ID.t option]
+  val resource_owner_id : User.ID.t option]
 end
 
 module Favourite = struct
@@ -395,10 +375,10 @@ WHERE
 ORDER BY created_at DESC LIMIT $2|}
     ~p:
       [
-        `Int id;
+        `Int (Account.ID.to_int id);
         `Int limit;
-        `Int (Option.value ~default:0 since_id);
-        `Int (Option.value ~default:0 max_id);
+        `Int (Option.fold ~none:0 ~some:Status.ID.to_int since_id);
+        `Int (Option.fold ~none:0 ~some:Status.ID.to_int max_id);
       ]
   >|= List.map Status.pack
 
@@ -425,10 +405,10 @@ let account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies
   c#named_query sql
     ~p:
       [
-        ("id", `Int id);
+        ("id", `Int (Account.ID.to_int id));
         ("limit", `Int limit);
-        ("since_id", `Int (Option.value ~default:0 since_id));
-        ("max_id", `Int (Option.value ~default:0 max_id));
+        ("since_id", `Int (Option.fold ~none:0 ~some:Status.ID.to_int since_id));
+        ("max_id", `Int (Option.fold ~none:0 ~some:Status.ID.to_int max_id));
       ]
   >|= List.map Status.pack
 
@@ -455,10 +435,10 @@ ORDER BY f.created_at DESC
 LIMIT :limit|}
     ~p:
       [
-        ("id", `Int id);
+        ("id", `Int (Account.ID.to_int id));
         ("limit", `Int limit);
-        ("since_id", `Int (Option.value ~default:0 since_id));
-        ("max_id", `Int (Option.value ~default:0 max_id));
+        ("since_id", `Int (Option.fold ~none:0 ~some:Follow.ID.to_int since_id));
+        ("max_id", `Int (Option.fold ~none:0 ~some:Follow.ID.to_int max_id));
       ]
   >|= List.map Account.pack
 
@@ -475,10 +455,10 @@ ORDER BY f.created_at DESC
 LIMIT :limit|}
     ~p:
       [
-        ("id", `Int id);
+        ("id", `Int (Account.ID.to_int id));
         ("limit", `Int limit);
-        ("since_id", `Int (Option.value ~default:0 since_id));
-        ("max_id", `Int (Option.value ~default:0 max_id));
+        ("since_id", `Int (Option.fold ~none:0 ~some:Follow.ID.to_int since_id));
+        ("max_id", `Int (Option.fold ~none:0 ~some:Follow.ID.to_int max_id));
       ]
   >|= List.map Account.pack
 
@@ -494,10 +474,12 @@ ORDER BY n.created_at DESC
 LIMIT :limit|}
     ~p:
       [
-        ("account_id", `Int account_id);
+        ("account_id", `Int (Account.ID.to_int account_id));
         ("limit", `Int limit);
-        ("since_id", `Int (Option.value ~default:0 since_id));
-        ("max_id", `Int (Option.value ~default:0 max_id));
+        ( "since_id",
+          `Int (Option.fold ~none:0 ~some:Notification.ID.to_int since_id) );
+        ( "max_id",
+          `Int (Option.fold ~none:0 ~some:Notification.ID.to_int max_id) );
       ]
   >|= List.map Notification.pack
 
@@ -512,33 +494,3 @@ let get_remote_followers ~account_id c : Account.t list Lwt.t =
   Follow.get_many ~target_account_id:account_id c
   >|= List.filter_map (fun x ->
           x#account#domain |> Option.map (fun _ -> x#account))
-
-let register_user ~username ~display_name ~email ~password =
-  let now = Ptime.now () in
-  let created_at, updated_at = (now, now) in
-  let private_key, public_key = Httpq.Signature.generate_keypair () in
-  let public_key = Httpq.Signature.encode_public_key public_key in
-  let private_key = Httpq.Signature.encode_private_key private_key in
-  let uri = Config.url [ "users"; username ] in
-  let inbox_url = uri ^/ "inbox" in
-  let outbox_url = uri ^/ "outbox" in
-  let followers_url = uri ^/ "followers" in
-  let shared_inbox_url = Config.url [ "inbox" ] in
-  let encrypted_password = Bcrypt.(hash password |> string_of_hash) in
-  let%lwt a =
-    Db.e
-      Account.(
-        make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
-          ~outbox_url ~followers_url ~created_at ~updated_at ~shared_inbox_url
-          ()
-        |> save_one)
-  in
-  let%lwt u =
-    let created_at, updated_at = (now, now) in
-    Db.e
-      User.(
-        make ~email ~created_at ~updated_at ~account_id:a#id ~encrypted_password
-          ()
-        |> save_one)
-  in
-  Lwt.return (a, u)

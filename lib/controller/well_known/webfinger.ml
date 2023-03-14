@@ -16,15 +16,15 @@ let get req =
       failwith "Invalid request";
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
-    let%lwt a = Db.Account.get_one ~domain:None ~username:name () in
-    let%lwt _ = Db.User.get_one ~account_id:a.id () in
+    let%lwt a = Db.e (Model.Account.get_one ~domain:None ~username:name) in
+    let%lwt _ = Db.(e @@ User.get_one ~account_id:a#id) in
     make_webfinger
       ~subject:("acct:" ^ name ^ "@" ^ dom)
-      ~aliases:[ a.uri ]
+      ~aliases:[ a#uri ]
       ~links:
         [
           make_webfinger_link ~rel:"self" ~typ:"application/activity+json"
-            ~href:a.uri
+            ~href:a#uri
           |> yojson_of_webfinger_link;
         ]
       ()

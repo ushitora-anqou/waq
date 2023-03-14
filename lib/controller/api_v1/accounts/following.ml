@@ -2,26 +2,30 @@ open Lwt.Infix
 open Helper
 
 type params = {
-  self_id : int option;
-  id : int;
+  self_id : Model.Account.ID.t option;
+  id : Model.Account.ID.t;
   limit : int;
-  max_id : int option;
-  since_id : int option;
+  max_id : Model.Follow.ID.t option;
+  since_id : Model.Follow.ID.t option;
 }
+
+let string_to_follow_id s = s |> int_of_string |> Model.Follow.ID.of_int
 
 let parse_req req =
   let open Httpq.Server in
   let%lwt self_id = may_authenticate_user req in
-  let id = req |> param ":id" |> int_of_string in
+  let id = req |> param ":id" |> int_of_string |> Model.Account.ID.of_int in
   let limit = req |> query ~default:"40" "limit" |> int_of_string in
   let limit = min limit 80 in
-  let max_id = req |> query_opt "max_id" |> Option.map int_of_string in
-  let since_id = req |> query_opt "since_id" |> Option.map int_of_string in
+  let max_id = req |> query_opt "max_id" |> Option.map string_to_follow_id in
+  let since_id =
+    req |> query_opt "since_id" |> Option.map string_to_follow_id
+  in
   Lwt.return { id; self_id; max_id; since_id; limit }
 
 let respond_account_list accts =
   accts
-  |> List.map (fun (a : Db.Account.t) -> a.id)
+  |> List.map (fun (a : Db.Account.t) -> a#id)
   |> Entity.serialize_accounts
   >|= List.map Entity.yojson_of_account
   >|= (fun l -> `List l)
@@ -30,11 +34,11 @@ let respond_account_list accts =
 let get_following req =
   (* FIXME: Return Link header for pagination *)
   let%lwt { id; self_id; max_id; since_id; limit } = parse_req req in
-  Db.get_following ~id ~self_id ~max_id ~since_id ~limit
+  Db.(e @@ get_following ~id ~self_id ~max_id ~since_id ~limit)
   >>= respond_account_list
 
 let get_followers req =
   (* FIXME: Return Link header for pagination *)
   let%lwt { id; self_id; max_id; since_id; limit } = parse_req req in
-  Db.get_followers ~id ~self_id ~max_id ~since_id ~limit
+  Db.(e @@ get_followers ~id ~self_id ~max_id ~since_id ~limit)
   >>= respond_account_list
