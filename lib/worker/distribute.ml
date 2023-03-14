@@ -4,32 +4,32 @@ let deliver_to_local ~(followers : Db.User.t list) ~(status : Db.Status.t) :
     unit Lwt.t =
   followers
   |> Lwt_list.iter_p (fun (u : Db.User.t) ->
-         Insert_to_feed.kick ~account_id:u.account_id ~status_id:status.id
-           ~user_id:u.id ~stream:`User)
+         Insert_to_feed.kick ~account_id:u#account_id ~status_id:status#id
+           ~user_id:u#id ~stream:`User)
 
 let deliver_to_remote ~(followers : Db.Account.t list) ~(status : Db.Status.t) :
     unit Lwt.t =
   followers |> Db.Account.preferred_inbox_urls
   |> Lwt_list.iter_p (fun url ->
-         match status.reblog_of_id with
+         match status#reblog_of_id with
          | None -> Create_note.kick ~status ~url
          | Some _ -> Announce.kick ~status ~url)
 
 let kick (s : Db.Status.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt a = Db.Account.get_one ~id:s.account_id () in
-  let is_status_from_remote = a.domain <> None in
+  let%lwt a = Db.e (Model.Account.get_one ~id:s#account_id) in
+  let is_status_from_remote = a#domain <> None in
 
-  let%lwt local_followers = Db.get_local_followers ~account_id:a.id in
-  let%lwt remote_followers = Db.get_remote_followers ~account_id:a.id in
+  let%lwt local_followers = Db.(e @@ get_local_followers ~account_id:a#id) in
+  let%lwt remote_followers = Db.(e @@ get_remote_followers ~account_id:a#id) in
 
   (* Deliver to self *)
   (if is_status_from_remote then Lwt.return_unit (* Just ignore *)
-  else
-    let%lwt u = Db.User.get_one ~account_id:a.id () in
-    (* Local: Send the status to self *)
-    Insert_to_feed.kick ~account_id:a.id ~status_id:s.id ~user_id:u.id
-      ~stream:`User);%lwt
+   else
+     let%lwt u = Db.(e @@ User.get_one ~account_id:a#id) in
+     (* Local: Send the status to self *)
+     Insert_to_feed.kick ~account_id:a#id ~status_id:s#id ~user_id:u#id
+       ~stream:`User);%lwt
 
   (* Deliver to remote followers *)
   if is_status_from_remote && remote_followers <> [] then

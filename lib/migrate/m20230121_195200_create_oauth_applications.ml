@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE oauth_applications (
   id SERIAL PRIMARY KEY,
@@ -14,4 +14,4 @@ CREATE TABLE oauth_applications (
   UNIQUE (uid)
 )|}
 
-let down c = Sql.execute c {|DROP TABLE oauth_applications|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE oauth_applications|}

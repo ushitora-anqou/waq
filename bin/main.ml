@@ -15,7 +15,7 @@ let server () =
   in
 
   Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
-  Db.do_query Migration.verify_migration_status;%lwt
+  Db.e Migration.verify_migration_status;%lwt
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
 
@@ -51,14 +51,14 @@ let oauth_generate_access_token username =
         ~scopes:"read write follow push"
     in
     let%lwt user =
-      let%lwt a = Db.Account.get_one ~username () in
-      Db.User.get_one ~account_id:a.id ()
+      let%lwt a = Db.(e @@ Account.get_one ~username) in
+      Db.(e @@ User.get_one ~account_id:a#id)
     in
     let%lwt access_token =
       Oauth_helper.generate_access_token ~scopes:"read write follow push"
-        ~resource_owner_id:user.id ~app:web
+        ~resource_owner_id:user#id ~app:web
     in
-    Lwt_io.printf "%s\n%!" access_token.token;%lwt
+    Lwt_io.printf "%s\n%!" access_token#token;%lwt
     Lwt.return_unit
   in
   Lwt_main.run f
@@ -93,7 +93,8 @@ let user_register () =
       password
     in
     let%lwt _, u = Db.register_user ~username ~display_name ~email ~password in
-    print_endline ("Correctly registered. User # = " ^ string_of_int u.id);
+    Printf.printf "Correctly registered. User # = %d"
+      (u#id |> Model.User.ID.to_int);
     Lwt.return_unit
   in
   Lwt_main.run f

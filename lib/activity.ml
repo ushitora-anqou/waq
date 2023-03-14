@@ -490,16 +490,17 @@ let get_webfinger ~scheme ~domain ~username =
 let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   let domain = Uri.of_string r.id |> Uri.domain in
   let now = Ptime.now () in
-  Db.Account.make ~username:r.preferred_username ~domain
-    ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
-    ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
-    ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
-  |> Db.Account.save_one
+  Db.(
+    Account.make ~username:r.preferred_username ~domain
+      ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
+      ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
+      ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
+    |> Account.save_one |> e)
 
 and account_person (r : ap_person) : Db.Account.t Lwt.t =
-  match%lwt Db.Account.get_one ~uri:r.id () with
+  match%lwt Db.(e Account.(get_one ~uri:r.id)) with
   | acc -> Lwt.return acc
-  | exception Sql.NoRowFound -> account_person' r
+  | exception Sqlx.Error.NoRowFound -> account_person' r
 
 and fetch_account ?(scheme = "https") by =
   let make_new_account (uri : string) =
@@ -508,11 +509,11 @@ and fetch_account ?(scheme = "https") by =
   in
   match by with
   | `Webfinger (domain, username) -> (
-      match%lwt Db.Account.get_one ~domain ~username () with
+      match%lwt Db.(e Account.(get_one ~domain ~username)) with
       | acc -> Lwt.return acc
-      | exception Sql.NoRowFound when domain = None (* Local *) ->
+      | exception Sqlx.Error.NoRowFound when domain = None (* Local *) ->
           failwith "Couldn't fetch the account"
-      | exception Sql.NoRowFound ->
+      | exception Sqlx.Error.NoRowFound ->
           let domain = Option.get domain in
           let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
           let href =
@@ -525,17 +526,17 @@ and fetch_account ?(scheme = "https") by =
           make_new_account href)
   | `Uri uri -> (
       let uri = Uri.(with_fragment (of_string uri) None |> to_string) in
-      match%lwt Db.Account.get_one ~uri () with
+      match%lwt Db.(e Account.(get_one ~uri)) with
       | acc -> Lwt.return acc
-      | exception Sql.NoRowFound -> make_new_account uri)
+      | exception Sqlx.Error.NoRowFound -> make_new_account uri)
 
 let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
   let body = Yojson.Safe.to_string body in
   let sign =
     let priv_key =
-      src.private_key |> Option.get |> Httpq.Signature.decode_private_key
+      src#private_key |> Option.get |> Httpq.Signature.decode_private_key
     in
-    let key_id = src.uri ^ "#main-key" in
+    let key_id = src#uri ^ "#main-key" in
     let signed_headers =
       [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
     in
@@ -555,7 +556,7 @@ let verify_activity_json req =
     parse_signature_header signature
   in
   let%lwt acct = fetch_account (`Uri key_id) in
-  let pub_key = decode_public_key acct.public_key in
+  let pub_key = decode_public_key acct#public_key in
   Lwt.return
   @@
   match
@@ -578,26 +579,25 @@ let post_activity_json ~body ~sign ~url =
   | _ -> failwith "Failed to post activity json"
 
 let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
-  let%lwt self = Db.Account.get_one ~id:s.account_id () in
+  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
   let%lwt in_reply_to_s =
-    match s.in_reply_to_id with
+    match s#in_reply_to_id with
     | None -> Lwt.return_none
-    | Some id -> Db.Status.get_one ~id () >|= Option.some
+    | Some id -> Db.(e Status.(get_one ~id)) >|= Option.some
   in
-  let published = s.created_at |> Ptime.to_rfc3339 in
+  let published = s#created_at |> Ptime.to_rfc3339 in
   let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-  let cc = [ self.followers_url ] in
+  let cc = [ self#followers_url ] in
   let in_reply_to =
-    Db.Status.(
-      in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s.uri))
+    in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s#uri)
   in
   {
-    id = s.uri;
+    id = s#uri;
     published;
     to_;
     cc;
-    attributed_to = self.uri;
-    content = s.text;
+    attributed_to = self#uri;
+    content = s#text;
     in_reply_to;
   }
   |> Lwt.return
@@ -605,9 +605,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
 let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
   let published, _, _ = Ptime.of_rfc3339 note.published |> Result.get_ok in
   let%lwt in_reply_to_id =
-    let uri_to_status_id uri =
-      fetch_status ~uri >|= fun (s : Db.Status.t) -> Some s.id
-    in
+    let uri_to_status_id uri = fetch_status ~uri >|= fun s -> Some s#id in
     match note.in_reply_to with
     | `String uri -> uri_to_status_id uri
     | `Assoc l -> (
@@ -617,45 +615,49 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
     | _ -> Lwt.return_none
   in
   let%lwt attributedTo = fetch_account (`Uri note.attributed_to) in
-  Db.Status.(
-    make ~id:0 ~uri:note.id ~text:note.content ~created_at:published
-      ~updated_at:published ~account_id:attributedTo.id ?in_reply_to_id ()
-    |> save_one)
+  Db.(
+    e
+      Status.(
+        make ~uri:note.id ~text:note.content ~created_at:published
+          ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id ()
+        |> save_one))
 
 and status_of_note (note : ap_note) : Db.Status.t Lwt.t =
-  match%lwt Db.Status.get_one ~uri:note.id () with
+  match%lwt Db.(e Status.(get_one ~uri:note.id)) with
   | s -> Lwt.return s
-  | exception Sql.NoRowFound -> status_of_note' note
+  | exception Sqlx.Error.NoRowFound -> status_of_note' note
 
 and status_of_announce' (ann : ap_announce) : Db.Status.t Lwt.t =
   let published, _, _ = Ptime.of_rfc3339 ann.published |> Result.get_ok in
   let%lwt reblogee = fetch_status ~uri:ann.obj in
   let%lwt account = fetch_account (`Uri ann.actor) in
-  Db.Status.(
-    make ~id:0 ~uri:ann.id ~text:"" ~created_at:published ~updated_at:published
-      ~account_id:account.id ~reblog_of_id:reblogee.id ()
-    |> save_one)
+  Db.(
+    e
+      Status.(
+        make ~uri:ann.id ~text:"" ~created_at:published ~updated_at:published
+          ~account_id:account#id ~reblog_of_id:reblogee#id ()
+        |> save_one))
 
 and status_of_announce (ann : ap_announce) : Db.Status.t Lwt.t =
-  match%lwt Db.Status.get_one ~uri:ann.id () with
+  match%lwt Db.(e Status.(get_one ~uri:ann.id)) with
   | s -> Lwt.return s
-  | exception Sql.NoRowFound -> status_of_announce' ann
+  | exception Sqlx.Error.NoRowFound -> status_of_announce' ann
 
 and fetch_status ~uri =
-  match%lwt Db.Status.get_one ~uri () with
+  match%lwt Db.(e Status.(get_one ~uri)) with
   | s -> Lwt.return s
-  | exception Sql.NoRowFound -> (
+  | exception Sqlx.Error.NoRowFound -> (
       match%lwt fetch_activity ~uri >|= of_yojson with
       | Note note -> status_of_note' note
       | Announce ann -> status_of_announce' ann
       | _ -> failwith "fetch_status failed: fetched activity is invalid")
 
 let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
-  let%lwt self = Db.Account.get_one ~id:s.account_id () in
+  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
   note_of_status s >|= fun note ->
   {
     id = note.id ^/ "activity";
-    actor = `String self.uri;
+    actor = `String self#uri;
     published = note.published;
     to_ = note.to_;
     cc = note.cc;
@@ -665,46 +667,52 @@ let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
 let announce_of_status ?(deleted = false) (s : Db.Status.t) : ap_announce Lwt.t
     =
   let%lwt reblog =
-    let id = Option.get s.reblog_of_id in
-    Db.Status.(if deleted then get_one' ~id () else get_one ~id ())
+    let id = Option.get s#reblog_of_id in
+    Db.(if deleted then e Status.(get_one' ~id) else e Status.(get_one ~id))
   in
-  let%lwt reblog_acct = Db.Account.get_one ~id:reblog.account_id () in
-  let%lwt self = Db.Account.get_one ~id:s.account_id () in
+  let%lwt reblog_acct = Db.(e Account.(get_one ~id:reblog#account_id)) in
+  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
 
-  let id = s.uri ^/ "activity" in
-  let actor = self.uri in
-  let published = s.created_at |> Ptime.to_rfc3339 in
+  let id = s#uri ^/ "activity" in
+  let actor = self#uri in
+  let published = s#created_at |> Ptime.to_rfc3339 in
   let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-  let cc = [ reblog_acct.uri; self.followers_url ] in
-  let obj = reblog.uri in
+  let cc = [ reblog_acct#uri; self#followers_url ] in
+  let obj = reblog#uri in
 
   make_announce ~id ~actor ~published ~to_ ~cc ~obj |> Lwt.return
 
 let like_of_favourite (f : Db.Favourite.t) : ap_like Lwt.t =
-  let%lwt acct = Db.Account.get_one ~id:f.account_id () in
-  let%lwt status = Db.Status.get_one ~id:f.status_id () in
+  let%lwt acct = Db.(e Account.(get_one ~id:f#account_id)) in
+  let%lwt status = Db.(e Status.(get_one ~id:f#status_id)) in
 
-  let id = acct.uri ^ "#likes/" ^ string_of_int f.id in
-  let actor = acct.uri in
-  let obj = status.uri in
+  let id =
+    acct#uri ^ "#likes/" ^ (f#id |> Model.Favourite.ID.to_int |> string_of_int)
+  in
+  let actor = acct#uri in
+  let obj = status#uri in
 
   make_like ~id ~actor ~obj |> Lwt.return
 
 let favourite_of_like ?(must_already_exist = false) (l : ap_like) :
     Db.Favourite.t Lwt.t =
-  let%lwt acct = Db.Account.get_one ~uri:l.actor () in
-  let%lwt status = Db.Status.get_one ~uri:l.obj () in
+  let%lwt acct = Db.(e Account.(get_one ~uri:l.actor)) in
+  let%lwt status = Db.(e Status.(get_one ~uri:l.obj)) in
   let now = Ptime.now () in
-  let open Db.Favourite in
-  match%lwt get_one ~account_id:acct.id ~status_id:status.id () with
+  match%lwt
+    Db.(e Favourite.(get_one ~account_id:acct#id ~status_id:status#id))
+  with
   | fav -> Lwt.return fav
-  | exception Sql.NoRowFound ->
+  | exception Sqlx.Error.NoRowFound ->
       if must_already_exist then
         failwith "favourite_of_like: must_already_exist failed"
       else
-        make ~id:0 ~created_at:now ~updated_at:now ~account_id:acct.id
-          ~status_id:status.id
-        |> save_one
+        Db.(
+          e
+            Favourite.(
+              make ~created_at:now ~updated_at:now ~account_id:acct#id
+                ~status_id:status#id ()
+              |> save_one))
 
 let to_undo ~actor =
   let actor = `String actor in
@@ -723,10 +731,10 @@ let to_undo ~actor =
   | _ -> assert false
 
 let person_of_account (a : Db.Account.t) =
-  make_person ~id:a.uri ~following:(a.uri ^/ "following")
-    ~followers:a.followers_url ~inbox:a.inbox_url
-    ~shared_inbox:a.shared_inbox_url ~outbox:a.outbox_url
-    ~preferred_username:a.username ~name:a.display_name
-    ~summary:"FIXME: summary is here" ~url:a.uri ~tag:[]
-    ~public_key_id:(a.uri ^ "#main-key") ~public_key_owner:a.uri
-    ~public_key_pem:a.public_key
+  make_person ~id:a#uri ~following:(a#uri ^/ "following")
+    ~followers:a#followers_url ~inbox:a#inbox_url
+    ~shared_inbox:a#shared_inbox_url ~outbox:a#outbox_url
+    ~preferred_username:a#username ~name:a#display_name
+    ~summary:"FIXME: summary is here" ~url:a#uri ~tag:[]
+    ~public_key_id:(a#uri ^ "#main-key") ~public_key_owner:a#uri
+    ~public_key_pem:a#public_key

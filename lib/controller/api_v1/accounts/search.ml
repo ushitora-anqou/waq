@@ -1,4 +1,5 @@
 open Activity
+open Helper
 
 (* Recv GET /api/v1/accounts/search *)
 type entry = {
@@ -13,7 +14,6 @@ type t = entry list [@@deriving yojson]
 
 let parse_req req =
   let open Httpq.Server in
-  let open Helper in
   let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
   let username, domain = req |> query "q" |> parse_webfinger_address in
   (resolve, username, domain)
@@ -23,13 +23,14 @@ let get req =
   try%lwt
     let%lwt acc = fetch_account (`Webfinger (domain, username)) in
     let acct =
-      match acc.domain with
+      match acc#domain with
       | None -> username
       | Some domain -> username ^ "@" ^ domain
     in
     let ent =
-      make_entry ~id:(string_of_int acc.id) ~username ~acct
-        ~display_name:acc.display_name
+      make_entry
+        ~id:(acc#id |> Model.Account.ID.to_int |> string_of_int)
+        ~username ~acct ~display_name:acc#display_name
     in
     [ ent ] |> yojson_of_t |> Yojson.Safe.to_string
     |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

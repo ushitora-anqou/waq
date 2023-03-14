@@ -2,8 +2,8 @@ open Lwt.Infix
 open Util
 
 module type S = sig
-  val up : Sql.connection -> unit Lwt.t
-  val down : Sql.connection -> unit Lwt.t
+  val up : Sqlx.Connection.t -> unit Lwt.t
+  val down : Sqlx.Connection.t -> unit Lwt.t
 end
 
 let all : (int * (module S)) list =
@@ -23,13 +23,13 @@ let all : (int * (module S)) list =
       (20230225_174100, (module M20230225_174100_create_status_stats));
     ]
 
-let get_commited_versions c =
-  Sql.execute c
+let get_commited_versions (c : Sqlx.Connection.t) =
+  c#execute
     "CREATE TABLE IF NOT EXISTS waq_schema_migrations ( version BIGINT PRIMARY \
      KEY )";%lwt
-  Sql.query c "SELECT version FROM waq_schema_migrations ORDER BY version"
+  c#query "SELECT version FROM waq_schema_migrations ORDER BY version"
   >|= List.map (function
-        | [ ("version", v) ] -> Sql.Value.expect_int v
+        | [ ("version", v) ] -> Sqlx.Value.expect_int v
         | _ -> assert false)
 
 let verify_migration_status c =
@@ -49,7 +49,7 @@ let verify_migration_status c =
 
 let migrate () =
   (* FIXME: Not sure it's safe when it's called twice in parallel *)
-  Db.do_query @@ fun c ->
+  Db.e @@ fun c ->
   let%lwt versions = get_commited_versions c in
   let rec aux = function
     | x :: commited, (y, _) :: cands when x = y -> aux (commited, cands)
@@ -57,27 +57,27 @@ let migrate () =
         cands
         |> Lwt_list.iter_s (fun (id, (module M : S)) ->
                Logq.info (fun m -> m "Migrate %d" id);
-               Sql.execute c "BEGIN";%lwt
+               c#execute "BEGIN";%lwt
                try
                  M.up c;%lwt
-                 Sql.execute c "INSERT INTO waq_schema_migrations VALUES ($1)"
+                 c#execute "INSERT INTO waq_schema_migrations VALUES ($1)"
                    ~p:[ `Int id ];%lwt
-                 Sql.execute c "COMMIT"
-               with _ -> Sql.execute c "ROLLBACK")
+                 c#execute "COMMIT"
+               with _ -> c#execute "ROLLBACK")
     | _ -> failwith "Migration error: current status is invalid"
   in
   aux (versions, all)
 
 let rollback ?(n = 1) () =
-  Db.do_query @@ fun c ->
+  Db.e @@ fun c ->
   let%lwt versions = get_commited_versions c in
   versions |> List.rev |> List.take n
   |> Lwt_list.iter_s @@ fun last_v ->
      let (module M : S) = all |> List.assoc last_v in
-     Sql.execute c "BEGIN";%lwt
+     c#execute "BEGIN";%lwt
      try
        M.down c;%lwt
-       Sql.execute c "DELETE FROM waq_schema_migrations WHERE version = $1"
+       c#execute "DELETE FROM waq_schema_migrations WHERE version = $1"
          ~p:[ `Int last_v ];%lwt
-       Sql.execute c "COMMIT"
-     with _ -> Sql.execute c "ROLLBACK"
+       c#execute "COMMIT"
+     with _ -> c#execute "ROLLBACK"

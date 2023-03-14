@@ -6,7 +6,7 @@ type connection_id = int
 let connections : (key, (connection_id, connection) Hashtbl.t) Hashtbl.t =
   Hashtbl.create 10
 
-let make_key ~user_id ~stream = (user_id, stream)
+let make_key ~user_id ~stream = (Model.User.ID.to_int user_id, stream)
 
 let add : key -> connection -> connection_id =
   let id = ref 0 in

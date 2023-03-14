@@ -22,26 +22,26 @@ let post req =
   let%lwt grant = Oauth_helper.authenticate_access_grant code in
   (* FIXME: Check if scope is correct *)
   let%lwt app =
-    Db.OAuthApplication.get_one ~id:(Option.get grant.application_id) ()
+    Db.(e OAuthApplication.(get_one ~id:(Option.get grant#application_id)))
   in
-  if app.redirect_uri <> redirect_uri then
+  if app#redirect_uri <> redirect_uri then
     Httpq.Server.raise_error_response `Bad_request;
-  if app.uid <> client_id || app.secret <> client_secret then
+  if app#uid <> client_id || app#secret <> client_secret then
     Httpq.Server.raise_error_response `Unauthorized;
   if
     let open Ptime in
-    grant.expires_in
-    < (diff (now ()) grant.created_at |> Span.to_int_s |> Option.get)
+    grant#expires_in
+    < (diff (now ()) grant#created_at |> Span.to_int_s |> Option.get)
   then Httpq.Server.raise_error_response `Bad_request;
 
   let%lwt token =
     Oauth_helper.generate_access_token ~scopes:scope
-      ~resource_owner_id:(Option.get grant.resource_owner_id)
+      ~resource_owner_id:(Option.get grant#resource_owner_id)
       ~app
   in
 
-  make_res ~access_token:token.token ~token_type:"Bearer" ~scope
+  make_res ~access_token:token#token ~token_type:"Bearer" ~scope
     ~created_at:
-      (token.created_at |> Ptime.to_span |> Ptime.Span.to_int_s |> Option.get)
+      (token#created_at |> Ptime.to_span |> Ptime.Span.to_int_s |> Option.get)
   |> yojson_of_res |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

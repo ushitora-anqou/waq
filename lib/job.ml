@@ -15,7 +15,7 @@ let kick ~name (f : unit -> unit Lwt.t) : unit Lwt.t =
     with e ->
       Logq.warn (fun m ->
           m "[DEBUG ONLY] Fail immediately due to job failure:\n%s: %s: %s" name
-            (match e with Sql.Error s -> s | _ -> Printexc.to_string e)
+            (match e with _ -> Printexc.to_string e)
             (Printexc.get_backtrace ()));
       Lwt.fail e)
   else

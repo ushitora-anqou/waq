@@ -17,8 +17,9 @@ let post req =
     Oauth_helper.generate_application ~name:client_name
       ~redirect_uri:redirect_uris ~scopes
   in
-  make_res ~id:(string_of_int app.id) ~name:app.name
-    ~redirect_uri:app.redirect_uri ~client_id:app.uid ~client_secret:app.secret
-    ()
+  make_res
+    ~id:(app#id |> Model.OAuthApplication.ID.to_int |> string_of_int)
+    ~name:app#name ~redirect_uri:app#redirect_uri ~client_id:app#uid
+    ~client_secret:app#secret ()
   |> yojson_of_res |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]

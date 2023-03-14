@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE favourites (
   id SERIAL PRIMARY KEY,
@@ -13,4 +13,4 @@ CREATE TABLE favourites (
   UNIQUE (account_id, status_id)
 )|}
 
-let down c = Sql.execute c {|DROP TABLE favourites|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE favourites|}

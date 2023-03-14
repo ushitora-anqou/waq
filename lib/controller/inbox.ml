@@ -9,26 +9,30 @@ let kick_inbox_follow (req : ap_follow) =
     | _ -> Httpq.Server.raise_error_response `Bad_request
   in
   let%lwt src = fetch_account (`Uri src) in
-  match%lwt Db.Account.get_one ~uri:dst () with
-  | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Bad_request
+  match%lwt Db.e (Model.Account.get_one ~uri:dst) with
+  | exception Sqlx.Error.NoRowFound ->
+      Httpq.Server.raise_error_response `Bad_request
   | dst ->
       Job.kick ~name:__FUNCTION__ @@ fun () ->
       let%lwt f =
         match%lwt
-          Db.Follow.get_one ~account_id:src.id ~target_account_id:dst.id ()
+          Db.(e @@ Follow.get_one ~account_id:src#id ~target_account_id:dst#id)
         with
         | f -> Lwt.return f
-        | exception Sql.NoRowFound ->
+        | exception Sqlx.Error.NoRowFound ->
             (* Insert to table 'follows' *)
             let now = Ptime.now () in
             let%lwt f =
-              Db.Follow.(
-                make ~id:0 ~created_at:now ~updated_at:now ~account_id:src.id
-                  ~target_account_id:dst.id ~uri:req.id
-                |> save_one)
+              Db.(
+                e
+                @@ Follow.(
+                     make ~created_at:now ~updated_at:now ~account_id:src#id
+                       ~target_account_id:dst#id ~uri:req.id ()
+                     |> save_one))
             in
-            Worker.Local_notify.kick ~activity_id:f.id ~activity_type:`Follow
-              ~src ~dst ~typ:`follow;%lwt
+            Worker.Local_notify.kick
+              ~activity_id:(Model.Follow.ID.to_int f#id)
+              ~activity_type:`Follow ~src ~dst ~typ:`follow;%lwt
             Lwt.return f
       in
 
@@ -42,28 +46,31 @@ let kick_inbox_accept (req : ap_accept) =
     | Follow { id; _ } -> id
     | _ -> Httpq.Server.raise_error_response `Bad_request
   in
-  match%lwt Db.FollowRequest.get_one ~uri () with
-  | exception Sql.NoRowFound -> Httpq.Server.raise_error_response `Bad_request
+  match%lwt Db.(e @@ FollowRequest.get_one ~uri) with
+  | exception Sqlx.Error.NoRowFound ->
+      Httpq.Server.raise_error_response `Bad_request
   | r ->
       Job.kick ~name:__FUNCTION__ @@ fun () ->
       let now = Ptime.now () in
-      Db.FollowRequest.delete ~id:r.id () |> ignore_lwt;%lwt
-      Db.Follow.(
-        make ~id:0 ~account_id:r.account_id
-          ~target_account_id:r.target_account_id ~uri ~created_at:now
-          ~updated_at:now
-        |> save_one)
+      Db.(e @@ FollowRequest.delete [ r ]) |> ignore_lwt;%lwt
+      Db.(
+        e
+        @@ Follow.(
+             make ~account_id:r#account_id
+               ~target_account_id:r#target_account_id ~uri ~created_at:now
+               ~updated_at:now ()
+             |> save_one))
       |> ignore_lwt
 
 let kick_inbox_undo_like (l : ap_like) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt fav = favourite_of_like ~must_already_exist:true l in
-  Db.Favourite.delete fav
+  Db.(e @@ Favourite.delete [ fav ])
 
 let kick_inbox_undo_follow ({ id; _ } : ap_follow) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt follow = Db.Follow.get_one ~uri:id () in
-  Db.Follow.delete follow
+  let%lwt follow = Db.(e @@ Follow.get_one ~uri:id) in
+  Db.(e @@ Follow.delete [ follow ])
 
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =
@@ -81,48 +88,45 @@ let kick_inbox_announce (req : ap_announce) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_announce req in
   Worker.Distribute.kick s;%lwt
-  let%lwt src = Db.Account.get_one ~id:s.account_id () in
-  let%lwt s' = Db.Status.get_one ~id:(Option.get s.reblog_of_id) () in
-  let%lwt dst = Db.Account.get_one ~id:s'.account_id () in
-  Worker.Local_notify.kick ~activity_id:s.id ~activity_type:`Status ~typ:`reblog
-    ~src ~dst
+  let%lwt src = Db.e (Model.Account.get_one ~id:s#account_id) in
+  let%lwt s' = Db.e (Model.Status.get_one ~id:(Option.get s#reblog_of_id)) in
+  let%lwt dst = Db.e (Model.Account.get_one ~id:s'#account_id) in
+  Worker.Local_notify.kick
+    ~activity_id:(Model.Status.ID.to_int s#id)
+    ~activity_type:`Status ~typ:`reblog ~src ~dst
 
 (* Recv Like in inbox *)
 let kick_inbox_like (req : ap_like) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt f = favourite_of_like req in
-  let%lwt src = Db.Account.get_one ~id:f.account_id () in
-  let%lwt s = Db.Status.get_one ~id:f.status_id () in
-  let%lwt dst = Db.Account.get_one ~id:s.account_id () in
-  Worker.Local_notify.kick ~activity_id:f.id ~activity_type:`Favourite
-    ~typ:`favourite ~src ~dst;%lwt
+  let%lwt src = Db.e (Model.Account.get_one ~id:f#account_id) in
+  let%lwt s = Db.e (Model.Status.get_one ~id:f#status_id) in
+  let%lwt dst = Db.e (Model.Account.get_one ~id:s#account_id) in
+  Worker.Local_notify.kick
+    ~activity_id:(Model.Favourite.ID.to_int f#id)
+    ~activity_type:`Favourite ~typ:`favourite ~src ~dst;%lwt
   Lwt.return_unit
 
 let kick_inbox_delete (req : ap_delete) =
-  let%lwt account = Db.Account.get_one ~uri:req.actor () in
+  let%lwt account = Db.e (Model.Account.get_one ~uri:req.actor) in
   let%lwt status =
-    Db.Status.get_one ~uri:(get_tombstone req.obj |> Option.get).id ()
+    Db.e (Model.Status.get_one ~uri:(get_tombstone req.obj |> Option.get).id)
   in
-  Worker.Removal.kick ~account_id:account.id ~status_id:status.id
+  Worker.Removal.kick ~account_id:account#id ~status_id:status#id
 
 let kick_inbox_update_person (r : ap_person) =
-  let%lwt a = Db.Account.get_one ~uri:r.id () in
-  let a =
-    {
-      a with
-      username = r.preferred_username;
-      domain = Some Uri.(of_string r.id |> domain);
-      public_key = r.public_key_pem;
-      display_name = r.name;
-      uri = r.id;
-      url = Some r.url;
-      inbox_url = r.inbox;
-      outbox_url = r.outbox;
-      followers_url = r.followers;
-      shared_inbox_url = r.shared_inbox;
-    }
-  in
-  Db.Account.update_one ~id:a.id a () |> ignore_lwt
+  let%lwt a = Db.e (Model.Account.get_one ~uri:r.id) in
+  a#set_username r.preferred_username;
+  a#set_domain (Some Uri.(of_string r.id |> domain));
+  a#set_public_key r.public_key_pem;
+  a#set_display_name r.name;
+  a#set_uri r.id;
+  a#set_url (Some r.url);
+  a#set_inbox_url r.inbox;
+  a#set_outbox_url r.outbox;
+  a#set_followers_url r.followers;
+  a#set_shared_inbox_url r.shared_inbox;
+  Db.(e @@ Account.update [ a ]) |> ignore_lwt
 
 (* Recv POST /users/:name/inbox *)
 let post req =

@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE notifications (
   id SERIAL PRIMARY KEY,
@@ -15,4 +15,4 @@ CREATE TABLE notifications (
   FOREIGN KEY (from_account_id) REFERENCES accounts (id) ON DELETE CASCADE
 )|}
 
-let down c = Sql.execute c {|DROP TABLE notifications|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE notifications|}

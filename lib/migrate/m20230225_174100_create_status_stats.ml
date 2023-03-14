@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE status_stats (
   id SERIAL PRIMARY KEY,
@@ -14,4 +14,4 @@ CREATE TABLE status_stats (
   UNIQUE (status_id)
 )|}
 
-let down c = Sql.execute c {|DROP TABLE status_stats|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE status_stats|}

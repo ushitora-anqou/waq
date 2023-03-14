@@ -26,7 +26,7 @@ let authenticate_bearer = function
 let authenticate_user (r : Httpq.Server.request) =
   try
     let%lwt token = authenticate_bearer r in
-    token.resource_owner_id |> Option.get |> Lwt.return
+    (Option.get token#resource_owner)#account_id |> Lwt.return
   with _ -> raise_error_response `Unauthorized
 
 let may_authenticate_user r =
@@ -75,4 +75,7 @@ let parse_webfinger_address q =
   | _ -> raise_error_response `Bad_request
 
 let raise_if_no_row_found ?(status = `Bad_request) f =
-  try%lwt f with Sql.NoRowFound -> raise_error_response status
+  try%lwt f with Sqlx.Error.NoRowFound -> raise_error_response status
+
+let string_to_status_id s = s |> int_of_string |> Model.Status.ID.of_int
+let string_to_account_id s = s |> int_of_string |> Model.Account.ID.of_int

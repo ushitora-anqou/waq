@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
@@ -13,4 +13,4 @@ CREATE TABLE users (
   FOREIGN KEY (account_id) REFERENCES accounts (id) ON UPDATE CASCADE ON DELETE CASCADE
 )|}
 
-let down c = Sql.execute c {|DROP TABLE users|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE users|}

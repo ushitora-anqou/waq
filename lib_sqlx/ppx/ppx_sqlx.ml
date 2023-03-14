@@ -725,8 +725,6 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_let_pack loc schema]
       [%%i expand_let_unpack loc schema]
 
-      let id x = x#id
-
       let after_create_commit_callbacks :
           (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
         ref []
@@ -749,7 +747,7 @@ let expand ~ctxt (xs : structure_item list) =
         let table_name = table_name
         let unpack = unpack
         let pack = pack
-        let id = id
+        let id x = x#id
         let after_create_commit_callbacks = after_create_commit_callbacks
         let after_destroy_commit_callbacks = after_destroy_commit_callbacks
       end)

@@ -1,5 +1,5 @@
-let up c =
-  Sql.execute c
+let up (c : Sqlx.Connection.t) =
+  c#execute
     {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
@@ -17,7 +17,7 @@ CREATE TABLE accounts (
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
 )|};%lwt
-  Sql.execute c
+  c#execute
     {|
 CREATE INDEX ON accounts (
   LOWER(username),
@@ -25,4 +25,4 @@ CREATE INDEX ON accounts (
 )
 |}
 
-let down c = Sql.execute c {|DROP TABLE accounts|}
+let down (c : Sqlx.Connection.t) = c#execute {|DROP TABLE accounts|}
