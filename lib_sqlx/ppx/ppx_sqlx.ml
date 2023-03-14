@@ -15,7 +15,7 @@ type typ =
   | `User of longident
   | `Option of typ ]
 
-let rec core_type_of_typ loc : typ -> core_type = function
+let rec core_type_of_type loc : typ -> core_type = function
   | `Int -> [%type: int]
   | `String -> [%type: string]
   | `Ptime -> [%type: Ptime.t]
@@ -25,7 +25,9 @@ let rec core_type_of_typ loc : typ -> core_type = function
       ptyp_constr ~loc { loc; txt = Ldot (Ldot (m, "ID"), "t") } []
   | `User l -> ptyp_constr ~loc { loc; txt = l } []
   | `Option t ->
-      ptyp_constr ~loc { loc; txt = lident "option" } [ core_type_of_typ loc t ]
+      ptyp_constr ~loc
+        { loc; txt = lident "option" }
+        [ core_type_of_type loc t ]
 
 let in_mod_ident l s =
   match l.mod_ident with None -> Lident s | Some m -> Ldot (m, s)
@@ -34,16 +36,35 @@ let column_name_wo_suffix_id s =
   let open String in
   if ends_with ~suffix:"_id" s then sub s 0 (length s - 3) else assert false
 
-type column = { c_ocaml_name : string; c_sql_name : string; c_typ : typ }
-type dummy_column = { d_name : string; d_type : core_type; d_opt : bool }
+type column_body = { c_ocaml_name : string; c_sql_name : string; c_type : typ }
+type column = CID | CCreatedAt | CUpdatedAt | CNormal of column_body
+type derived_column = { d_name : string; d_type : typ }
+type user_defined_field = { u_name : string; u_core_type : core_type }
 
 type schema = {
   s_sql_name : string;
   s_columns : column list;
-  s_derived : dummy_column list;
-  s_user_defined : dummy_column list;
+  s_derived : derived_column list;
+  s_user_defined : user_defined_field list;
   s_code_path : Code_path.t;
 }
+
+let ocaml_name_of_column = function
+  | CID -> "id"
+  | CCreatedAt -> "created_at"
+  | CUpdatedAt -> "updated_at"
+  | CNormal { c_ocaml_name; _ } -> c_ocaml_name
+
+let sql_name_of_column = function
+  | CID -> "id"
+  | CCreatedAt -> "created_at"
+  | CUpdatedAt -> "updated_at"
+  | CNormal { c_sql_name; _ } -> c_sql_name
+
+let type_of_column = function
+  | CID -> `Option (`ID { mod_ident = None })
+  | CCreatedAt | CUpdatedAt -> `Option `Ptime
+  | CNormal { c_type; _ } -> c_type
 
 let parse_config (x : structure_item) =
   (* Parse config e.g., `name "notifications"` *)
@@ -94,15 +115,13 @@ let parse_val (x : structure_item) =
   if attrs |> List.mem `Not_column then
     match x.pval_type.ptyp_desc with
     | Ptyp_constr (_, []) ->
-        `User_defined { d_name = name; d_type = x.pval_type; d_opt = false }
-    | Ptyp_constr ({ txt = Lident "option"; _ }, [ typ ]) ->
-        `User_defined { d_name = name; d_type = typ; d_opt = true }
+        `User_defined { u_name = name; u_core_type = x.pval_type }
     | _ -> assert false
   else
     `Column
       {
         c_ocaml_name = name;
-        c_typ = parse_type x;
+        c_type = parse_type x;
         c_sql_name =
           attrs
           |> List.find_map (function `Column s -> Some s | _ -> None)
@@ -110,29 +129,9 @@ let parse_val (x : structure_item) =
       }
 
 let construct_schema ctxt xs =
-  let loc = !Ast_helper.default_loc in
   let sql_name = ref "" in
   let code_path = Expansion_context.Extension.code_path ctxt in
-  let columns =
-    ref
-      [
-        {
-          c_ocaml_name = "id";
-          c_sql_name = "id";
-          c_typ = `Option (`ID { mod_ident = None });
-        };
-        {
-          c_ocaml_name = "created_at";
-          c_sql_name = "created_at";
-          c_typ = `Option `Ptime;
-        };
-        {
-          c_ocaml_name = "updated_at";
-          c_sql_name = "updated_at";
-          c_typ = `Option `Ptime;
-        };
-      ]
-  in
+  let columns = ref [ CID; CCreatedAt; CUpdatedAt ] in
   let user_defined = ref [] in
   xs
   |> List.iter (fun x ->
@@ -141,26 +140,23 @@ let construct_schema ctxt xs =
          | exception _ -> (
              match parse_val x with
              | `User_defined r -> user_defined := r :: !user_defined
-             | `Column column -> columns := column :: !columns));
+             | `Column column -> columns := CNormal column :: !columns));
   let derived =
     !columns
-    |> List.filter_map (fun c ->
-           match c.c_typ with
-           | `ID l ->
-               Some
-                 {
-                   d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
-                   d_name = column_name_wo_suffix_id c.c_ocaml_name;
-                   d_opt = false;
-                 }
-           | `Option (`ID l) when c.c_ocaml_name <> "id" ->
-               Some
-                 {
-                   d_type = ptyp_constr ~loc (wloc (in_mod_ident l "t")) [];
-                   d_name = column_name_wo_suffix_id c.c_ocaml_name;
-                   d_opt = true;
-                 }
-           | _ -> None)
+    |> List.filter_map @@ function
+       | CNormal { c_type = `ID l; c_ocaml_name; _ } ->
+           Some
+             {
+               d_name = column_name_wo_suffix_id c_ocaml_name;
+               d_type = `User (in_mod_ident l "t");
+             }
+       | CNormal { c_type = `Option (`ID l); c_ocaml_name; _ } ->
+           Some
+             {
+               d_name = column_name_wo_suffix_id c_ocaml_name;
+               d_type = `Option (`User (in_mod_ident l "t"));
+             }
+       | _ -> None
   in
   {
     s_sql_name = !sql_name;
@@ -173,7 +169,8 @@ let construct_schema ctxt xs =
 let expand_type_column loc schema =
   let rtags =
     schema.s_columns
-    |> List.map (fun c -> rtag ~loc { txt = c.c_ocaml_name; loc } true [])
+    |> List.map (fun c ->
+           rtag ~loc { txt = ocaml_name_of_column c; loc } true [])
   in
   pstr_type ~loc Nonrecursive
     [
@@ -185,7 +182,7 @@ let expand_type_column loc schema =
 let expand_let_columns loc schema =
   let columns =
     schema.s_columns
-    |> List.map (fun c -> pexp_variant ~loc c.c_ocaml_name None)
+    |> List.map (fun c -> pexp_variant ~loc (ocaml_name_of_column c) None)
     |> elist ~loc
   in
   [%stri let columns : column list = [%e columns]]
@@ -195,9 +192,9 @@ let expand_let_string_of_column loc schema =
     schema.s_columns
     |> List.map (fun c ->
            case
-             ~lhs:(ppat_variant ~loc c.c_ocaml_name None)
+             ~lhs:(ppat_variant ~loc (ocaml_name_of_column c) None)
              ~guard:None
-             ~rhs:(estring ~loc c.c_sql_name))
+             ~rhs:(estring ~loc (sql_name_of_column c)))
   in
   [%stri
     let string_of_column : column -> string = [%e pexp_function ~loc cases]]
@@ -207,9 +204,9 @@ let expand_type_args loc schema =
     schema.s_columns
     |> List.map (fun c ->
            label_declaration ~loc
-             ~name:{ txt = c.c_ocaml_name; loc }
+             ~name:{ txt = ocaml_name_of_column c; loc }
              ~mutable_:Immutable
-             ~type_:(core_type_of_typ loc c.c_typ))
+             ~type_:(type_of_column c |> core_type_of_type loc))
   in
   pstr_type ~loc Nonrecursive
     [
@@ -229,52 +226,66 @@ let expand_class_model loc schema =
           Public,
           Cfk_concrete (Fresh, pexp_poly ~loc e None) )
     in
+    let obj_method_with loc name =
+      let x = gen_symbol () in
+      obj_method ("with_" ^ name)
+        [%expr
+          fun [%p ppat_var ~loc (wloc x)] ->
+            [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]
+    in
+    let obj_method_set loc name =
+      let x = gen_symbol () in
+      obj_method ("set_" ^ name)
+        [%expr
+          fun [%p ppat_var ~loc (wloc x)] ->
+            [%e pexp_setinstvar ~loc (wloc name) (evar ~loc x)]]
+    in
     let obj_vals_and_methods_for_columns =
       schema.s_columns
-      |> List.map @@ fun c ->
-         let name = c.c_ocaml_name in
-         let e_name = evar ~loc name in
-         let opt = match c.c_typ with `Option _ -> true | _ -> false in
-         [
-           obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
-           obj_method name
-             (if opt then [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]]
-              else e_name);
-           obj_method ("set_" ^ name)
-             (let x = gen_symbol () in
-              [%expr
-                fun [%p ppat_var ~loc (wloc x)] ->
-                  [%e pexp_setinstvar ~loc (wloc name) (evar ~loc x)]]);
-           obj_method ("with_" ^ name)
-             (let x = gen_symbol () in
-              [%expr
-                fun [%p ppat_var ~loc (wloc x)] ->
-                  [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
-         ]
-         @ if opt then [ obj_method (name ^ "_opt") e_name ] else []
+      |> List.map @@ function
+         | CID ->
+             [
+               obj_val "id" [%expr [%e evar ~loc a].id];
+               obj_method "id" [%expr Sqlx.Ppx_runtime.expect_loaded id];
+               obj_method "id_opt" [%expr id];
+             ]
+         | CCreatedAt ->
+             [
+               obj_val "created_at" [%expr [%e evar ~loc a].created_at];
+               obj_method "created_at"
+                 [%expr Sqlx.Ppx_runtime.expect_loaded created_at];
+               obj_method "created_at_opt" [%expr created_at];
+             ]
+         | CUpdatedAt ->
+             [
+               obj_val "updated_at" [%expr [%e evar ~loc a].updated_at];
+               obj_method "updated_at"
+                 [%expr Sqlx.Ppx_runtime.expect_loaded updated_at];
+               obj_method "updated_at_opt" [%expr updated_at];
+             ]
+         | CNormal { c_ocaml_name = name; _ } ->
+             let e_name = evar ~loc name in
+             [
+               obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
+               obj_method name e_name;
+               obj_method_set loc name;
+               obj_method_with loc name;
+             ]
     in
     let obj_vals_and_methods_for_derived =
-      schema.s_derived @ schema.s_user_defined
-      |> List.map @@ fun d ->
-         let name = d.d_name in
-         let e_name = evar ~loc d.d_name in
+      (schema.s_derived
+      |> List.map (fun { d_name; d_type } ->
+             (d_name, core_type_of_type loc d_type)))
+      @ (schema.s_user_defined
+        |> List.map (fun { u_name; u_core_type } -> (u_name, u_core_type)))
+      |> List.map @@ fun (name, typ) ->
+         let e_name = evar ~loc name in
          [
-           obj_val name [%expr None];
-           obj_method ("with_" ^ name)
-             (let x = gen_symbol () in
-              [%expr
-                fun [%p ppat_var ~loc (wloc x)] ->
-                  [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]);
-           obj_method ("set_" ^ name)
-             (let x = gen_symbol () in
-              [%expr
-                fun ([%p ppat_var ~loc (wloc x)] : [%t d.d_type]) ->
-                  [%e
-                    pexp_setinstvar ~loc (wloc name)
-                      [%expr Some [%e evar ~loc x]]]]);
+           obj_val name [%expr (None : [%t typ] option)];
            obj_method name [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]];
+           obj_method_set loc name;
+           obj_method_with loc name;
          ]
-         @ if d.d_opt then [ obj_method (name ^ "_opt") e_name ] else []
     in
     obj_vals_and_methods_for_columns @ obj_vals_and_methods_for_derived
     |> List.flatten
@@ -293,26 +304,28 @@ let expand_let_make loc schema =
   let xs =
     schema.s_columns
     |> List.map (fun c ->
-           (c.c_ocaml_name, gen_symbol ~prefix:c.c_ocaml_name ()))
+           let name = ocaml_name_of_column c in
+           (name, gen_symbol ~prefix:name ()))
     |> List.to_seq |> Hashtbl.of_seq
   in
   let body =
     schema.s_columns
     |> List.map (fun c ->
-           ( wloc (lident c.c_ocaml_name),
-             evar ~loc (Hashtbl.find xs c.c_ocaml_name) ))
+           let name = ocaml_name_of_column c in
+           (wloc (lident name), evar ~loc (Hashtbl.find xs name)))
   in
   let body = [%expr fun () -> new t [%e pexp_record ~loc body None]] in
   let body =
     schema.s_columns
     |> List.fold_left
          (fun body c ->
+           let name = ocaml_name_of_column c in
            pexp_fun ~loc
-             (match c.c_typ with
-             | `Option _ -> Optional c.c_ocaml_name
-             | _ -> Labelled c.c_ocaml_name)
+             (match type_of_column c with
+             | `Option _ -> Optional name
+             | _ -> Labelled name)
              None
-             (ppat_var ~loc (wloc (Hashtbl.find xs c.c_ocaml_name)))
+             (ppat_var ~loc (wloc (Hashtbl.find xs name)))
              body)
          body
   in
@@ -331,45 +344,51 @@ let expand_let_pack loc schema =
            | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_of_string")))
            | _ -> assert false
          in
-         match (c.c_sql_name, c.c_typ) with
-         | "id", _ ->
+         match c with
+         | CID ->
              [%expr
                fun x -> x |> Sqlx.Value.expect_int |> ID.of_int |> Option.some]
-         | "created_at", _ | "updated_at", _ ->
+         | CCreatedAt | CUpdatedAt ->
              [%expr fun x -> x |> Sqlx.Value.expect_timestamp |> Option.some]
-         | _, `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int]
-         | _, `String -> [%expr fun x -> x |> Sqlx.Value.expect_string]
-         | _, `Ptime -> [%expr fun x -> x |> Sqlx.Value.expect_timestmap]
-         | _, `ID l ->
-             [%expr fun x -> x |> Sqlx.Value.expect_int |> [%e decode_id l]]
-         | _, `User l ->
-             [%expr
-               fun x -> x |> Sqlx.Value.expect_string |> [%e decode_user l]]
-         | _, `Option `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int_opt]
-         | _, `Option `String ->
-             [%expr fun x -> x |> Sqlx.Value.expect_string_opt]
-         | _, `Option `Ptime ->
-             [%expr fun x -> x |> Sqlx.Value.expect_timestamp_opt]
-         | _, `Option (`ID l) ->
-             [%expr
-               fun x ->
-                 x |> Sqlx.Value.expect_int_opt |> Option.map [%e decode_id l]]
-         | _, `Option (`User l) ->
-             [%expr
-               fun x ->
-                 x |> Sqlx.Value.expect_string_opt
-                 |> Option.map [%e decode_user l]]
-         | _, `Option (`Option _) -> assert false
+         | CNormal { c_type; _ } -> (
+             match c_type with
+             | `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int]
+             | `String -> [%expr fun x -> x |> Sqlx.Value.expect_string]
+             | `Ptime -> [%expr fun x -> x |> Sqlx.Value.expect_timestmap]
+             | `ID l ->
+                 [%expr fun x -> x |> Sqlx.Value.expect_int |> [%e decode_id l]]
+             | `User l ->
+                 [%expr
+                   fun x -> x |> Sqlx.Value.expect_string |> [%e decode_user l]]
+             | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int_opt]
+             | `Option `String ->
+                 [%expr fun x -> x |> Sqlx.Value.expect_string_opt]
+             | `Option `Ptime ->
+                 [%expr fun x -> x |> Sqlx.Value.expect_timestamp_opt]
+             | `Option (`ID l) ->
+                 [%expr
+                   fun x ->
+                     x |> Sqlx.Value.expect_int_opt
+                     |> Option.map [%e decode_id l]]
+             | `Option (`User l) ->
+                 [%expr
+                   fun x ->
+                     x |> Sqlx.Value.expect_string_opt
+                     |> Option.map [%e decode_user l]]
+             | `Option (`Option _) -> assert false)
        in
+       let ocaml_name = ocaml_name_of_column c in
+       let sql_name = sql_name_of_column c in
+       let typ = type_of_column c in
        let e =
          [%expr
            [%e evar ~loc x]
-           |> List.assoc [%e estring ~loc c.c_sql_name]
+           |> List.assoc [%e estring ~loc sql_name]
            |> [%e decode]]
        in
-       match c.c_typ with
-       | `Option _ -> (Optional c.c_ocaml_name, e)
-       | _ -> (Labelled c.c_ocaml_name, e)
+       match typ with
+       | `Option _ -> (Optional ocaml_name, e)
+       | _ -> (Labelled ocaml_name, e)
   in
   let args = (Nolabel, [%expr ()]) :: args in
   let body = pexp_apply ~loc [%expr make] args in
@@ -380,47 +399,64 @@ let expand_let_unpack loc schema =
   let body =
     schema.s_columns
     |> List.map @@ fun c ->
-       let encode =
-         let encode_id l =
-           Ldot (in_mod_ident l "ID", "to_int") |> wloc |> pexp_ident ~loc
-         in
-         let encode_user = function
-           | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
-           | _ -> assert false
-         in
-         match c.c_typ with
-         | `Int -> [%expr fun x -> x |> Sqlx.Value.of_int]
-         | `String -> [%expr fun x -> x |> Sqlx.Value.of_string]
-         | `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
-         | `ID l -> [%expr fun x -> x |> [%e encode_id l] |> Sqlx.Value.of_int]
-         | `User l ->
-             [%expr fun x -> x |> [%e encode_user l] |> Sqlx.Value.of_string]
-         | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
-         | `Option `String -> [%expr fun x -> x |> Sqlx.Value.of_string_opt]
-         | `Option `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
-         | `Option (`ID l) ->
-             [%expr
-               fun x ->
-                 x |> Option.map [%e encode_id l] |> Sqlx.Value.of_int_opt]
-         | `Option (`User l) ->
-             [%expr
-               fun x ->
-                 x |> Option.map [%e encode_user l] |> Sqlx.Value.of_string_opt]
-         | `Option (`Option _) -> assert false
-       in
-       pexp_tuple ~loc
-         [
-           estring ~loc c.c_sql_name;
-           pexp_apply ~loc encode
+       match c with
+       | CID ->
+           [%expr
+             "id",
+               [%e evar ~loc x]#id_opt |> Option.map ID.to_int
+               |> Sqlx.Value.of_int_opt]
+       | CCreatedAt ->
+           [%expr
+             "created_at",
+               [%e evar ~loc x]#created_at_opt |> Sqlx.Value.of_timestamp_opt]
+       | CUpdatedAt ->
+           [%expr
+             "updated_at",
+               [%e evar ~loc x]#updated_at_opt |> Sqlx.Value.of_timestamp_opt]
+       | CNormal { c_type; _ } ->
+           let encode =
+             let encode_id l =
+               Ldot (in_mod_ident l "ID", "to_int") |> wloc |> pexp_ident ~loc
+             in
+             let encode_user = function
+               | Lident s -> pexp_ident ~loc (wloc (Lident (s ^ "_to_string")))
+               | _ -> assert false
+             in
+             match c_type with
+             | `Int -> [%expr fun x -> x |> Sqlx.Value.of_int]
+             | `String -> [%expr fun x -> x |> Sqlx.Value.of_string]
+             | `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
+             | `ID l ->
+                 [%expr fun x -> x |> [%e encode_id l] |> Sqlx.Value.of_int]
+             | `User l ->
+                 [%expr
+                   fun x -> x |> [%e encode_user l] |> Sqlx.Value.of_string]
+             | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
+             | `Option `String -> [%expr fun x -> x |> Sqlx.Value.of_string_opt]
+             | `Option `Ptime ->
+                 [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
+             | `Option (`ID l) ->
+                 [%expr
+                   fun x ->
+                     x |> Option.map [%e encode_id l] |> Sqlx.Value.of_int_opt]
+             | `Option (`User l) ->
+                 [%expr
+                   fun x ->
+                     x
+                     |> Option.map [%e encode_user l]
+                     |> Sqlx.Value.of_string_opt]
+             | `Option (`Option _) -> assert false
+           in
+           pexp_tuple ~loc
              [
-               ( Nolabel,
-                 pexp_send ~loc (evar ~loc x)
-                   (wloc
-                      (match c.c_typ with
-                      | `Option _ -> c.c_ocaml_name ^ "_opt"
-                      | _ -> c.c_ocaml_name)) );
-             ];
-         ]
+               estring ~loc (sql_name_of_column c);
+               pexp_apply ~loc encode
+                 [
+                   ( Nolabel,
+                     pexp_send ~loc (evar ~loc x)
+                       (wloc (ocaml_name_of_column c)) );
+                 ];
+             ]
   in
   let body = elist ~loc body in
   [%stri
@@ -429,13 +465,14 @@ let expand_let_unpack loc schema =
       [%e body]]
 
 let expand_let_load_column loc col =
-  let opt, id_t =
-    match col.c_typ with
-    | `ID l -> (false, l)
-    | `Option (`ID l) -> (true, l)
+  let opt, name, id_t =
+    match col with
+    | CNormal { c_ocaml_name; c_type = `ID l; _ } -> (false, c_ocaml_name, l)
+    | CNormal { c_ocaml_name; c_type = `Option (`ID l); _ } ->
+        (true, c_ocaml_name, l)
     | _ -> assert false
   in
-  let column_wo_id = column_name_wo_suffix_id col.c_ocaml_name in
+  let column_wo_id = column_name_wo_suffix_id name in
   let funname = "load_" ^ column_wo_id in
   let select = in_mod_ident id_t "select" |> wloc |> pexp_ident ~loc in
   let x_set_column =
@@ -444,11 +481,7 @@ let expand_let_load_column loc col =
   in
   let x_column_id =
     (* e.g., x#account_id *)
-    pexp_send ~loc [%expr x] (wloc col.c_ocaml_name)
-  in
-  let x_column_id_opt =
-    (* e.g., x#account_id *)
-    pexp_send ~loc [%expr x] (wloc (col.c_ocaml_name ^ "_opt"))
+    pexp_send ~loc [%expr x] (wloc name)
   in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc funname))
@@ -456,39 +489,37 @@ let expand_let_load_column loc col =
       [%expr
         fun (xs : t list) (c : Sqlx.Ppx_runtime.connection) ->
           let ids =
-            [%e
-              if opt then
-                [%expr xs |> List.filter_map (fun x -> [%e x_column_id_opt])]
-              else [%expr xs |> List.map (fun x -> [%e x_column_id])]]
+            xs
+            |> [%e if opt then [%expr List.filter_map] else [%expr List.map]]
+                 (fun x -> [%e x_column_id])
           in
-          match ids with
+          let ( >|= ) x f = Lwt.map f x in
+          (match ids with
           | [] ->
               (* Prevent casting useless 'WHERE FALSE' queries *)
-              Lwt.return_unit
-          | _ ->
-              let ( >|= ) x f = Lwt.map f x in
-              [%e select] ~id:(`In ids) c
-              >|= Sqlx.Ppx_runtime.index_by (fun y -> y#id)
-              >|= fun tbl ->
-              xs
-              |> List.iter @@ fun x ->
-                 [%e
-                   if opt then
-                     [%expr
-                       match [%e x_column_id_opt] with
-                       | None -> ()
-                       | Some y -> [%e x_set_column] (Hashtbl.find tbl y)]
-                   else
-                     [%expr
-                       [%e x_set_column] (Hashtbl.find tbl [%e x_column_id])]]]
+              Lwt.return []
+          | _ -> [%e select] ~id:(`In ids) c)
+          >|= Sqlx.Ppx_runtime.index_by (fun y -> y#id)
+          >|= fun tbl ->
+          xs
+          |> List.iter @@ fun x ->
+             [%e x_set_column]
+               (Some
+                  [%e
+                    if opt then
+                      [%expr
+                        match [%e x_column_id] with
+                        | None -> None
+                        | Some y -> Some (Hashtbl.find tbl y)]
+                    else [%expr Hashtbl.find tbl [%e x_column_id]]])]
 
 let preload_info_of_schema loc schema =
   let preload_spec_src =
     schema.s_columns
     |> List.filter_map @@ fun c ->
-       match c.c_typ with
-       | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
-           let column_wo_id = column_name_wo_suffix_id c.c_ocaml_name in
+       match c with
+       | CNormal { c_type = `ID _ | `Option (`ID _); c_ocaml_name; _ } ->
+           let column_wo_id = column_name_wo_suffix_id c_ocaml_name in
            Some
              ( pexp_variant ~loc column_wo_id None,
                pexp_ident ~loc (wloc (lident ("load_" ^ column_wo_id))) )
@@ -506,11 +537,11 @@ let expand_where loc schema where p =
   schema.s_columns
   |> List.fold_left
        (fun body c ->
-         match c.c_ocaml_name with
-         | "id" | "created_at" | "updated_at" -> body
-         | _ ->
-             let ident = pexp_ident ~loc (wloc (lident c.c_ocaml_name)) in
-             let estr = estring ~loc c.c_sql_name in
+         match c with
+         | CID | CCreatedAt | CUpdatedAt -> body
+         | CNormal { c_ocaml_name; c_sql_name; c_type } ->
+             let ident = pexp_ident ~loc (wloc (lident c_ocaml_name)) in
+             let estr = estring ~loc c_sql_name in
              let where_id l =
                in_mod_ident l "where_id" |> wloc |> pexp_ident ~loc
              in
@@ -522,7 +553,7 @@ let expand_where loc schema where p =
                | _ -> assert false
              in
              let where =
-               match c.c_typ with
+               match c_type with
                | `Int -> [%expr Sqlx.Sql.where_int]
                | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
                | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
@@ -570,9 +601,8 @@ let expand_optionally_labelled_columns loc schema body =
   schema.s_columns
   |> List.fold_left
        (fun body c ->
-         pexp_fun ~loc (Optional c.c_ocaml_name) None
-           (ppat_var ~loc (wloc c.c_ocaml_name))
-           body)
+         let name = ocaml_name_of_column c in
+         pexp_fun ~loc (Optional name) None (ppat_var ~loc (wloc name)) body)
        body
 
 let expand_let_select loc schema =
@@ -590,8 +620,8 @@ let expand_let_select loc schema =
 let expand_let_select_and_load_columns loc schema =
   schema.s_columns
   |> List.filter_map (fun c ->
-         match c.c_typ with
-         | (`ID _ | `Option (`ID _)) when c.c_ocaml_name <> "id" ->
+         match c with
+         | CNormal { c_type = `ID _ | `Option (`ID _); _ } ->
              Some (expand_let_load_column loc c)
          | _ -> None)
   |> List.cons (expand_let_select loc schema)
@@ -635,20 +665,18 @@ let expand_let_get_many loc schema =
                 pexp_apply ~loc [%expr select]
                   (schema.s_columns
                   |> List.map @@ fun c ->
-                     ( Optional c.c_ocaml_name,
+                     let name = ocaml_name_of_column c in
+                     ( Optional name,
                        [%expr
-                         [%e pexp_ident ~loc (wloc (lident c.c_ocaml_name))]
+                         [%e pexp_ident ~loc (wloc (lident name))]
                          |> Option.map @@ fun x ->
                             [%e
-                              match c.c_typ with
-                              | `Option _
-                                when c.c_ocaml_name <> "id"
-                                     && c.c_ocaml_name <> "created_at"
-                                     && c.c_ocaml_name <> "updated_at" ->
+                              match c with
+                              | CNormal { c_type = `Option _; _ } ->
                                   [%expr
-                                    match x with
-                                    | None -> `EqNone
-                                    | Some x -> `Eq x]
+                                    Option.fold ~none:`EqNone
+                                      ~some:(fun x -> `Eq x)
+                                      x]
                               | _ -> [%expr `Eq x]]] ))]
                 ?where ?order_by ?limit ~p ~preload c]]]
 
@@ -663,8 +691,8 @@ let expand_let_get_one loc schema =
                 pexp_apply ~loc [%expr get_many]
                   (schema.s_columns
                   |> List.map @@ fun c ->
-                     ( Optional c.c_ocaml_name,
-                       pexp_ident ~loc (wloc (lident c.c_ocaml_name)) ))]
+                     let name = ocaml_name_of_column c in
+                     (Optional name, pexp_ident ~loc (wloc (lident name))))]
                 ~limit:1 ?where ?order_by ~p ~preload c
               |> Lwt.map Sqlx.Ppx_runtime.expect_single_row]]]
 
