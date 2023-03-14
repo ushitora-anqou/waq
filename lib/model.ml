@@ -39,8 +39,8 @@ module Account = struct
   val shared_inbox_url : string
   val followers_url : string]
 
-  let is_local (x : t) = Option.is_none x#domain_opt
-  let is_remote (x : t) = Option.is_some x#domain_opt
+  let is_local (x : t) = Option.is_none x#domain
+  let is_remote (x : t) = Option.is_some x#domain
 
   let preferred_inbox_url (a : t) =
     match (a#inbox_url, a#shared_inbox_url) with s, "" -> s | _, s -> s
@@ -208,19 +208,19 @@ let () =
   Status.after_create_commit (fun s c ->
       AccountStat.increment ~account_id:s#account_id ~statuses_count:1
         ~last_status_at:s#created_at c;%lwt
-      s#reblog_of_id_opt
+      s#reblog_of_id
       |> Lwt_option.iter (fun status_id ->
              StatusStat.increment ~status_id ~reblogs_count:1 c);%lwt
-      s#in_reply_to_id_opt
+      s#in_reply_to_id
       |> Lwt_option.iter (fun status_id ->
              StatusStat.increment ~status_id ~replies_count:1 c);%lwt
       Lwt.return_unit);
   Status.after_discard_with_reblogs (fun s c ->
       AccountStat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
-      s#reblog_of_id_opt
+      s#reblog_of_id
       |> Lwt_option.iter (fun status_id ->
              StatusStat.decrement ~status_id ~reblogs_count:1 c);%lwt
-      s#in_reply_to_id_opt
+      s#in_reply_to_id
       |> Lwt_option.iter (fun status_id ->
              StatusStat.decrement ~status_id ~replies_count:1 c);%lwt
       Lwt.return_unit)
@@ -358,7 +358,7 @@ module Notification = struct
     ( ns
     |> List.filter_map (fun n ->
            match (n#activity_type, n#typ) with
-           | `Favourite, _ | _, `favourite ->
+           | `Favourite, _ | _, Some `favourite ->
                Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
            | _ -> None)
     |> fun r ->
@@ -366,18 +366,18 @@ module Notification = struct
       >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
       >>= fun r ->
       Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) x) );%lwt
+      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
     (* Load reblogs *)
     ( ns
     |> List.filter_map (fun n ->
            match (n#activity_type, n#typ) with
-           | `Status, _ | _, `reblog ->
+           | `Status, _ | _, Some `reblog ->
                Some (Status.ID.of_int n#activity_id, n#set_target_status)
            | _ -> None)
     |> fun r ->
       Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) x) );%lwt
+      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
     Lwt.return_unit
 end
@@ -511,7 +511,7 @@ let get_local_followers ~account_id c : User.t list Lwt.t =
 let get_remote_followers ~account_id c : Account.t list Lwt.t =
   Follow.get_many ~target_account_id:account_id c
   >|= List.filter_map (fun x ->
-          x#account#domain_opt |> Option.map (fun _ -> x#account))
+          x#account#domain |> Option.map (fun _ -> x#account))
 
 let register_user ~username ~display_name ~email ~password =
   let now = Ptime.now () in

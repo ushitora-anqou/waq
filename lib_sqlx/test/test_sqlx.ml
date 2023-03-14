@@ -78,7 +78,7 @@ module Notification = struct
     ( ns
     |> List.filter_map (fun n ->
            match (n#activity_type, n#typ) with
-           | `Favourite, _ | _, `favourite ->
+           | `Favourite, _ | _, Some `favourite ->
                Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
            | _ -> None)
     |> fun r ->
@@ -86,18 +86,18 @@ module Notification = struct
       >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
       >>= fun r ->
       Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) x) );%lwt
+      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
     (* Load reblogs *)
     ( ns
     |> List.filter_map (fun n ->
            match (n#activity_type, n#typ) with
-           | `Status, _ | _, `reblog ->
+           | `Status, _ | _, Some `reblog ->
                Some (Status.ID.of_int n#activity_id, n#set_target_status)
            | _ -> None)
     |> fun r ->
       Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) x) );%lwt
+      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
     Lwt.return_unit
 end
@@ -199,8 +199,8 @@ let test_account_basic_ops_case1 _ _ =
   ignore a2'#updated_at;
   assert (a1'#username = "user1");
   assert (a2'#username = "user2");
-  assert (a1'#domain_opt = None);
-  assert (a2'#domain_opt = Some "example.com");
+  assert (a1'#domain = None);
+  assert (a2'#domain = Some "example.com");
 
   let%lwt [ a1 ] = Db.e Account.(select ~id:(`Eq a1'#id)) in
   let%lwt [ a2 ] = Db.e Account.(select ~id:(`Eq a2'#id)) in
@@ -213,8 +213,8 @@ let test_account_basic_ops_case1 _ _ =
     = List.sort compare (a12 |> List.map (fun a -> a#id)));
   assert (a1#username = "user1");
   assert (a2#username = "user2");
-  assert (a1#domain_opt = None);
-  assert (a2#domain_opt = Some "example.com");
+  assert (a1#domain = None);
+  assert (a2#domain = Some "example.com");
 
   let%lwt [ a2' ] = Db.e Account.(select ~domain:(`Eq "example.com")) in
   assert (a2#id = a2'#id);
@@ -247,7 +247,7 @@ let test_account_basic_ops_case1 _ _ =
   assert (Ptime.is_earlier a1#updated_at ~than:a1'#updated_at);
   assert (Ptime.is_earlier a2#updated_at ~than:a2'#updated_at);
   assert (a1'#username = "foo");
-  assert (a2'#domain = "bar");
+  assert (a2'#domain = Some "bar");
 
   (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun [ x ] -> assert (x#id = a1#id));%lwt
   Db.e Account.(delete [ a1 ]);%lwt
@@ -286,8 +286,8 @@ let test_status_preload _ _ =
   assert (s1#account#id = a1#id);
   assert (s2#account#id = a2#id);
   assert (s3#account#id = a1#id);
-  assert (s2#in_reply_to#id = s1#id);
-  assert (s3#reblog_of#id = s2#id);
+  assert ((Option.get s2#in_reply_to)#id = s1#id);
+  assert ((Option.get s3#reblog_of)#id = s2#id);
 
   let%lwt [ s3'; s2'; s1' ] =
     Db.e
@@ -300,12 +300,12 @@ let test_status_preload _ _ =
   assert (s1'#account#id = a1#id);
   assert (s2'#account#id = a2#id);
   assert (s3'#account#id = a1#id);
-  assert (s2'#in_reply_to#id = s1#id);
-  assert (s3'#reblog_of#id = s2#id);
+  assert ((Option.get s2'#in_reply_to)#id = s1#id);
+  assert ((Option.get s3'#reblog_of)#id = s2#id);
 
-  let%lwt [ s1 ] = Db.e Status.(select ~id:(`Eq s1#id) ~preload:[]) in
-  assert (Option.is_none s1#in_reply_to_opt);
-  assert (Option.is_none s1#reblog_of_opt);
+  let%lwt [ s1 ] = Db.e Status.(select ~id:(`Eq s1#id)) in
+  assert (Option.is_none s1#in_reply_to);
+  assert (Option.is_none s1#reblog_of);
   let%lwt [ s1' ] = Db.e Status.(update [ s1#with_text "foo modified" ]) in
   assert (s1#id = s1'#id);
   assert (s1'#text <> s1#text);
@@ -345,8 +345,8 @@ let test_notification_target_status _ _ =
   in
   Db.e (Notification.load_target_status [ n1 ]);%lwt
   assert (n1#target_status#id = s2#id);
-  assert (n1#target_status#reblog_of#id = s1#id);
-  assert (n1#target_status#reblog_of#text = "foo");
+  assert ((Option.get n1#target_status#reblog_of)#id = s1#id);
+  assert ((Option.get n1#target_status#reblog_of)#text = "foo");
 
   let%lwt [ f1 ] =
     Db.e Favourite.(insert [ make ~status_id:s1#id ~account_id:a2#id () ])
