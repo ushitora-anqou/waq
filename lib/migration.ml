@@ -21,6 +21,7 @@ let all : (int * (module S)) list =
       (20230212_175600, (module M20230212_175600_create_notifications));
       (20230225_173800, (module M20230225_173800_create_account_stats));
       (20230225_174100, (module M20230225_174100_create_status_stats));
+      (20230315_100000, (module M20230315_100000_add_updated_at_column));
     ]
 
 let get_commited_versions (c : Sqlx.Connection.t) =
