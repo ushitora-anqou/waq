@@ -102,9 +102,9 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
       update [ x ] c >|= function [ x ] -> x | _ -> assert false
     in
     (status :: reblogs
-    |> Lwt_list.iter_p @@ fun s ->
+    |> Lwt_list.iter_s @@ fun s ->
        !after_discard_with_reblogs_callbacks
-       |> Lwt_list.iter_p @@ fun f -> f s c);%lwt
+       |> Lwt_list.iter_s @@ fun f -> f s c);%lwt
     Lwt.return status
 end
 
