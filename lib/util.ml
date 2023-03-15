@@ -6,6 +6,11 @@ let iota n =
   let rec f acc = function 0 -> acc | n -> f ((n - 1) :: acc) (n - 1) in
   f [] n
 
+let index_by f l =
+  let h = Hashtbl.create (List.length l) in
+  l |> List.iter (fun x -> Hashtbl.replace h (f x) x);
+  h
+
 module Lwt_list = struct
   include Lwt_list
 
