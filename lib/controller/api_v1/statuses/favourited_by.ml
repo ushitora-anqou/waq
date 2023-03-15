@@ -10,7 +10,7 @@ let get req =
   let%lwt accts =
     accts
     |> List.map (fun (a : Db.Account.t) -> a#id)
-    |> Entity.serialize_accounts
+    |> Entity.load_accounts_from_db
     >|= List.map Entity.yojson_of_account
   in
   `List accts |> respond_yojson

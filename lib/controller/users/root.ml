@@ -13,7 +13,7 @@ let respond_html (a : Db.Account.t) () =
       @@ account_statuses ~id:a#id ~limit:30 ~max_id:None ~since_id:None
            ~exclude_replies:false)
     >|= List.map (fun (s : Db.Status.t) -> s#id)
-    >>= Entity.serialize_statuses
+    >>= Entity.load_statuses_from_db
   in
   let status_to_Tobj (s : Entity.status) =
     let rec aux (s : Entity.status) =

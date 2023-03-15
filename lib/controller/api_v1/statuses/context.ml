@@ -18,12 +18,12 @@ let get req =
       let%lwt ancestors =
         ancestors
         |> List.map (fun (s : Db.Status.t) -> s#id)
-        |> Entity.serialize_statuses ?self_id
+        |> Entity.load_statuses_from_db ?self_id
       in
       let%lwt descendants =
         descendants
         |> List.map (fun (s : Db.Status.t) -> s#id)
-        |> Entity.serialize_statuses ?self_id
+        |> Entity.load_statuses_from_db ?self_id
       in
       make ~ancestors ~descendants ()
       |> yojson_of_t |> Yojson.Safe.to_string

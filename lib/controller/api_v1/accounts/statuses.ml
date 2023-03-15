@@ -38,7 +38,7 @@ let get req =
   in
   Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
   >|= List.map (fun (s : Db.Status.t) -> s#id)
-  >>= Entity.serialize_statuses ?self_id
+  >>= Entity.load_statuses_from_db ?self_id
   >|= List.map Entity.yojson_of_status
   >|= (fun l -> `List l)
   >>= respond_yojson

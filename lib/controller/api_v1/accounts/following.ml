@@ -26,7 +26,7 @@ let parse_req req =
 let respond_account_list accts =
   accts
   |> List.map (fun (a : Db.Account.t) -> a#id)
-  |> Entity.serialize_accounts
+  |> Entity.load_accounts_from_db
   >|= List.map Entity.yojson_of_account
   >|= (fun l -> `List l)
   >>= respond_yojson

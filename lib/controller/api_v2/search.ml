@@ -46,10 +46,10 @@ let parse_query q =
   let%lwt accounts =
     a1 @ a2
     |> List.map (fun (a : Db.Account.t) -> a#id)
-    |> Entity.serialize_accounts
+    |> Entity.load_accounts_from_db
   in
   let%lwt statuses =
-    s1 |> List.map (fun (s : Db.Status.t) -> s#id) |> Entity.serialize_statuses
+    s1 |> List.map (fun (s : Db.Status.t) -> s#id) |> Entity.load_statuses_from_db
   in
   let hashtags = [] in
   make ~accounts ~statuses ~hashtags () |> Lwt.return

@@ -64,51 +64,43 @@ let in_ints name vals =
         ^ (vals |> List.map string_of_int |> String.concat ", ")
         ^ ")")
 
-let serialize_accounts ?(credential = false)
-    (account_ids : Model.Account.ID.t list) : account list Lwt.t =
-  let%lwt accts = Db.(e Account.(select ~id:(`In account_ids))) in
-  let%lwt stats = Db.(e AccountStat.(select ~account_id:(`In account_ids))) in
+let serialize_account ?(credential = false) (a : Model.Account.t) : account =
+  let source =
+    (* FIXME *)
+    if not credential then None
+    else
+      make_credential_account_source ~privacy:"public" ~sensitive:false ~note:""
+        ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
+      |> Option.some
+  in
+  (* FIXME *)
   let avatar = Config.avatar_url () in
   let header = Config.header_url () in
-  accts
-  |> List.map (fun (a : Db.Account.t) ->
-         let statuses_count, following_count, followers_count, last_status_at =
-           stats
-           |> List.find_map (fun stat ->
-                  if stat#account_id = a#id then
-                    Some
-                      ( stat#statuses_count,
-                        stat#following_count,
-                        stat#followers_count,
-                        stat#last_status_at )
-                  else None)
-           |> Option.value ~default:(0, 0, 0, None)
-         in
-         let last_status_at = last_status_at |> Option.map Ptime.to_rfc3339 in
-         let source =
-           (* FIXME *)
-           if not credential then None
-           else
-             make_credential_account_source ~privacy:"public" ~sensitive:false
-               ~note:"" ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
-             |> Option.some
-         in
-         make_account
-           ~id:(a#id |> Model.Account.ID.to_int |> string_of_int)
-           ~username:a#username ~acct:(acct a#username a#domain) ~url:a#uri
-           ~display_name:a#display_name ~note:"" ~avatar ~avatar_static:avatar
-           ~header ~header_static:header ~locked:false ~fields:[] ~emojis:[]
-           ~bot:false ~group:false ~discoverable:true
-           ~created_at:(Ptime.to_rfc3339 a#created_at)
-           ?last_status_at ~statuses_count ~followers_count ~following_count
-           ?source ())
-  |> Lwt.return
+  make_account
+    ~id:(a#id |> Model.Account.ID.to_int |> string_of_int)
+    ~username:a#username ~acct:(acct a#username a#domain) ~url:a#uri
+    ~display_name:a#display_name ~note:"" ~avatar ~avatar_static:avatar ~header
+    ~header_static:header ~locked:false ~fields:[] ~emojis:[] ~bot:false
+    ~group:false ~discoverable:true
+    ~created_at:(Ptime.to_rfc3339 a#created_at)
+    ?last_status_at:(a#stat#last_status_at |> Option.map Ptime.to_rfc3339)
+    ~statuses_count:a#stat#statuses_count
+    ~followers_count:a#stat#followers_count
+    ~following_count:a#stat#following_count ?source ()
+
+let load_accounts_from_db ?(credential = false)
+    (account_ids : Model.Account.ID.t list) : account list Lwt.t =
+  let%lwt accts = Db.(e Account.(select ~id:(`In account_ids))) in
+  Db.(e @@ Account.load_stat accts) >|= fun () ->
+  let accts = accts |> index_by (fun x -> x#id) in
+  account_ids
+  |> List.map (fun id -> Hashtbl.find accts id |> serialize_account ~credential)
 
 let make_account_from_model (a : Db.Account.t) : account Lwt.t =
-  serialize_accounts [ a#id ] >|= List.hd
+  load_accounts_from_db [ a#id ] >|= List.hd
 
 let make_credential_account_from_model (a : Db.Account.t) : account Lwt.t =
-  serialize_accounts ~credential:true [ a#id ] >|= List.hd
+  load_accounts_from_db ~credential:true [ a#id ] >|= List.hd
 
 (* Entity status *)
 type status_mention = {
@@ -141,121 +133,45 @@ type status = {
 let status_list_to_hash (statuses : status list) =
   statuses |> List.map (fun s -> (s.id, s)) |> List.to_seq |> Hashtbl.of_seq
 
-let serialize_statuses ?(visibility = "public") ?self_id
+let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
+    =
+  let id_to_string x = x |> Model.Status.ID.to_int |> string_of_int in
+  make_status ~id:(s#id |> id_to_string)
+    ~created_at:(Ptime.to_rfc3339 s#created_at)
+    ~visibility ~uri:s#uri ~content:s#text
+    ~account:(serialize_account s#account)
+    ~replies_count:s#stat#replies_count
+    ?in_reply_to_id:(s#in_reply_to_id |> Option.map id_to_string)
+    ?in_reply_to_account_id:
+      (s#in_reply_to
+      |> Option.map @@ fun x ->
+         x#account_id |> Model.Account.ID.to_int |> string_of_int)
+    ?reblog:(s#reblog_of |> Option.map serialize_status)
+    ~reblogs_count:s#stat#reblogs_count
+    ~favourites_count:s#stat#favourites_count ~reblogged:s#reblogged
+    ~favourited:s#favourited ()
+
+let load_statuses_from_db ?visibility ?self_id
     (status_ids : Model.Status.ID.t list) : status list Lwt.t =
-  let id (s : Db.Status.t) = s#id in
-  let account_id (s : Db.Status.t) = s#account_id in
-  let in_reply_to_id (s : Db.Status.t) = s#in_reply_to_id in
-  let status_model_list_to_hash statuses =
-    statuses
-    |> List.map (fun (s : Db.Status.t) -> (s#id, s))
-    |> List.to_seq |> Hashtbl.of_seq
-  in
-  let stat_model_list_to_hash stats =
-    stats
-    |> List.map (fun (s : Db.StatusStat.t) -> (s#status_id, s))
-    |> List.to_seq |> Hashtbl.of_seq
-  in
-  let favourited_list_to_hash favouriteds =
-    favouriteds
-    |> List.map (fun (f : Db.Favourite.t) -> (f#status_id, 1))
-    |> List.to_seq |> Hashtbl.of_seq
-  in
-  let reblogged_list_to_hash rebloggeds =
-    rebloggeds
-    |> List.map (fun (s : Db.Status.t) -> (Option.get s#reblog_of_id, 1))
-    |> List.sort_uniq compare |> List.to_seq |> Hashtbl.of_seq
-  in
-
   let%lwt statuses = Db.(e Status.(select ~id:(`In status_ids))) in
-  let reblogs = List.filter_map (fun s -> s#reblog_of) statuses in
-  let all_status_ids =
-    reblogs @ statuses |> List.map id |> List.sort_uniq compare
+  let statuses_plus_reblogs =
+    statuses @ List.filter_map (fun s -> s#reblog_of) statuses
   in
-  let%lwt stats = Db.(e StatusStat.(select ~status_id:(`In all_status_ids))) in
-  let%lwt accounts =
-    reblogs @ statuses |> List.map account_id |> List.sort_uniq compare
-    |> serialize_accounts
-  in
-  let%lwt favouriteds, rebloggeds =
-    match self_id with
-    | None -> Lwt.return ([], [])
-    | Some account_id ->
-        let%lwt favouriteds =
-          Db.(
-            e
-              Favourite.(
-                select ~account_id:(`Eq account_id)
-                  ~status_id:(`In all_status_ids)))
-        in
-        let%lwt rebloggeds =
-          Db.(
-            e
-              Status.(
-                select ~account_id:(`Eq account_id)
-                  ~reblog_of_id:(`In all_status_ids)))
-        in
-        Lwt.return (favouriteds, rebloggeds)
-  in
-  let%lwt in_reply_to_account_ids_h =
-    let in_reply_to_ids =
-      reblogs @ statuses |> List.filter_map in_reply_to_id
-    in
-    Db.(e Status.(select ~id:(`In in_reply_to_ids)))
-    >|= List.map (fun (s : Db.Status.t) ->
-            (s#id, s#account_id |> Model.Account.ID.to_int |> string_of_int))
-    >|= List.to_seq >|= Hashtbl.of_seq
-  in
-
-  let statuses_h = status_model_list_to_hash (reblogs @ statuses) in
-  let stats_h = stat_model_list_to_hash stats in
-  let accounts_h = account_list_to_hash accounts in
-  let favouriteds_h = favourited_list_to_hash favouriteds in
-  let rebloggeds_h = reblogged_list_to_hash rebloggeds in
-
-  let rec aux status_id =
-    let s = Hashtbl.find statuses_h status_id in
-    let account =
-      Hashtbl.find accounts_h
-        (s#account_id |> Model.Account.ID.to_int |> string_of_int)
-    in
-    let replies_count, reblogs_count, favourites_count =
-      let status_id = s#reblog_of_id |> Option.value ~default:status_id in
-      match Hashtbl.find_opt stats_h status_id with
-      | None -> (0, 0, 0)
-      | Some stat ->
-          (stat#replies_count, stat#reblogs_count, stat#favourites_count)
-    in
-    let in_reply_to_id =
-      s#in_reply_to_id
-      |> Option.map (fun x -> x |> Model.Status.ID.to_int |> string_of_int)
-    in
-    let in_reply_to_account_id =
-      s#in_reply_to_id |> Option.map (Hashtbl.find in_reply_to_account_ids_h)
-    in
-    let reblog = s#reblog_of_id |> Option.map aux in
-    let reblogged =
-      Hashtbl.mem rebloggeds_h status_id
-      ||
-      match (reblog, self_id) with
-      | Some _, Some self_id ->
-          account.id = (self_id |> Model.Account.ID.to_int |> string_of_int)
-      | _ -> false
-    in
-    let favourited = Hashtbl.mem favouriteds_h status_id in
-    make_status
-      ~id:(s#id |> Model.Status.ID.to_int |> string_of_int)
-      ~created_at:(Ptime.to_rfc3339 s#created_at)
-      ~visibility ~uri:s#uri ~content:s#text ~account ~replies_count
-      ?in_reply_to_id ?in_reply_to_account_id ?reblog ~reblogs_count ~reblogged
-      ~favourited ~favourites_count ()
-  in
-
-  status_ids |> List.map aux |> Lwt.return
+  Db.(e @@ Status.load_stat statuses_plus_reblogs);%lwt
+  Db.(
+    e
+    @@ Account.load_stat (statuses_plus_reblogs |> List.map (fun x -> x#account)));%lwt
+  Db.(e @@ load_reblogged ?self_id statuses_plus_reblogs);%lwt
+  Db.(e @@ load_favourited ?self_id statuses_plus_reblogs);%lwt
+  let statuses = statuses |> index_by (fun x -> x#id) in
+  status_ids
+  |> List.map (fun id ->
+         Hashtbl.find statuses id |> serialize_status ?visibility)
+  |> Lwt.return
 
 let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
     status Lwt.t =
-  serialize_statuses ~visibility ?self_id [ s#id ] >|= List.hd
+  load_statuses_from_db ~visibility ?self_id [ s#id ] >|= List.hd
 
 (* Entity relationship *)
 type relationship = {
@@ -326,7 +242,7 @@ let serialize_notifications ?self_id (noti_ids : Model.Notification.ID.t list) :
   let%lwt accounts_h =
     notis
     |> List.map (fun n -> n#from_account_id)
-    |> serialize_accounts >|= account_list_to_hash
+    |> load_accounts_from_db >|= account_list_to_hash
   in
   let%lwt statuses_fav_h =
     let%lwt favs =
@@ -340,7 +256,7 @@ let serialize_notifications ?self_id (noti_ids : Model.Notification.ID.t list) :
       Db.(e Favourite.(select ~id:(`In ids)))
       >|= List.map (fun f -> (f#id, f#status_id))
     in
-    let%lwt statuses = favs |> List.map snd |> serialize_statuses ?self_id in
+    let%lwt statuses = favs |> List.map snd |> load_statuses_from_db ?self_id in
     List.combine (List.map fst favs) statuses
     |> List.to_seq |> Hashtbl.of_seq |> Lwt.return
   in
@@ -351,7 +267,7 @@ let serialize_notifications ?self_id (noti_ids : Model.Notification.ID.t list) :
            | `Status, Some `reblog ->
                Some (n#activity_id |> Model.Status.ID.of_int)
            | _ -> None)
-    |> serialize_statuses ?self_id
+    |> load_statuses_from_db ?self_id
     >|= status_list_to_hash
   in
 
