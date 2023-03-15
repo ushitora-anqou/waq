@@ -223,7 +223,7 @@ module Follow = struct
   val uri : string]
 
   let does_follow ~account_id ~target_account_id c : bool Lwt.t =
-    get_many ~account_id ~target_account_id c >|= ( = ) []
+    get_many ~account_id ~target_account_id c >|= ( <> ) []
 
   let () =
     after_create_commit (fun f c ->
@@ -270,7 +270,7 @@ end
 
 module OAuthAccessToken = struct
   [%%sqlx.schema
-  name "oauth_access_token"
+  name "oauth_access_tokens"
 
   val token : string
   val scopes : string option
