@@ -46,9 +46,11 @@ struct
            if there are any mutual recursive reference. *)
         Lwt.return []
     | _ ->
-        spec
-        |> Lwt_list.iter_s (fun (column, f) ->
-               if List.mem column chosen then f rows c else Lwt.return_unit);%lwt
+        chosen
+        |> Lwt_list.iter_s (fun key ->
+               match List.assoc_opt key spec with
+               | None -> failwith "Can't find a preload function"
+               | Some f -> f rows c);%lwt
         Lwt.return rows
 
   let select id created_at updated_at order_by limit preload_chosen

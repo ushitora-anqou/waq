@@ -67,6 +67,8 @@ module Account = struct
            AccountStat.make ~account_id ~statuses_count:0 ~following_count:0
              ~followers_count:0 ()
 
+  let () = add_field_loader `stat load_stat
+
   module Stat = struct
     let increment ~account_id ?(statuses_count = 0) ?(following_count = 0)
         ?(followers_count = 0) ?last_status_at (c : Sqlx.Connection.t) =
@@ -195,6 +197,10 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
        | None ->
            StatusStat.make ~status_id ~replies_count:0 ~reblogs_count:0
              ~favourites_count:0 ()
+
+  let () =
+    default_preload := [ `in_reply_to; `reblog_of; `account; `stat ];
+    add_field_loader `stat load_stat
 
   module Stat = struct
     let increment ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
@@ -402,6 +408,8 @@ module Notification = struct
       >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
     Lwt.return_unit
+
+  let () = add_field_loader `target_status load_target_status
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id (c : Sqlx.Connection.t) :

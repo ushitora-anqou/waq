@@ -38,7 +38,7 @@ let column_name_wo_suffix_id s =
 
 type column_body = { c_ocaml_name : string; c_sql_name : string; c_type : typ }
 type column = CID | CCreatedAt | CUpdatedAt | CNormal of column_body
-type derived_column = { d_name : string; d_type : typ }
+type derived_column = { d_name : string; (* e.g., account *) d_type : typ }
 type user_defined_field = { u_name : string; u_core_type : core_type }
 
 type schema = {
@@ -513,6 +513,34 @@ let expand_let_load_column loc col =
                         | Some y -> Some (Hashtbl.find tbl y)]
                     else [%expr Hashtbl.find tbl [%e x_column_id]]])]
 
+let init_field_loader_spec loc schema =
+  schema.s_derived
+  |> List.map (fun f -> f.d_name)
+  |> List.map (fun s ->
+         ( pexp_variant ~loc s None,
+           pexp_ident ~loc (wloc (lident ("load_" ^ s))) ))
+  |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
+  |> elist ~loc
+
+let expand_type_loadable_field loc schema =
+  let rtags =
+    (schema.s_derived
+    |> List.map (fun f -> rtag ~loc { txt = f.d_name; loc } true []))
+    @ (schema.s_user_defined
+      |> List.map (fun f -> rtag ~loc { txt = f.u_name; loc } true []))
+  in
+  [%stri type loadable_field = [%t ptyp_variant ~loc rtags Closed None]]
+
+let expand_let_default_preload loc schema =
+  [%stri
+    let default_preload : loadable_field list ref =
+      ref
+        [%e
+          (schema.s_derived |> List.map (fun f -> f.d_name))
+          @ (schema.s_user_defined |> List.map (fun f -> f.u_name))
+          |> List.map (fun n -> pexp_variant ~loc n None)
+          |> elist ~loc]]
+
 let preload_info_of_schema loc schema =
   let preload_spec_src =
     schema.s_columns
@@ -606,15 +634,15 @@ let expand_optionally_labelled_columns loc schema body =
        body
 
 let expand_let_select loc schema =
-  let preload_spec, preload_all = preload_info_of_schema loc schema in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc "select"))
     ~expr:
       (expand_optionally_labelled_columns loc schema
          [%expr
-           fun ?where ?(p = []) ?order_by ?limit ?(preload = [%e preload_all]) c ->
+           fun ?where ?(p = []) ?order_by ?limit ?preload c ->
+             let preload = preload |> Option.value ~default:!default_preload in
              select' id created_at updated_at order_by limit preload c
-               [%e preload_spec]
+               !field_loader_spec
                [%e expand_where loc schema [%expr where] [%expr p]]])
 
 let expand_let_select_and_load_columns loc schema =
@@ -627,17 +655,17 @@ let expand_let_select_and_load_columns loc schema =
   |> List.cons (expand_let_select loc schema)
   |> pstr_value ~loc Recursive
 
-let expand_let_update loc schema =
-  let preload_spec, preload_all = preload_info_of_schema loc schema in
+let expand_let_update loc _schema =
   [%stri
-    let update ?(preload = [%e preload_all]) xs c =
-      update xs c preload [%e preload_spec]]
+    let update ?preload xs c =
+      let preload = preload |> Option.value ~default:!default_preload in
+      update xs c preload !field_loader_spec]
 
-let expand_let_insert loc schema =
-  let preload_spec, preload_all = preload_info_of_schema loc schema in
+let expand_let_insert loc _schema =
   [%stri
-    let insert ?(preload = [%e preload_all]) xs c =
-      insert xs c preload [%e preload_spec]]
+    let insert ?preload xs c =
+      let preload = preload |> Option.value ~default:!default_preload in
+      insert xs c preload !field_loader_spec]
 
 let expand_let_count loc schema =
   [%stri
@@ -649,18 +677,14 @@ let expand_let_count loc schema =
               count id created_at updated_at c
                 [%e expand_where loc schema [%expr where] [%expr p]]]]]
 
-let expand_let_all_derived_columns loc schema =
-  let _preload_spec, preload_all = preload_info_of_schema loc schema in
-  [%stri let all_derived_columns = [%e preload_all]]
-
 let expand_let_get_many loc schema =
   [%stri
     let get_many =
       [%e
         expand_optionally_labelled_columns loc schema
           [%expr
-            fun ?where ?(p = []) ?order_by ?limit
-                ?(preload = all_derived_columns) c ->
+            fun ?where ?(p = []) ?order_by ?limit ?preload c ->
+              let preload = preload |> Option.value ~default:!default_preload in
               [%e
                 pexp_apply ~loc [%expr select]
                   (schema.s_columns
@@ -686,7 +710,8 @@ let expand_let_get_one loc schema =
       [%e
         expand_optionally_labelled_columns loc schema
           [%expr
-            fun ?where ?(p = []) ?order_by ?(preload = all_derived_columns) c ->
+            fun ?where ?(p = []) ?order_by ?preload c ->
+              let preload = preload |> Option.value ~default:!default_preload in
               [%e
                 pexp_apply ~loc [%expr get_many]
                   (schema.s_columns
@@ -718,7 +743,8 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_type_column loc schema]
       [%%i expand_let_columns loc schema]
       [%%i expand_let_string_of_column loc schema]
-      [%%i expand_let_all_derived_columns loc schema]
+      [%%i expand_type_loadable_field loc schema]
+      [%%i expand_let_default_preload loc schema]
       [%%i expand_type_args loc schema]
       [%%i expand_class_model loc schema]
       [%%i expand_let_make loc schema]
@@ -752,6 +778,16 @@ let expand ~ctxt (xs : structure_item list) =
         let after_destroy_commit_callbacks = after_destroy_commit_callbacks
       end)
 
+      let field_loader_spec :
+          (loadable_field
+          * (t list -> Sqlx.Ppx_runtime.connection -> unit Lwt.t))
+          list
+          ref =
+        ref []
+
+      let add_field_loader k v =
+        field_loader_spec := (k, v) :: !field_loader_spec
+
       let select' = select
 
       [%%i expand_let_select_and_load_columns loc schema]
@@ -761,10 +797,14 @@ let expand ~ctxt (xs : structure_item list) =
       [%%i expand_let_get_many loc schema]
       [%%i expand_let_get_one loc schema]
 
-      let save_one ?(preload = all_derived_columns) (x : t) c =
+      let save_one ?preload (x : t) c =
+        let preload = preload |> Option.value ~default:!default_preload in
         match x#id_opt with
         | None -> insert ~preload [ x ] c |> Lwt.map List.hd
         | Some _ -> update ~preload [ x ] c |> Lwt.map List.hd
+
+      let () =
+        field_loader_spec := [%e preload_info_of_schema loc schema |> fst]
     end]
 
 let sqlx_schema =
