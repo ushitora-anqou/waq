@@ -51,7 +51,7 @@ type derived_column = { d_name : string; d_id_ident : id_ident; d_opt : bool }
 type user_defined_field = {
   u_name : string;
   u_core_type : core_type;
-  u_preload_spec : longident option;
+  u_preload_spec : core_type option;
 }
 
 type schema = {
@@ -101,10 +101,7 @@ let parse_val (x : structure_item) =
     match x.attr_name.txt with
     | "not_column" -> `Not_column
     | "preload_spec" ->
-        parse
-          (pstr (pstr_eval (pexp_ident __) drop ^:: nil))
-          x.attr_loc x.attr_payload
-        @@ fun l -> `Preload_spec l
+        parse (ptyp __) x.attr_loc x.attr_payload @@ fun l -> `Preload_spec l
     | "column" -> (
         parse
           (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
@@ -601,9 +598,8 @@ let expand_type_preload_spec loc schema =
       |> List.map (fun f ->
              match f.u_preload_spec with
              | None -> rtag ~loc (wloc f.u_name) true []
-             | Some preload_spec_ident ->
-                 rtag ~loc (wloc f.u_name) false
-                   [ ptyp_constr ~loc (wloc preload_spec_ident) [] ]))
+             | Some preload_spec_core_type ->
+                 rtag ~loc (wloc f.u_name) false [ preload_spec_core_type ]))
   in
   match rtags with
   | [] ->

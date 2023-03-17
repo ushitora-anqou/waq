@@ -71,7 +71,7 @@ module Notification = struct
   val typ : typ_t option [@@column "type"]
 
   val target_status : Status.t
-    [@@not_column] [@@preload_spec Status.preload_spec]]
+    [@@not_column] [@@preload_spec: Status.preload_spec]]
 
   let () =
     loader_target_status :=

@@ -111,8 +111,8 @@ module Status = struct
   val reblog_of_id : ID.t option
   val account_id : Account.ID.t
   val stat : StatusStat.t [@@not_column]
-  val reblogged : bool [@@not_column]
-  val favourited : bool [@@not_column]]
+  val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
+  val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]]
 
   let get_one' = get_one
   let get_many' = get_many
@@ -379,7 +379,7 @@ module Notification = struct
   val typ : typ_t option [@@column "type"]
 
   val target_status : Status.t
-    [@@not_column] [@@preload_spec Status.preload_spec]]
+    [@@not_column] [@@preload_spec: Status.preload_spec]]
 
   let () =
     loader_target_status :=
@@ -547,31 +547,33 @@ let get_remote_followers ~account_id c : Account.t list Lwt.t =
   >|= List.filter_map (fun x ->
           x#account#domain |> Option.map (fun _ -> x#account))
 
-let load_reblogged ?self_id (xs : Status.t list) c =
+let () =
   let open Status in
-  select
-    ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
-    ~reblog_of_id:(`In (xs |> List.map (fun x -> x#id)))
-    c
-  >|= index_by (fun x -> Option.get x#reblog_of_id)
-  >|= fun tbl ->
-  xs
-  |> List.iter @@ fun (x : t) ->
-     (Hashtbl.mem tbl x#id
-     ||
-     match (x#reblog_of, self_id) with
-     | Some _, Some self_id -> x#account_id = self_id
-     | _ -> false)
-     |> Option.some |> x#set_reblogged
-
-let load_favourited ?self_id (xs : Status.t list) c =
-  let open Status in
-  Favourite.select
-    ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
-    ~status_id:(`In (xs |> List.map (fun x -> x#id)))
-    c
-  >|= index_by (fun x -> x#status_id)
-  >|= fun tbl ->
-  xs
-  |> List.iter @@ fun (x : t) ->
-     Hashtbl.mem tbl x#id |> Option.some |> x#set_favourited
+  (loader_reblogged :=
+     fun ?preload:(self_id = None) (xs : Status.t list) c ->
+       select
+         ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
+         ~reblog_of_id:(`In (xs |> List.map (fun x -> x#id)))
+         c
+       >|= index_by (fun x -> Option.get x#reblog_of_id)
+       >|= fun tbl ->
+       xs
+       |> List.iter @@ fun (x : t) ->
+          (Hashtbl.mem tbl x#id
+          ||
+          match (x#reblog_of_id, self_id) with
+          | Some _, Some self_id -> x#account_id = self_id
+          | _ -> false)
+          |> Option.some |> x#set_reblogged);
+  (loader_favourited :=
+     fun ?preload:(self_id = None) (xs : Status.t list) c ->
+       Favourite.select
+         ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
+         ~status_id:(`In (xs |> List.map (fun x -> x#id)))
+         c
+       >|= index_by (fun x -> x#status_id)
+       >|= fun tbl ->
+       xs
+       |> List.iter @@ fun (x : t) ->
+          Hashtbl.mem tbl x#id |> Option.some |> x#set_favourited);
+  ()
