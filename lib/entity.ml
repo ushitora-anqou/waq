@@ -90,7 +90,8 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
 
 let load_accounts_from_db ?(credential = false)
     (account_ids : Model.Account.ID.t list) : account list Lwt.t =
-  Db.(e Account.(select ~id:(`In account_ids))) >|= index_by (fun x -> x#id)
+  Db.(e Account.(select ~id:(`In account_ids) ~preload:[ `stat ]))
+  >|= index_by (fun x -> x#id)
   >|= fun accts ->
   account_ids
   |> List.map (fun id -> Hashtbl.find accts id |> serialize_account ~credential)
@@ -152,7 +153,20 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
 
 let load_statuses_from_db ?visibility ?self_id
     (status_ids : Model.Status.ID.t list) : status list Lwt.t =
-  let%lwt statuses = Db.(e Status.(select ~id:(`In status_ids))) in
+  let%lwt statuses =
+    Db.(
+      e
+        Status.(
+          select ~id:(`In status_ids)
+            ~preload:
+              [
+                `stat;
+                `account [ `stat ];
+                `in_reply_to [];
+                `reblog_of
+                  [ `stat; `account [ `stat ]; `in_reply_to []; `reblog_of [] ];
+              ]))
+  in
   let statuses_plus_reblogs =
     statuses @ List.filter_map (fun s -> s#reblog_of) statuses
   in

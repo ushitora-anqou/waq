@@ -27,7 +27,8 @@ let generate_access_token ~scopes ~resource_owner_id
     ()
   |> save_one |> Db.e
 
-let authenticate_access_token token = Db.(e (OAuthAccessToken.get_one ~token))
+let authenticate_access_token token =
+  Db.(e (OAuthAccessToken.get_one ~token ~preload:[ `resource_owner [] ]))
 
 let authenticate_application uid =
   match%lwt Db.(e (OAuthApplication.get_one ~uid) |> maybe_no_row) with

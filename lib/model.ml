@@ -120,7 +120,7 @@ module Status = struct
   let get_many = get_many ~deleted_at:None
 
   let save_one_with_uri s c =
-    let%lwt s = save_one s c in
+    let%lwt s = save_one s c ~preload:[ `account [] ] in
     let self = s#account in
     let uri = self#uri ^/ "statuses" ^/ string_of_int (ID.to_int s#id) in
     let s = s#with_uri uri in
@@ -543,7 +543,7 @@ let get_local_followers ~account_id c : User.t list Lwt.t =
   User.select ~account_id:(`In ids) c
 
 let get_remote_followers ~account_id c : Account.t list Lwt.t =
-  Follow.get_many ~target_account_id:account_id c
+  Follow.get_many ~target_account_id:account_id c ~preload:[ `account [] ]
   >|= List.filter_map (fun x ->
           x#account#domain |> Option.map (fun _ -> x#account))
 

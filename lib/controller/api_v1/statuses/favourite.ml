@@ -10,7 +10,9 @@ let post req =
   in
 
   let%lwt status =
-    match%lwt Db.e (Model.Status.get_one ~id:status_id) with
+    match%lwt
+      Db.e (Model.Status.get_one ~id:status_id ~preload:[ `account [] ])
+    with
     | exception Sqlx.Error.NoRowFound ->
         Httpq.Server.raise_error_response `Not_found
     | s -> Lwt.return s
