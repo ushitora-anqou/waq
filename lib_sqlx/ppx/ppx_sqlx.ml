@@ -136,7 +136,7 @@ let parse_val (x : structure_item) =
   let attrs = x.pval_attributes |> List.map parse_attr in
   if attrs |> List.mem `Not_column then
     match x.pval_type.ptyp_desc with
-    | Ptyp_constr (_, []) ->
+    | Ptyp_constr _ ->
         `User_defined
           {
             u_name = name;
