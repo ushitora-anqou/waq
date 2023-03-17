@@ -7,6 +7,14 @@ let wloc txt =
 
 type id_ident = { mod_ident : longident option }
 
+let empty_variant_type ~loc name =
+  (* [%stri type name = | ] *)
+  pstr_type ~loc Recursive
+    [
+      type_declaration ~loc ~name:(wloc name) ~params:[] ~cstrs:[]
+        ~kind:(Ptype_variant []) ~private_:Public ~manifest:None;
+    ]
+
 type typ =
   [ `Int
   | `String
@@ -38,8 +46,13 @@ let column_name_wo_suffix_id s =
 
 type column_body = { c_ocaml_name : string; c_sql_name : string; c_type : typ }
 type column = CID | CCreatedAt | CUpdatedAt | CNormal of column_body
-type derived_column = { d_name : string; (* e.g., account *) d_type : typ }
-type user_defined_field = { u_name : string; u_core_type : core_type }
+type derived_column = { d_name : string; d_id_ident : id_ident; d_opt : bool }
+
+type user_defined_field = {
+  u_name : string;
+  u_core_type : core_type;
+  u_preload_spec : longident option;
+}
 
 type schema = {
   s_sql_name : string;
@@ -48,6 +61,10 @@ type schema = {
   s_user_defined : user_defined_field list;
   s_code_path : Code_path.t;
 }
+
+let loadable_fields_of_schema schema =
+  (schema.s_derived |> List.map (fun f -> f.d_name))
+  @ (schema.s_user_defined |> List.map (fun f -> f.u_name))
 
 let ocaml_name_of_column = function
   | CID -> "id"
@@ -83,6 +100,11 @@ let parse_val (x : structure_item) =
   let parse_attr (x : attribute) =
     match x.attr_name.txt with
     | "not_column" -> `Not_column
+    | "preload_spec" ->
+        parse
+          (pstr (pstr_eval (pexp_ident __) drop ^:: nil))
+          x.attr_loc x.attr_payload
+        @@ fun l -> `Preload_spec l
     | "column" -> (
         parse
           (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
@@ -115,7 +137,16 @@ let parse_val (x : structure_item) =
   if attrs |> List.mem `Not_column then
     match x.pval_type.ptyp_desc with
     | Ptyp_constr (_, []) ->
-        `User_defined { u_name = name; u_core_type = x.pval_type }
+        `User_defined
+          {
+            u_name = name;
+            u_core_type = x.pval_type;
+            u_preload_spec =
+              attrs
+              |> List.find_map (function
+                   | `Preload_spec l -> Some l
+                   | _ -> None);
+          }
     | _ -> assert false
   else
     `Column
@@ -148,13 +179,15 @@ let construct_schema ctxt xs =
            Some
              {
                d_name = column_name_wo_suffix_id c_ocaml_name;
-               d_type = `User (in_mod_ident l "t");
+               d_id_ident = l;
+               d_opt = false;
              }
        | CNormal { c_type = `Option (`ID l); c_ocaml_name; _ } ->
            Some
              {
                d_name = column_name_wo_suffix_id c_ocaml_name;
-               d_type = `Option (`User (in_mod_ident l "t"));
+               d_id_ident = l;
+               d_opt = true;
              }
        | _ -> None
   in
@@ -274,10 +307,14 @@ let expand_class_model loc schema =
     in
     let obj_vals_and_methods_for_derived =
       (schema.s_derived
-      |> List.map (fun { d_name; d_type } ->
+      |> List.map (fun { d_name; d_opt; d_id_ident } ->
+             let d_type =
+               if d_opt then `Option (`User (in_mod_ident d_id_ident "t"))
+               else `User (in_mod_ident d_id_ident "t")
+             in
              (d_name, core_type_of_type loc d_type)))
       @ (schema.s_user_defined
-        |> List.map (fun { u_name; u_core_type } -> (u_name, u_core_type)))
+        |> List.map (fun { u_name; u_core_type; _ } -> (u_name, u_core_type)))
       |> List.map @@ fun (name, typ) ->
          let e_name = evar ~loc name in
          [
@@ -487,7 +524,7 @@ let expand_let_load_column loc col =
     ~pat:(ppat_var ~loc (wloc funname))
     ~expr:
       [%expr
-        fun (xs : t list) (c : Sqlx.Ppx_runtime.connection) ->
+        fun ?preload (xs : t list) (c : Sqlx.Ppx_runtime.connection) ->
           let ids =
             xs
             |> [%e if opt then [%expr List.filter_map] else [%expr List.map]]
@@ -498,7 +535,7 @@ let expand_let_load_column loc col =
           | [] ->
               (* Prevent casting useless 'WHERE FALSE' queries *)
               Lwt.return []
-          | _ -> [%e select] ~id:(`In ids) c)
+          | _ -> [%e select] ?preload ~id:(`In ids) c)
           >|= Sqlx.Ppx_runtime.index_by (fun y -> y#id)
           >|= fun tbl ->
           xs
@@ -513,53 +550,76 @@ let expand_let_load_column loc col =
                         | Some y -> Some (Hashtbl.find tbl y)]
                     else [%expr Hashtbl.find tbl [%e x_column_id]]])]
 
-let init_field_loader_spec loc schema =
-  schema.s_derived
-  |> List.map (fun f -> f.d_name)
-  |> List.map (fun s ->
-         ( pexp_variant ~loc s None,
-           pexp_ident ~loc (wloc (lident ("load_" ^ s))) ))
-  |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
-  |> elist ~loc
+let expand_let_load_user_defined_fields loc schema =
+  schema.s_user_defined
+  |> List.map (fun field ->
+         let has_arg = Option.is_some field.u_preload_spec in
+         let loader_name = "loader_" ^ field.u_name in
+         let load_name = "load_" ^ field.u_name in
+         if has_arg then
+           [
+             [%stri
+               let [%p ppat_var ~loc (wloc loader_name)] =
+                 ref (fun ?preload _ _ -> failwith "loader not found")];
+             [%stri
+               let [%p ppat_var ~loc (wloc load_name)] =
+                fun ?preload xs c -> ![%e evar ~loc loader_name] ?preload xs c];
+           ]
+         else
+           [
+             [%stri
+               let [%p ppat_var ~loc (wloc loader_name)] =
+                 ref (fun _ _ -> failwith "loader not found")];
+             [%stri
+               let [%p ppat_var ~loc (wloc load_name)] =
+                fun xs c -> ![%e evar ~loc loader_name] xs c];
+           ])
+  |> List.flatten
 
-let expand_type_loadable_field loc schema =
+let expand_type_user_defined_field loc schema =
+  let rtags =
+    schema.s_user_defined
+    |> List.map (fun f -> rtag ~loc { txt = f.u_name; loc } true [])
+  in
+  match rtags with
+  | [] -> empty_variant_type ~loc "user_defined_field"
+  | _ ->
+      [%stri type user_defined_field = [%t ptyp_variant ~loc rtags Closed None]]
+
+let expand_type_preload_spec loc schema =
   let rtags =
     (schema.s_derived
-    |> List.map (fun f -> rtag ~loc { txt = f.d_name; loc } true []))
+    |> List.map (fun f ->
+           let name = f.d_name in
+           let arg =
+             ptyp_constr ~loc
+               (wloc (in_mod_ident f.d_id_ident "preload_spec"))
+               []
+           in
+           rtag ~loc (wloc name) false [ arg ]))
     @ (schema.s_user_defined
-      |> List.map (fun f -> rtag ~loc { txt = f.u_name; loc } true []))
+      |> List.map (fun f ->
+             match f.u_preload_spec with
+             | None -> rtag ~loc (wloc f.u_name) true []
+             | Some preload_spec_ident ->
+                 rtag ~loc (wloc f.u_name) false
+                   [ ptyp_constr ~loc (wloc preload_spec_ident) [] ]))
   in
-  [%stri type loadable_field = [%t ptyp_variant ~loc rtags Closed None]]
+  match rtags with
+  | [] ->
+      [%stri
+        include struct
+          [%%i empty_variant_type ~loc "preload_spec_elm"]
 
-let expand_let_default_preload loc schema =
-  [%stri
-    let default_preload : loadable_field list ref =
-      ref
-        [%e
-          (schema.s_derived |> List.map (fun f -> f.d_name))
-          @ (schema.s_user_defined |> List.map (fun f -> f.u_name))
-          |> List.map (fun n -> pexp_variant ~loc n None)
-          |> elist ~loc]]
+          type preload_spec = preload_spec_elm list
+        end]
+  | _ ->
+      [%stri
+        type preload_spec_elm = [%t ptyp_variant ~loc rtags Closed None]
+        and preload_spec = preload_spec_elm list]
 
-let preload_info_of_schema loc schema =
-  let preload_spec_src =
-    schema.s_columns
-    |> List.filter_map @@ fun c ->
-       match c with
-       | CNormal { c_type = `ID _ | `Option (`ID _); c_ocaml_name; _ } ->
-           let column_wo_id = column_name_wo_suffix_id c_ocaml_name in
-           Some
-             ( pexp_variant ~loc column_wo_id None,
-               pexp_ident ~loc (wloc (lident ("load_" ^ column_wo_id))) )
-       | _ -> None
-  in
-  let preload_all = preload_spec_src |> List.map fst |> elist ~loc in
-  let preload_spec =
-    preload_spec_src
-    |> List.map (fun (v, f) -> pexp_tuple ~loc [ v; f ])
-    |> elist ~loc
-  in
-  (preload_spec, preload_all)
+let expand_let_default_preload loc _schema =
+  [%stri let default_preload : preload_spec ref = ref []]
 
 let expand_where loc schema where p =
   schema.s_columns
@@ -640,32 +700,77 @@ let expand_let_select loc schema =
       (expand_optionally_labelled_columns loc schema
          [%expr
            fun ?where ?(p = []) ?order_by ?limit ?preload c ->
-             let preload = preload |> Option.value ~default:!default_preload in
-             select' id created_at updated_at order_by limit preload c
-               !field_loader_spec
-               [%e expand_where loc schema [%expr where] [%expr p]]])
+             Lwt.bind
+               (select' id created_at updated_at order_by limit c
+                  [%e expand_where loc schema [%expr where] [%expr p]])
+               (fun xs -> load_fields ?preload xs c |> Lwt.map (fun () -> xs))])
 
-let expand_let_select_and_load_columns loc schema =
+let expand_let_load_fields loc schema =
+  let cases =
+    (schema.s_derived
+    |> List.map @@ fun f ->
+       case
+         ~lhs:
+           (ppat_variant ~loc f.d_name
+              (Some (ppat_var ~loc (wloc "nested_preload"))))
+         ~guard:None
+         ~rhs:
+           [%expr
+             [%e pexp_ident ~loc (wloc (lident ("load_" ^ f.d_name)))]
+               ~preload:nested_preload xs c])
+    @ (schema.s_user_defined
+      |> List.map @@ fun f ->
+         let has_arg = Option.is_some f.u_preload_spec in
+         let loader = pexp_ident ~loc (wloc (lident ("load_" ^ f.u_name))) in
+         case
+           ~lhs:
+             (ppat_variant ~loc f.u_name
+                (if has_arg then Some (ppat_var ~loc (wloc "nested_preload"))
+                else None))
+           ~guard:None
+           ~rhs:
+             (if has_arg then [%expr [%e loader] ~preload:nested_preload xs c]
+             else [%expr [%e loader] xs c]))
+  in
+  value_binding ~loc
+    ~pat:(ppat_var ~loc (wloc "load_fields"))
+    ~expr:
+      (match cases with
+      | [] -> [%expr fun ?preload:_ _ _ -> Lwt.return_unit]
+      | _ ->
+          [%expr
+            fun ?preload xs c ->
+              let preload = preload |> Option.value ~default:!default_preload in
+              match xs with
+              | [] ->
+                  (* Prevent infinite loops. *)
+                  (* NOTE: It will NOT prevent all infinite loops,
+                     if there are any mutual recursive reference. *)
+                  Lwt.return_unit
+              | _ -> preload |> Lwt_list.iter_s [%e pexp_function ~loc cases]])
+
+let expand_let_select_and_load_columns_and_load_fields loc schema =
   schema.s_columns
   |> List.filter_map (fun c ->
          match c with
          | CNormal { c_type = `ID _ | `Option (`ID _); _ } ->
              Some (expand_let_load_column loc c)
          | _ -> None)
+  |> List.cons (expand_let_load_fields loc schema)
   |> List.cons (expand_let_select loc schema)
   |> pstr_value ~loc Recursive
 
 let expand_let_update loc _schema =
   [%stri
     let update ?preload xs c =
-      let preload = preload |> Option.value ~default:!default_preload in
-      update xs c preload !field_loader_spec]
+      Lwt.bind (update xs c) (fun xs ->
+          load_fields ?preload xs c |> Lwt.map (fun () -> xs))]
 
 let expand_let_insert loc _schema =
   [%stri
     let insert ?preload xs c =
-      let preload = preload |> Option.value ~default:!default_preload in
-      insert xs c preload !field_loader_spec]
+      Lwt.bind (insert xs c) (fun xs ->
+          load_fields ?preload xs c |> Lwt.map (fun () -> xs))]
 
 let expand_let_count loc schema =
   [%stri
@@ -684,7 +789,6 @@ let expand_let_get_many loc schema =
         expand_optionally_labelled_columns loc schema
           [%expr
             fun ?where ?(p = []) ?order_by ?limit ?preload c ->
-              let preload = preload |> Option.value ~default:!default_preload in
               [%e
                 pexp_apply ~loc [%expr select]
                   (schema.s_columns
@@ -702,7 +806,7 @@ let expand_let_get_many loc schema =
                                       ~some:(fun x -> `Eq x)
                                       x]
                               | _ -> [%expr `Eq x]]] ))]
-                ?where ?order_by ?limit ~p ~preload c]]]
+                ?where ?order_by ?limit ~p ?preload c]]]
 
 let expand_let_get_one loc schema =
   [%stri
@@ -711,54 +815,54 @@ let expand_let_get_one loc schema =
         expand_optionally_labelled_columns loc schema
           [%expr
             fun ?where ?(p = []) ?order_by ?preload c ->
-              let preload = preload |> Option.value ~default:!default_preload in
               [%e
                 pexp_apply ~loc [%expr get_many]
                   (schema.s_columns
                   |> List.map @@ fun c ->
                      let name = ocaml_name_of_column c in
                      (Optional name, pexp_ident ~loc (wloc (lident name))))]
-                ~limit:1 ?where ?order_by ~p ~preload c
+                ~limit:1 ?where ?order_by ~p ?preload c
               |> Lwt.map Sqlx.Ppx_runtime.expect_single_row]]]
 
 let expand ~ctxt (xs : structure_item list) =
   let loc = !Ast_helper.default_loc in
   let schema = construct_schema ctxt xs in
-  [%stri
-    include struct
-      module ID : sig
-        type t
+  [
+    [%stri
+      include struct
+        module ID : sig
+          type t
 
-        val of_int : int -> t
-        val to_int : t -> int
-      end = struct
-        type t = int
+          val of_int : int -> t
+          val to_int : t -> int
+        end = struct
+          type t = int
 
-        let of_int = Fun.id
-        let to_int = Fun.id
-      end
-
-      let table_name = [%e estring ~loc schema.s_sql_name]
-
-      [%%i expand_type_column loc schema]
-      [%%i expand_let_columns loc schema]
-      [%%i expand_let_string_of_column loc schema]
-      [%%i expand_type_loadable_field loc schema]
-      [%%i expand_let_default_preload loc schema]
-      [%%i expand_type_args loc schema]
-      [%%i expand_class_model loc schema]
-      [%%i expand_let_make loc schema]
-      [%%i expand_let_pack loc schema]
-      [%%i expand_let_unpack loc schema]
-
+          let of_int = Fun.id
+          let to_int = Fun.id
+        end
+      end];
+    [%stri let table_name = [%e estring ~loc schema.s_sql_name]];
+    expand_type_column loc schema;
+    expand_let_columns loc schema;
+    expand_let_string_of_column loc schema;
+    expand_type_user_defined_field loc schema;
+    expand_type_preload_spec loc schema;
+    expand_let_default_preload loc schema;
+    expand_type_args loc schema;
+    expand_class_model loc schema;
+    expand_let_make loc schema;
+    expand_let_pack loc schema;
+    expand_let_unpack loc schema;
+    [%stri
       let after_create_commit_callbacks :
           (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
-        ref []
-
+        ref []];
+    [%stri
       let after_destroy_commit_callbacks :
           (t -> Sqlx.Ppx_runtime.connection -> unit Lwt.t) list ref =
-        ref []
-
+        ref []];
+    [%stri
       include Sqlx.Ppx_runtime.Make (struct
         module ID = ID
 
@@ -776,36 +880,24 @@ let expand ~ctxt (xs : structure_item list) =
         let id x = x#id
         let after_create_commit_callbacks = after_create_commit_callbacks
         let after_destroy_commit_callbacks = after_destroy_commit_callbacks
-      end)
-
-      let field_loader_spec :
-          (loadable_field
-          * (t list -> Sqlx.Ppx_runtime.connection -> unit Lwt.t))
-          list
-          ref =
-        ref []
-
-      let add_field_loader k v =
-        field_loader_spec := (k, v) :: !field_loader_spec
-
-      let select' = select
-
-      [%%i expand_let_select_and_load_columns loc schema]
-      [%%i expand_let_update loc schema]
-      [%%i expand_let_insert loc schema]
-      [%%i expand_let_count loc schema]
-      [%%i expand_let_get_many loc schema]
-      [%%i expand_let_get_one loc schema]
-
-      let save_one ?preload (x : t) c =
-        let preload = preload |> Option.value ~default:!default_preload in
-        match x#id_opt with
-        | None -> insert ~preload [ x ] c |> Lwt.map List.hd
-        | Some _ -> update ~preload [ x ] c |> Lwt.map List.hd
-
-      let () =
-        field_loader_spec := [%e preload_info_of_schema loc schema |> fst]
-    end]
+      end)];
+    [%stri let select' = select];
+  ]
+  @ expand_let_load_user_defined_fields loc schema
+  @ [
+      expand_let_select_and_load_columns_and_load_fields loc schema;
+      expand_let_update loc schema;
+      expand_let_insert loc schema;
+      expand_let_count loc schema;
+      expand_let_get_many loc schema;
+      expand_let_get_one loc schema;
+      [%stri
+        let save_one ?preload (x : t) c =
+          match x#id_opt with
+          | None -> insert ?preload [ x ] c |> Lwt.map List.hd
+          | Some _ -> update ?preload [ x ] c |> Lwt.map List.hd];
+    ]
+  |> pmod_structure ~loc |> include_infos ~loc |> pstr_include ~loc
 
 let sqlx_schema =
   Extension.V3.declare "sqlx.schema" Extension.Context.structure_item

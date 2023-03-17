@@ -53,8 +53,7 @@ struct
                | Some f -> f rows c);%lwt
         Lwt.return rows
 
-  let select id created_at updated_at order_by limit preload_chosen
-      (c : connection) preload_spec cond =
+  let select id created_at updated_at order_by limit (c : connection) cond =
     let sql, param =
       Sql.select ~columns:`Star ~table_name:M.table_name
         ~order_by:
@@ -68,7 +67,6 @@ struct
     in
     c#query sql ~p:(param : Value.t list :> Value.null_t list)
     >|= List.map M.pack
-    >>= preload preload_chosen preload_spec c
 
   let count id created_at updated_at (c : connection) cond =
     let sql, param =
@@ -82,7 +80,7 @@ struct
     c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
     >|= List.hd >|= snd >|= Value.expect_int
 
-  let update (xs : M.t list) (c : connection) preload_chosen preload_spec =
+  let update (xs : M.t list) (c : connection) =
     xs
     |> Lwt_list.map_s (fun x ->
            let sql, param =
@@ -93,9 +91,8 @@ struct
            in
            c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
            >|= M.pack)
-    >>= preload preload_chosen preload_spec c
 
-  let insert (xs : M.t list) (c : connection) preload_chosen preload_spec =
+  let insert (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
     let%lwt rows =
       xs
@@ -112,7 +109,7 @@ struct
     |> Lwt_list.iter_s (fun row ->
            !M.after_create_commit_callbacks
            |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)));%lwt
-    preload preload_chosen preload_spec c rows
+    Lwt.return rows
 
   let delete (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)

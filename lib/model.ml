@@ -50,24 +50,24 @@ module Account = struct
   let preferred_inbox_urls (accts : t list) =
     accts |> List.map preferred_inbox_url |> List.sort_uniq compare
 
-  let load_stat (xs : t list) c =
-    AccountStat.select
-      ~account_id:(`In (xs |> List.map (fun x -> x#id |> ID.to_int)))
-      c
-    >|= index_by (fun x -> x#account_id)
-    >|= fun tbl ->
-    xs
-    |> List.iter @@ fun (x : t) ->
-       let account_id = ID.to_int x#id in
-       x#set_stat @@ Option.some
-       @@
-       match Hashtbl.find_opt tbl account_id with
-       | Some stat -> stat
-       | None ->
-           AccountStat.make ~account_id ~statuses_count:0 ~following_count:0
-             ~followers_count:0 ()
-
-  let () = add_field_loader `stat load_stat
+  let () =
+    loader_stat :=
+      fun xs c ->
+        AccountStat.select
+          ~account_id:(`In (xs |> List.map (fun x -> x#id |> ID.to_int)))
+          c
+        >|= index_by (fun x -> x#account_id)
+        >|= fun tbl ->
+        xs
+        |> List.iter @@ fun (x : t) ->
+           let account_id = ID.to_int x#id in
+           x#set_stat @@ Option.some
+           @@
+           match Hashtbl.find_opt tbl account_id with
+           | Some stat -> stat
+           | None ->
+               AccountStat.make ~account_id ~statuses_count:0 ~following_count:0
+                 ~followers_count:0 ()
 
   module Stat = struct
     let increment ~account_id ?(statuses_count = 0) ?(following_count = 0)
@@ -181,26 +181,26 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
        |> Lwt_list.iter_s @@ fun f -> f s c);%lwt
     Lwt.return status
 
-  let load_stat (xs : t list) c =
-    (* NOTE: This function does NOT set in_reply_to#stat and reblog_of#stat *)
-    let get_id x = x#reblog_of_id |> Option.value ~default:x#id |> ID.to_int in
-    StatusStat.select ~status_id:(`In (xs |> List.map get_id)) c
-    >|= index_by (fun x -> x#status_id)
-    >|= fun tbl ->
-    xs
-    |> List.iter @@ fun (x : t) ->
-       let status_id = get_id x in
-       x#set_stat @@ Option.some
-       @@
-       match Hashtbl.find_opt tbl status_id with
-       | Some stat -> stat
-       | None ->
-           StatusStat.make ~status_id ~replies_count:0 ~reblogs_count:0
-             ~favourites_count:0 ()
-
   let () =
-    default_preload := [ `in_reply_to; `reblog_of; `account; `stat ];
-    add_field_loader `stat load_stat
+    loader_stat :=
+      fun xs c ->
+        (* NOTE: This function does NOT set in_reply_to#stat and reblog_of#stat *)
+        let get_id x =
+          x#reblog_of_id |> Option.value ~default:x#id |> ID.to_int
+        in
+        StatusStat.select ~status_id:(`In (xs |> List.map get_id)) c
+        >|= index_by (fun x -> x#status_id)
+        >|= fun tbl ->
+        xs
+        |> List.iter @@ fun (x : t) ->
+           let status_id = get_id x in
+           x#set_stat @@ Option.some
+           @@
+           match Hashtbl.find_opt tbl status_id with
+           | Some stat -> stat
+           | None ->
+               StatusStat.make ~status_id ~replies_count:0 ~reblogs_count:0
+                 ~favourites_count:0 ()
 
   module Stat = struct
     let increment ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
@@ -377,39 +377,41 @@ module Notification = struct
   val account_id : Account.ID.t
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]
-  val target_status : Status.t [@@not_column]]
 
-  let load_target_status (ns : t list) c =
-    let map_fst_sort_uniq r = r |> List.map fst |> List.sort_uniq compare in
+  val target_status : Status.t
+    [@@not_column] [@@preload_spec Status.preload_spec]]
 
-    (* Load favourites *)
-    ( ns
-    |> List.filter_map (fun n ->
-           match (n#activity_type, n#typ) with
-           | `Favourite, _ | _, Some `favourite ->
-               Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
-           | _ -> None)
-    |> fun r ->
-      Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
-      >>= fun r ->
-      Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+  let () =
+    loader_target_status :=
+      fun ?preload (ns : t list) c ->
+        let map_fst_sort_uniq r = r |> List.map fst |> List.sort_uniq compare in
 
-    (* Load reblogs *)
-    ( ns
-    |> List.filter_map (fun n ->
-           match (n#activity_type, n#typ) with
-           | `Status, _ | _, Some `reblog ->
-               Some (Status.ID.of_int n#activity_id, n#set_target_status)
-           | _ -> None)
-    |> fun r ->
-      Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+        (* Load favourites *)
+        ( ns
+        |> List.filter_map (fun n ->
+               match (n#activity_type, n#typ) with
+               | `Favourite, _ | _, Some `favourite ->
+                   Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
+        |> fun r ->
+          Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
+          >>= fun r ->
+          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
-    Lwt.return_unit
+        (* Load reblogs *)
+        ( ns
+        |> List.filter_map (fun n ->
+               match (n#activity_type, n#typ) with
+               | `Status, _ | _, Some `reblog ->
+                   Some (Status.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
+        |> fun r ->
+          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
-  let () = add_field_loader `target_status load_target_status
+        Lwt.return_unit
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id (c : Sqlx.Connection.t) :

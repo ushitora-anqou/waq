@@ -69,37 +69,41 @@ module Notification = struct
   val account_id : Account.ID.t
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]
-  val target_status : Status.t [@@not_column]]
 
-  let load_target_status (ns : t list) c =
-    let map_fst_sort_uniq r = r |> List.map fst |> List.sort_uniq compare in
+  val target_status : Status.t
+    [@@not_column] [@@preload_spec Status.preload_spec]]
 
-    (* Load favourites *)
-    ( ns
-    |> List.filter_map (fun n ->
-           match (n#activity_type, n#typ) with
-           | `Favourite, _ | _, Some `favourite ->
-               Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
-           | _ -> None)
-    |> fun r ->
-      Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
-      >>= fun r ->
-      Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+  let () =
+    loader_target_status :=
+      fun ?preload ns c ->
+        let map_fst_sort_uniq r = r |> List.map fst |> List.sort_uniq compare in
 
-    (* Load reblogs *)
-    ( ns
-    |> List.filter_map (fun n ->
-           match (n#activity_type, n#typ) with
-           | `Status, _ | _, Some `reblog ->
-               Some (Status.ID.of_int n#activity_id, n#set_target_status)
-           | _ -> None)
-    |> fun r ->
-      Status.select ~id:(`In (map_fst_sort_uniq r)) c
-      >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+        (* Load favourites *)
+        ( ns
+        |> List.filter_map (fun n ->
+               match (n#activity_type, n#typ) with
+               | `Favourite, _ | _, Some `favourite ->
+                   Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
+        |> fun r ->
+          Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
+          >>= fun r ->
+          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
 
-    Lwt.return_unit
+        (* Load reblogs *)
+        ( ns
+        |> List.filter_map (fun n ->
+               match (n#activity_type, n#typ) with
+               | `Status, _ | _, Some `reblog ->
+                   Some (Status.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
+        |> fun r ->
+          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
+          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+
+        Lwt.return_unit
 end
 
 module Db = struct
@@ -271,17 +275,25 @@ let test_status_preload _ _ =
   in
 
   let%lwt [ s1 ] =
-    Db.e Status.(insert [ make ~account_id:a1#id ~text:"foo" () ])
+    Db.e
+      Status.(
+        insert
+          [ make ~account_id:a1#id ~text:"foo" () ]
+          ~preload:[ `account [] ])
   in
   let%lwt [ s2 ] =
     Db.e
       Status.(
-        insert [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1#id () ])
+        insert
+          [ make ~account_id:a2#id ~text:"bar" ~in_reply_to_id:s1#id () ]
+          ~preload:[ `account []; `in_reply_to [] ])
   in
   let%lwt [ s3 ] =
     Db.e
       Status.(
-        insert [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2#id () ])
+        insert
+          [ make ~account_id:a1#id ~text:"baz" ~reblog_of_id:s2#id () ]
+          ~preload:[ `account []; `reblog_of [] ])
   in
   assert (s1#account#id = a1#id);
   assert (s2#account#id = a2#id);
@@ -292,7 +304,10 @@ let test_status_preload _ _ =
   let%lwt [ s3'; s2'; s1' ] =
     Db.e
       Status.(
-        select ~id:(`In [ s1#id; s2#id; s3#id ]) ~order_by:[ (`id, `DESC) ])
+        select
+          ~id:(`In [ s1#id; s2#id; s3#id ])
+          ~order_by:[ (`id, `DESC) ]
+          ~preload:[ `account []; `in_reply_to []; `reblog_of [] ])
   in
   assert (s1#id = s1'#id);
   assert (s2#id = s2'#id);
@@ -303,7 +318,11 @@ let test_status_preload _ _ =
   assert ((Option.get s2'#in_reply_to)#id = s1#id);
   assert ((Option.get s3'#reblog_of)#id = s2#id);
 
-  let%lwt [ s1 ] = Db.e Status.(select ~id:(`Eq s1#id)) in
+  let%lwt [ s1 ] =
+    Db.e
+      Status.(
+        select ~id:(`Eq s1#id) ~preload:[ `in_reply_to []; `reblog_of [] ])
+  in
   assert (Option.is_none s1#in_reply_to);
   assert (Option.is_none s1#reblog_of);
   let%lwt [ s1' ] = Db.e Status.(update [ s1#with_text "foo modified" ]) in
@@ -340,10 +359,10 @@ let test_notification_target_status _ _ =
           [
             make ~activity_id:(Status.ID.to_int s2#id) ~activity_type:`Status
               ~account_id:a1#id ~from_account_id:a2#id ~typ:`reblog ();
-          ])
+          ]
+          ~preload:[ `target_status [ `reblog_of [] ] ])
     [@@warning "-8"]
   in
-  Db.e (Notification.load_target_status [ n1 ]);%lwt
   assert (n1#target_status#id = s2#id);
   assert ((Option.get n1#target_status#reblog_of)#id = s1#id);
   assert ((Option.get n1#target_status#reblog_of)#text = "foo");
@@ -360,9 +379,9 @@ let test_notification_target_status _ _ =
               ~activity_id:(Favourite.ID.to_int f1#id)
               ~activity_type:`Favourite ~account_id:a1#id ~from_account_id:a2#id
               ~typ:`favourite ();
-          ])
+          ]
+          ~preload:[ `target_status [] ])
   in
-  Db.e (Notification.load_target_status [ n2 ]);%lwt
   assert (n2#target_status#id = s1#id);
 
   Lwt.return_unit
