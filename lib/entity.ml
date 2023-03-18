@@ -151,30 +151,31 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     ~favourites_count:s#stat#favourites_count ~reblogged:s#reblogged
     ~favourited:s#favourited ()
 
+let status_preload_spec self_id =
+  [
+    `stat;
+    `account [ `stat ];
+    `in_reply_to [];
+    `reblogged self_id;
+    `favourited self_id;
+    `reblog_of
+      [
+        `stat;
+        `account [ `stat ];
+        `in_reply_to [];
+        `reblog_of [];
+        `reblogged self_id;
+        `favourited self_id;
+      ];
+  ]
+
 let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
     (status_ids : Model.Status.ID.t list) : status list Lwt.t =
   let%lwt statuses =
     Db.(
       e
         Status.(
-          select ~id:(`In status_ids)
-            ~preload:
-              [
-                `stat;
-                `account [ `stat ];
-                `in_reply_to [];
-                `reblogged self_id;
-                `favourited self_id;
-                `reblog_of
-                  [
-                    `stat;
-                    `account [ `stat ];
-                    `in_reply_to [];
-                    `reblog_of [];
-                    `reblogged self_id;
-                    `favourited self_id;
-                  ];
-              ]))
+          select ~id:(`In status_ids) ~preload:(status_preload_spec self_id)))
   in
   let statuses = statuses |> index_by (fun x -> x#id) in
   status_ids
@@ -248,68 +249,27 @@ let notification_model_list_to_hash (notis : Db.Notification.t list) =
   |> List.map (fun (n : Db.Notification.t) -> (n#id, n))
   |> List.to_seq |> Hashtbl.of_seq
 
-let serialize_notifications ?self_id (noti_ids : Model.Notification.ID.t list) :
-    notification list Lwt.t =
-  let%lwt notis = Db.(e Notification.(select ~id:(`In noti_ids))) in
-  let notis_h = notification_model_list_to_hash notis in
-  let%lwt accounts_h =
-    notis
-    |> List.map (fun n -> n#from_account_id)
-    |> load_accounts_from_db >|= account_list_to_hash
-  in
-  let%lwt statuses_fav_h =
-    let%lwt favs =
-      notis
-      |> List.filter_map (fun n ->
-             match (n#activity_type, n#typ) with
-             | `Favourite, Some `favourite ->
-                 Some (n#activity_id |> Model.Favourite.ID.of_int)
-             | _ -> None)
-      |> fun ids ->
-      Db.(e Favourite.(select ~id:(`In ids)))
-      >|= List.map (fun f -> (f#id, f#status_id))
-    in
-    let%lwt statuses = favs |> List.map snd |> load_statuses_from_db ?self_id in
-    List.combine (List.map fst favs) statuses
-    |> List.to_seq |> Hashtbl.of_seq |> Lwt.return
-  in
-  let%lwt statuses_reblog_h =
-    notis
-    |> List.filter_map (fun n ->
-           match (n#activity_type, n#typ) with
-           | `Status, Some `reblog ->
-               Some (n#activity_id |> Model.Status.ID.of_int)
-           | _ -> None)
-    |> load_statuses_from_db ?self_id
-    >|= status_list_to_hash
-  in
+let serialize_notification (n : Model.Notification.t) : notification =
+  make_notification
+    ~id:(n#id |> Model.Notification.ID.to_int |> string_of_int)
+    ~typ:(Option.get n#typ |> Model.Notification.typ_t_to_string)
+    ~created_at:(Ptime.to_rfc3339 n#created_at)
+    ~account:(serialize_account n#from_account)
+    ?status:(n#target_status |> Option.map serialize_status)
+    ()
 
+let load_notifications_from_db ?self_id
+    (noti_ids : Model.Notification.ID.t list) : notification list Lwt.t =
+  Db.(
+    e
+      Notification.(
+        select ~id:(`In noti_ids)
+          ~preload:
+            [
+              `from_account [ `stat ];
+              `target_status (status_preload_spec self_id);
+            ]))
+  >|= index_by (fun x -> x#id)
+  >|= fun notis ->
   noti_ids
-  |> List.map (fun noti_id ->
-         let m = Hashtbl.find notis_h noti_id in
-         let account =
-           Hashtbl.find accounts_h
-             (m#from_account_id |> Model.Account.ID.to_int |> string_of_int)
-         in
-         let status =
-           match (m#activity_type, m#typ) with
-           | `Status, Some `reblog ->
-               Some
-                 (Hashtbl.find statuses_reblog_h (string_of_int m#activity_id))
-           | `Favourite, Some `favourite ->
-               Some
-                 (Hashtbl.find statuses_fav_h
-                    (m#activity_id |> Model.Favourite.ID.of_int))
-           | `Follow, Some `follow -> None
-           | _ -> assert false
-         in
-         make_notification
-           ~id:(m#id |> Model.Notification.ID.to_int |> string_of_int)
-           ~typ:(Option.get m#typ |> Model.Notification.typ_t_to_string)
-           ~created_at:(Ptime.to_rfc3339 m#created_at)
-           ~account ?status ())
-  |> Lwt.return
-
-let make_notification_from_model ?self_id (m : Db.Notification.t) :
-    notification Lwt.t =
-  serialize_notifications ?self_id [ m#id ] >|= List.hd
+  |> List.map (fun id -> Hashtbl.find notis id |> serialize_notification)

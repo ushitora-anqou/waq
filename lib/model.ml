@@ -378,7 +378,7 @@ module Notification = struct
   val from_account_id : Account.ID.t
   val typ : typ_t option [@@column "type"]
 
-  val target_status : Status.t
+  val target_status : Status.t option
     [@@not_column] [@@preload_spec: Status.preload_spec]]
 
   let () =
@@ -386,30 +386,50 @@ module Notification = struct
       fun ?preload (ns : t list) c ->
         let map_fst_sort_uniq r = r |> List.map fst |> List.sort_uniq compare in
 
+        (* Load default values i.e., None *)
+        ns |> List.iter (fun n -> n#set_target_status (Some None));
+
         (* Load favourites *)
-        ( ns
-        |> List.filter_map (fun n ->
-               match (n#activity_type, n#typ) with
-               | `Favourite, _ | _, Some `favourite ->
-                   Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
-               | _ -> None)
-        |> fun r ->
-          Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
-          >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
-          >>= fun r ->
-          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
-          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+        (let targets =
+           ns
+           |> List.filter_map (fun n ->
+                  match (n#activity_type, n#typ) with
+                  | `Favourite, _ | _, Some `favourite ->
+                      Some
+                        (Favourite.ID.of_int n#activity_id, n#set_target_status)
+                  | _ -> None)
+         in
+         let%lwt tbl =
+           Favourite.select ~id:(`In (map_fst_sort_uniq targets)) c
+           >|= index_by (fun x -> x#id)
+         in
+         let targets =
+           targets
+           |> List.map (fun (fav_id, f) ->
+                  ((Hashtbl.find tbl fav_id)#status_id, f))
+         in
+         Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
+         >|= index_by (fun x -> x#id)
+         >|= fun tbl ->
+         targets
+         |> List.iter @@ fun (status_id, f) ->
+            f (Some (Some (Hashtbl.find tbl status_id))));%lwt
 
         (* Load reblogs *)
-        ( ns
-        |> List.filter_map (fun n ->
-               match (n#activity_type, n#typ) with
-               | `Status, _ | _, Some `reblog ->
-                   Some (Status.ID.of_int n#activity_id, n#set_target_status)
-               | _ -> None)
-        |> fun r ->
-          Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
-          >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt
+        (let targets =
+           ns
+           |> List.filter_map (fun n ->
+                  match (n#activity_type, n#typ) with
+                  | `Status, _ | _, Some `reblog ->
+                      Some (Status.ID.of_int n#activity_id, n#set_target_status)
+                  | _ -> None)
+         in
+         Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
+         >|= index_by (fun x -> x#id)
+         >|= fun tbl ->
+         targets
+         |> List.iter (fun (status_id, f) ->
+                f (Some (Some (Hashtbl.find tbl status_id)))));%lwt
 
         Lwt.return_unit
 end

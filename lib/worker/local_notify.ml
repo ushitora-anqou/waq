@@ -24,8 +24,8 @@ let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
              |> save_one)
       in
       let%lwt payload =
-        Entity.make_notification_from_model ~self_id:account_id n
-        >|= Entity.yojson_of_notification >|= Yojson.Safe.to_string
+        Entity.load_notifications_from_db ~self_id:account_id [ n#id ]
+        >|= List.hd >|= Entity.yojson_of_notification >|= Yojson.Safe.to_string
       in
       Streaming.(
         push
