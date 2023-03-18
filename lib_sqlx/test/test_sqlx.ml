@@ -494,6 +494,63 @@ let test_account_derived_ops _ _ =
   Lwt.return_unit
   [@@warning "-8"]
 
+module M1 : Migration.S = struct
+  let up (c : Sqlx.Connection.t) : unit Lwt.t =
+    c#execute {|CREATE TABLE t1 ( col1 INTEGER )|}
+
+  let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t1|}
+end
+
+module M2 : Migration.S = struct
+  let up (c : Sqlx.Connection.t) : unit Lwt.t =
+    c#execute {|CREATE TABLE t2 ( col1 INTEGER )|}
+
+  let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t2|}
+end
+
+let expect_exc_lwt f =
+  try%lwt
+    f |> ignore_lwt;%lwt
+    assert false
+  with _ -> Lwt.return_unit
+
+let test_migration _ _ =
+  let open Migration in
+  let config = { schema_migrations = "schema_migrations" } in
+
+  Db.debug_drop_all_tables_in_db ();%lwt
+  let migrations = [ (1, (module M1 : S)) ] in
+  Db.e (migrate ~config ~migrations);%lwt
+  let%lwt [] = Db.e (fun c -> c#query "SELECT * FROM t1") in
+  Db.e (rollback ~n:1 ~config ~migrations);%lwt
+  expect_exc_lwt (Db.e (fun c -> c#query "SELECT * FROM t1"));%lwt
+  Db.e (migrate ~config ~migrations);%lwt
+
+  Db.debug_drop_all_tables_in_db ();%lwt
+  let migrations = [ (1, (module M1 : S)); (2, (module M2 : S)) ] in
+  Db.e (migrate ~config ~migrations);%lwt
+  let%lwt [] = Db.e (fun c -> c#query "SELECT * FROM t1") in
+  let%lwt [] = Db.e (fun c -> c#query "SELECT * FROM t2") in
+  Db.e (rollback ~n:2 ~config ~migrations);%lwt
+  expect_exc_lwt (Db.e (fun c -> c#query "SELECT * FROM t1"));%lwt
+  expect_exc_lwt (Db.e (fun c -> c#query "SELECT * FROM t2"));%lwt
+  Db.e (migrate ~config ~migrations);%lwt
+
+  Db.debug_drop_all_tables_in_db ();%lwt
+  let migrations =
+    [ (1, (module M1 : S)); (2, (module M1 : S)); (3, (module M2 : S)) ]
+  in
+  expect_exc_lwt (Db.e (migrate ~config ~migrations));%lwt
+  let%lwt [] = Db.e (fun c -> c#query "SELECT * FROM t1") in
+  expect_exc_lwt (Db.e (fun c -> c#query "SELECT * FROM t2"));%lwt
+
+  Db.debug_drop_all_tables_in_db ();%lwt
+  Db.e (migrate ~config ~migrations:[ (1, (module M1 : S)) ]);%lwt
+  expect_exc_lwt (Db.e (migrate ~config ~migrations:[ (2, (module M2 : S)) ]));%lwt
+
+  Lwt.return_unit
+  [@@warning "-8"]
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Db.initialize (Sys.getenv "SQLX_TEST_DB_URL");
@@ -517,4 +574,6 @@ let () =
          ( "*_one, *_many",
            [ Alcotest_lwt.test_case "account" `Quick test_account_derived_ops ]
          );
+         ( "migrate",
+           [ Alcotest_lwt.test_case "migration" `Quick test_migration ] );
        ]
