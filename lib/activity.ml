@@ -45,6 +45,8 @@ and ap_note = {
   in_reply_to : Yojson.Safe.t;
 }
 
+and ap_image = { type_ : string; media_type : string; url : string }
+
 and ap_person = {
   id : string;
   following : string;
@@ -60,6 +62,8 @@ and ap_person = {
   public_key_id : string;
   public_key_owner : string;
   public_key_pem : string;
+  icon : ap_image option;
+  image : ap_image option;
 }
 
 and ap_undo = {
@@ -140,6 +144,7 @@ let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
 let make_delete ~id ~actor ~obj ~to_ : ap_delete = { id; actor; obj; to_ }
 let make_tombstone ~id : ap_tombstone = { id }
 let make_update ~id ~actor ~to_ ~obj : ap_update = { id; actor; to_; obj }
+let make_image ~type_ ~media_type ~url : ap_image = { type_; media_type; url }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
@@ -157,7 +162,7 @@ let make_ordered_collection ~id ~totalItems ~first ?last () :
 
 let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
     ~preferred_username ~name ~summary ~url ~tag ~public_key_id
-    ~public_key_owner ~public_key_pem =
+    ~public_key_owner ~public_key_pem ~icon ~image =
   {
     id;
     following;
@@ -173,6 +178,8 @@ let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
     public_key_id;
     public_key_owner;
     public_key_pem;
+    icon;
+    image;
   }
 
 type property =
@@ -201,6 +208,8 @@ type property =
   | TotalItems
   | First
   | Last
+  | Icon
+  | Image
 
 let string_of_property : property -> string = function
   | Id -> "id"
@@ -228,6 +237,8 @@ let string_of_property : property -> string = function
   | TotalItems -> "totalItems"
   | First -> "first"
   | Last -> "last"
+  | Icon -> "icon"
+  | Image -> "image"
 
 let rec of_yojson (src : Yojson.Safe.t) =
   let expect_assoc = function `Assoc l -> l | _ -> failwith "Expect assoc" in
@@ -244,6 +255,15 @@ let rec of_yojson (src : Yojson.Safe.t) =
   let list name = get name |> expect_list in
   let int name = get name |> expect_int in
   let string_opt name = try Some (get name |> expect_string) with _ -> None in
+  let assoc_opt name = try Some (get name |> expect_assoc) with _ -> None in
+  let image_opt name =
+    assoc_opt name
+    |> Option.map @@ fun x ->
+       make_image
+         ~type_:(x |> List.assoc "type" |> expect_string)
+         ~media_type:(x |> List.assoc "mediaType" |> expect_string)
+         ~url:(x |> List.assoc "url" |> expect_string)
+  in
 
   let id = string Id in
   let typ = string Type in
@@ -328,9 +348,11 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let public_key_pem =
         public_key |> List.assoc "publicKeyPem" |> expect_string
       in
+      let icon = image_opt Icon in
+      let image = image_opt Image in
       make_person ~id ~following ~followers ~inbox ~outbox ~shared_inbox
         ~preferred_username ~name ~summary ~url ~tag ~public_key_id
-        ~public_key_owner ~public_key_pem
+        ~public_key_owner ~public_key_pem ~icon ~image
       |> person
   | "Update" ->
       let actor = string Actor in
@@ -494,7 +516,11 @@ let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
     Account.make ~username:r.preferred_username ~domain
       ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
       ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
-      ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox ()
+      ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox
+      ?avatar_remote_url:(r.icon |> Option.map (fun (x : ap_image) -> x.url))
+      ~header_remote_url:
+        (r.image |> Option.fold ~none:"" ~some:(fun (x : ap_image) -> x.url))
+      ()
     |> Account.save_one |> e)
 
 and account_person (r : ap_person) : Db.Account.t Lwt.t =
@@ -730,11 +756,11 @@ let to_undo ~actor =
         ~obj:a ()
   | _ -> assert false
 
-let person_of_account (a : Db.Account.t) =
+let person_of_account (a : Db.Account.t) : ap_person =
   make_person ~id:a#uri ~following:(a#uri ^/ "following")
     ~followers:a#followers_url ~inbox:a#inbox_url
     ~shared_inbox:a#shared_inbox_url ~outbox:a#outbox_url
     ~preferred_username:a#username ~name:a#display_name
     ~summary:"FIXME: summary is here" ~url:a#uri ~tag:[]
     ~public_key_id:(a#uri ^ "#main-key") ~public_key_owner:a#uri
-    ~public_key_pem:a#public_key
+    ~public_key_pem:a#public_key ~icon:None ~image:None

@@ -16,6 +16,7 @@ let migrations : (int * (module Sqlx.Migration.S)) list =
       (20230225_173800, (module M20230225_173800_create_account_stats));
       (20230225_174100, (module M20230225_174100_create_status_stats));
       (20230315_100000, (module M20230315_100000_add_updated_at_column));
+      (20230318_232000, (module M20230318_232000_add_avatar_header_remote_url));
     ]
 
 let verify_migration_status () =

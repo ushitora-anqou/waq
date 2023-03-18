@@ -73,9 +73,13 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
         ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
       |> Option.some
   in
-  (* FIXME *)
-  let avatar = Config.avatar_url () in
-  let header = Config.header_url () in
+  let avatar =
+    a#avatar_remote_url |> Option.value ~default:(Config.avatar_url ())
+  in
+  let header =
+    if a#header_remote_url = "" then Config.header_url ()
+    else a#header_remote_url
+  in
   make_account
     ~id:(a#id |> Model.Account.ID.to_int |> string_of_int)
     ~username:a#username ~acct:(acct a#username a#domain) ~url:a#uri

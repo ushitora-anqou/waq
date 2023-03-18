@@ -39,6 +39,8 @@ module Account = struct
   val outbox_url : string
   val shared_inbox_url : string
   val followers_url : string
+  val avatar_remote_url : string option
+  val header_remote_url : string
   val stat : AccountStat.t [@@not_column]]
 
   let is_local (x : t) = Option.is_none x#domain
