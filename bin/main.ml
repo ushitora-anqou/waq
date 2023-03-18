@@ -15,7 +15,7 @@ let server () =
   in
 
   Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
-  Db.e Migration.verify_migration_status;%lwt
+  Migration.verify_migration_status ();%lwt
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
 

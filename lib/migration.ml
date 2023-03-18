@@ -1,12 +1,6 @@
-open Lwt.Infix
-open Util
+let config = Sqlx.Migration.{ schema_migrations = "waq_schema_migrations" }
 
-module type S = sig
-  val up : Sqlx.Connection.t -> unit Lwt.t
-  val down : Sqlx.Connection.t -> unit Lwt.t
-end
-
-let all : (int * (module S)) list =
+let migrations : (int * (module Sqlx.Migration.S)) list =
   Migrate.
     [
       (20221230_220000, (module M20221230_220000_create_accounts));
@@ -24,61 +18,10 @@ let all : (int * (module S)) list =
       (20230315_100000, (module M20230315_100000_add_updated_at_column));
     ]
 
-let get_commited_versions (c : Sqlx.Connection.t) =
-  c#execute
-    "CREATE TABLE IF NOT EXISTS waq_schema_migrations ( version BIGINT PRIMARY \
-     KEY )";%lwt
-  c#query "SELECT version FROM waq_schema_migrations ORDER BY version"
-  >|= List.map (function
-        | [ ("version", v) ] -> Sqlx.Value.expect_int v
-        | _ -> assert false)
+let verify_migration_status () =
+  Db.e @@ Sqlx.Migration.verify_migration_status ~config ~migrations
 
-let verify_migration_status c =
-  get_commited_versions c >|= fun versions ->
-  let versions' = all |> List.map fst in
-  if versions <> versions' then
-    failwith "Verification of migration status failed"
-(*
-  (* versions' should be a prefix of versions *)
-  let rec aux = function
-    | [], _ -> true
-    | x :: xs, y :: ys when x = y -> aux (xs, ys)
-    | _ -> false
-  in
-  aux (versions', versions)
-*)
-
-let migrate () =
-  (* FIXME: Not sure it's safe when it's called twice in parallel *)
-  Db.e @@ fun c ->
-  let%lwt versions = get_commited_versions c in
-  let rec aux = function
-    | x :: commited, (y, _) :: cands when x = y -> aux (commited, cands)
-    | [], cands ->
-        cands
-        |> Lwt_list.iter_s (fun (id, (module M : S)) ->
-               Logq.info (fun m -> m "Migrate %d" id);
-               c#execute "BEGIN";%lwt
-               try
-                 M.up c;%lwt
-                 c#execute "INSERT INTO waq_schema_migrations VALUES ($1)"
-                   ~p:[ `Int id ];%lwt
-                 c#execute "COMMIT"
-               with _ -> c#execute "ROLLBACK")
-    | _ -> failwith "Migration error: current status is invalid"
-  in
-  aux (versions, all)
+let migrate () = Db.e @@ Sqlx.Migration.migrate ~config ~migrations
 
 let rollback ?(n = 1) () =
-  Db.e @@ fun c ->
-  let%lwt versions = get_commited_versions c in
-  versions |> List.rev |> List.take n
-  |> Lwt_list.iter_s @@ fun last_v ->
-     let (module M : S) = all |> List.assoc last_v in
-     c#execute "BEGIN";%lwt
-     try
-       M.down c;%lwt
-       c#execute "DELETE FROM waq_schema_migrations WHERE version = $1"
-         ~p:[ `Int last_v ];%lwt
-       c#execute "COMMIT"
-     with _ -> c#execute "ROLLBACK"
+  Db.e @@ Sqlx.Migration.rollback ~config ~migrations ~n
