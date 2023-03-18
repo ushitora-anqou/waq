@@ -6,7 +6,6 @@
    ppx_deriving.enum
    ppx_deriving.make
    ppx_deriving.show
-   ppx_deriving_sql
    ppx_deriving_yaml
    ppx_yojson_conv
    ppx_sqlx))
