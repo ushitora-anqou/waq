@@ -509,6 +509,76 @@ let get_webfinger ~scheme ~domain ~username =
   in
   body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Lwt.return
 
+let model_account_of_person ?original (r : ap_person) : Model.Account.t =
+  let domain = Uri.(r.id |> of_string |> domain) |> Option.some in
+  let avatar_remote_url = r.icon |> Option.map (fun (x : ap_image) -> x.url) in
+  let header_remote_url =
+    r.image |> Option.fold ~none:"" ~some:(fun (x : ap_image) -> x.url)
+  in
+  match original with
+  | None ->
+      Model.Account.make ~username:r.preferred_username ?domain
+        ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
+        ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
+        ~shared_inbox_url:r.shared_inbox ?avatar_remote_url ~header_remote_url
+        ()
+  | Some (a : Model.Account.t) ->
+      let a = Oo.copy a in
+      a#set_username r.preferred_username;
+      a#set_domain domain;
+      a#set_public_key r.public_key_pem;
+      a#set_display_name r.name;
+      a#set_uri r.id;
+      a#set_url (Some r.url);
+      a#set_inbox_url r.inbox;
+      a#set_outbox_url r.outbox;
+      a#set_followers_url r.followers;
+      a#set_shared_inbox_url r.shared_inbox;
+      a#set_avatar_remote_url avatar_remote_url;
+      a#set_header_remote_url header_remote_url;
+      a
+
+let fetch_person by =
+  let get_uri = function
+    | `DomainUser (domain, username) | `UserDomain (username, domain) ->
+        get_webfinger ~scheme:"https" ~domain ~username >|= fun webfinger ->
+        webfinger.links
+        |> List.find_map @@ fun l ->
+           let l = webfinger_link_of_yojson l in
+           if l.rel = "self" then Some l.href else None
+    | `Uri uri ->
+        Uri.(with_fragment (of_string uri) None |> to_string)
+        |> Option.some |> Lwt.return
+  in
+  match%lwt get_uri by with
+  | None -> failwith "Couldn't find person's uri"
+  | Some uri -> (
+      fetch_activity ~uri >|= of_yojson >|= get_person >|= function
+      | None -> failwith "Couldn't parse the activity Person"
+      | Some person -> person)
+
+let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
+  let make_new_account by =
+    let%lwt a = fetch_person by >|= model_account_of_person in
+    Db.(e @@ Account.save_one a)
+  in
+  match by with
+  | `Webfinger (domain, username) -> (
+      match%lwt Db.(e @@ Account.get_one ~domain ~username) with
+      | acc -> Lwt.return acc
+      | exception Sqlx.Error.NoRowFound
+        when domain = None (* Local *) || not resolve ->
+          failwith "Couldn't find the account"
+      | exception Sqlx.Error.NoRowFound ->
+          make_new_account (`DomainUser (Option.get domain, username)))
+  | `Uri uri -> (
+      match%lwt Db.(e @@ Account.get_one ~uri) with
+      | acct -> Lwt.return acct
+      | exception Sqlx.Error.NoRowFound when not resolve ->
+          failwith "Couldn't find the account"
+      | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
+
+(*
 let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
   let domain = Uri.of_string r.id |> Uri.domain in
   let now = Ptime.now () in
@@ -555,6 +625,7 @@ and fetch_account ?(scheme = "https") by =
       match%lwt Db.(e Account.(get_one ~uri)) with
       | acc -> Lwt.return acc
       | exception Sqlx.Error.NoRowFound -> make_new_account uri)
+*)
 
 let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
   let body = Yojson.Safe.to_string body in
@@ -581,7 +652,7 @@ let verify_activity_json req =
   let { key_id; algorithm; headers = signed_headers; signature } =
     parse_signature_header signature
   in
-  let%lwt acct = fetch_account (`Uri key_id) in
+  let%lwt acct = search_account (`Uri key_id) in
   let pub_key = decode_public_key acct#public_key in
   Lwt.return
   @@
@@ -640,7 +711,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
         | _ -> Lwt.return_none)
     | _ -> Lwt.return_none
   in
-  let%lwt attributedTo = fetch_account (`Uri note.attributed_to) in
+  let%lwt attributedTo = search_account (`Uri note.attributed_to) in
   Db.(
     e
       Status.(
@@ -656,7 +727,7 @@ and status_of_note (note : ap_note) : Db.Status.t Lwt.t =
 and status_of_announce' (ann : ap_announce) : Db.Status.t Lwt.t =
   let published, _, _ = Ptime.of_rfc3339 ann.published |> Result.get_ok in
   let%lwt reblogee = fetch_status ~uri:ann.obj in
-  let%lwt account = fetch_account (`Uri ann.actor) in
+  let%lwt account = search_account (`Uri ann.actor) in
   Db.(
     e
       Status.(

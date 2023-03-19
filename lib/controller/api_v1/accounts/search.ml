@@ -21,7 +21,7 @@ let parse_req req =
 let get req =
   let _resolve, username, domain = parse_req req in
   try%lwt
-    let%lwt acc = fetch_account (`Webfinger (domain, username)) in
+    let%lwt acc = search_account (`Webfinger (domain, username)) in
     let acct =
       match acc#domain with
       | None -> username

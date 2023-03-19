@@ -8,7 +8,7 @@ let kick_inbox_follow (req : ap_follow) =
     | s, d when is_my_domain d -> (s, d)
     | _ -> Httpq.Server.raise_error_response `Bad_request
   in
-  let%lwt src = fetch_account (`Uri src) in
+  let%lwt src = search_account (`Uri src) in
   match%lwt Db.e (Model.Account.get_one ~uri:dst) with
   | exception Sqlx.Error.NoRowFound ->
       Httpq.Server.raise_error_response `Bad_request

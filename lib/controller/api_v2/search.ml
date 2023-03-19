@@ -15,17 +15,17 @@ let parse_query_accounts q =
   try%lwt
     match Regex.match_group re q with
     | Ok [ _; username; "" ] ->
-        Activity.fetch_account (`Webfinger (None, username)) >|= fun a ->
+        Activity.search_account (`Webfinger (None, username)) >|= fun a ->
         a :: accts
     | Ok [ _; username; domain ] ->
-        Activity.fetch_account (`Webfinger (Some domain, username)) >|= fun a ->
-        a :: accts
+        Activity.search_account (`Webfinger (Some domain, username))
+        >|= fun a -> a :: accts
     | _ -> Lwt.return accts
   with _ -> Lwt.return accts
 
 let parse_query_uri q =
-  let try_fetch_account uri =
-    match%lwt Activity.fetch_account (`Uri uri) with
+  let try_search_account uri =
+    match%lwt Activity.search_account (`Uri uri) with
     | exception _ -> Lwt.return_none
     | a -> Lwt.return_some a
   in
@@ -35,7 +35,7 @@ let parse_query_uri q =
     | s -> Lwt.return_some s
   in
   let list_of_option x = x |> Option.fold ~none:[] ~some:List.singleton in
-  let%lwt a_opt = try_fetch_account q in
+  let%lwt a_opt = try_search_account q in
   let%lwt s_opt = try_fetch_status q in
   Lwt.return (list_of_option a_opt, list_of_option s_opt)
 
@@ -49,7 +49,9 @@ let parse_query q =
     |> Entity.load_accounts_from_db
   in
   let%lwt statuses =
-    s1 |> List.map (fun (s : Db.Status.t) -> s#id) |> Entity.load_statuses_from_db
+    s1
+    |> List.map (fun (s : Db.Status.t) -> s#id)
+    |> Entity.load_statuses_from_db
   in
   let hashtags = [] in
   make ~accounts ~statuses ~hashtags () |> Lwt.return
