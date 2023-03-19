@@ -329,7 +329,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let outbox = string Outbox in
       let preferred_username = string PreferredUsername in
       let name = string Name in
-      let summary = string Summary in
+      let summary = string_opt Summary |> Option.value ~default:"" in
       let url = string Url in
       let tag =
         (* FIXME
