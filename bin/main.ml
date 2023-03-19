@@ -102,15 +102,22 @@ let user_register () =
 let account_fetch () =
   let open Lwt.Infix in
   let f =
-    Db.(e Account.all)
-    >>= Lwt_list.iter_s @@ fun acct ->
-        match acct#domain with
-        | None -> Lwt.return_unit
-        | Some domain ->
-            Activity.fetch_person (`DomainUser (domain, acct#username))
-            >|= Activity.model_account_of_person ~original:acct
-            >>= Db.(e *< Account.save_one)
-            |> ignore_lwt
+    let%lwt accts = Db.(e Account.all) in
+    accts
+    |> Lwt_list.iteri_s @@ fun i acct ->
+       Logq.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
+       match acct#domain with
+       | None -> Lwt.return_unit
+       | Some domain -> (
+           try%lwt
+             Activity.fetch_person (`DomainUser (domain, acct#username))
+             >|= Activity.model_account_of_person ~original:acct
+             >>= Db.(e *< Account.save_one)
+             |> ignore_lwt
+           with e ->
+             Logq.err (fun m ->
+                 m "Couldn't fetch person: %s" (Printexc.to_string e));
+             Lwt.return_unit)
   in
   Lwt_main.run f
 
