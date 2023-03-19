@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./config:/root/config
+      - ./static:/root/static
     environment:
       WAQ_CONFIG_PATH: /root/config/prod.yml
       OCAMLRUNPARAM: b
