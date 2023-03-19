@@ -440,27 +440,44 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
         in
         l
     | Person r ->
-        [
-          (Id, `String r.id);
-          (Type, `String "Person");
-          (Following, `String r.following);
-          (Followers, `String r.followers);
-          (Inbox, `String r.inbox);
-          (SharedInbox, `String r.shared_inbox);
-          (Outbox, `String r.outbox);
-          (PreferredUsername, `String r.preferred_username);
-          (Name, `String r.name);
-          (Summary, `String r.summary);
-          (Url, `String r.url);
-          (Tag, `List (r.tag |> List.map string));
-          ( PublicKey,
-            `Assoc
-              [
-                ("id", `String r.public_key_id);
-                ("owner", `String r.public_key_owner);
-                ("publicKeyPem", `String r.public_key_pem);
-              ] );
-        ]
+        let l =
+          [
+            (Id, `String r.id);
+            (Type, `String "Person");
+            (Following, `String r.following);
+            (Followers, `String r.followers);
+            (Inbox, `String r.inbox);
+            (SharedInbox, `String r.shared_inbox);
+            (Outbox, `String r.outbox);
+            (PreferredUsername, `String r.preferred_username);
+            (Name, `String r.name);
+            (Summary, `String r.summary);
+            (Url, `String r.url);
+            (Tag, `List (r.tag |> List.map string));
+            ( PublicKey,
+              `Assoc
+                [
+                  ("id", `String r.public_key_id);
+                  ("owner", `String r.public_key_owner);
+                  ("publicKeyPem", `String r.public_key_pem);
+                ] );
+          ]
+        in
+        let image (i : ap_image) =
+          `Assoc
+            [
+              ("type", `String i.type_);
+              ("mediaType", `String i.media_type);
+              ("url", `String i.url);
+            ]
+        in
+        let l =
+          r.icon |> Option.fold ~none:l ~some:(fun i -> (Icon, image i) :: l)
+        in
+        let l =
+          r.image |> Option.fold ~none:l ~some:(fun i -> (Image, image i) :: l)
+        in
+        l
     | Tombstone r -> [ (Id, `String r.id); (Type, `String "Tombstone") ]
     | Undo r ->
         let l =
@@ -779,10 +796,19 @@ let to_undo ~actor =
   | _ -> assert false
 
 let person_of_account (a : Db.Account.t) : ap_person =
+  (* FIXME: icon, image *)
   make_person ~id:a#uri ~following:(a#uri ^/ "following")
     ~followers:a#followers_url ~inbox:a#inbox_url
     ~shared_inbox:a#shared_inbox_url ~outbox:a#outbox_url
     ~preferred_username:a#username ~name:a#display_name
     ~summary:"FIXME: summary is here" ~url:a#uri ~tag:[]
     ~public_key_id:(a#uri ^ "#main-key") ~public_key_owner:a#uri
-    ~public_key_pem:a#public_key ~icon:None ~image:None
+    ~public_key_pem:a#public_key
+    ~icon:
+      (a#avatar_remote_url
+      |> Option.map (fun url ->
+             make_image ~type_:"Image" ~media_type:"image/png" ~url))
+    ~image:
+      (match a#header_remote_url with
+      | "" -> None
+      | url -> Some (make_image ~type_:"Image" ~media_type:"image/png" ~url))
