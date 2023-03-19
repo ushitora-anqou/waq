@@ -15,6 +15,7 @@ let routes =
   Controller.
     [
       get "/" Root.get;
+      get "/system/*" Static.get;
       post "/inbox" Inbox.post;
       scope "/.well-known" Well_known.[
         get "/host-meta" Host_meta.get;

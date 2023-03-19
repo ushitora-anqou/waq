@@ -2,8 +2,11 @@ type t = {
   listen : string; [@default ""]
   server_name : string; [@default ""]
   db_url : string; [@default ""]
-  avatar_url : string; [@default ""]
-  header_url : string; [@default ""]
+  notfound_avatar_url : string; [@default ""]
+  notfound_header_url : string; [@default ""]
+  default_avatar_url : string; [@default ""]
+  default_header_url : string; [@default ""]
+  static_root : string; [@default ""]
 }
 [@@deriving make, yaml]
 
@@ -22,11 +25,22 @@ let is_my_domain s =
   s = !c.server_name
 
 let db_url () = !c.db_url
-let avatar_url () = !c.avatar_url
-let header_url () = !c.header_url
+let static_root () = !c.static_root
 
 let url (l : string list) =
   "https:/" ^ (server_name () :: l |> List.fold_left Util.( ^/ ) "")
+
+let absolute_url (src : string) =
+  let open Uri in
+  let u = of_string src in
+  let u = with_scheme u (Some "https") in
+  let u = with_host u (Some (server_name ())) in
+  to_string u
+
+let default_avatar_url () = absolute_url !c.default_avatar_url
+let default_header_url () = absolute_url !c.default_header_url
+let notfound_avatar_url () = absolute_url !c.notfound_avatar_url
+let notfound_header_url () = absolute_url !c.notfound_header_url
 
 let config_path () =
   Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"

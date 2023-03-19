@@ -41,8 +41,9 @@ let register_user ~username ~display_name ~email ~password =
       Account.(
         make ~username ~public_key ~private_key ~display_name ~uri ~inbox_url
           ~outbox_url ~followers_url ~created_at ~updated_at ~shared_inbox_url
-          ~avatar_remote_url:(Config.avatar_url ())
-          ~header_remote_url:(Config.header_url ()) ()
+          ~header_remote_url:(Config.default_header_url ())
+          ~avatar_remote_url:(Config.default_avatar_url ())
+          ()
         |> save_one)
   in
   let%lwt u =

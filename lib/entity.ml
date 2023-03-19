@@ -74,10 +74,10 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
       |> Option.some
   in
   let avatar =
-    a#avatar_remote_url |> Option.value ~default:(Config.avatar_url ())
+    a#avatar_remote_url |> Option.value ~default:(Config.notfound_avatar_url ())
   in
   let header =
-    if a#header_remote_url = "" then Config.header_url ()
+    if a#header_remote_url = "" then Config.notfound_header_url ()
     else a#header_remote_url
   in
   make_account
