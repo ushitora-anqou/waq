@@ -99,6 +99,21 @@ let user_register () =
   in
   Lwt_main.run f
 
+let account_fetch () =
+  let open Lwt.Infix in
+  let f =
+    Db.(e Account.all)
+    >>= Lwt_list.iter_s @@ fun acct ->
+        match acct#domain with
+        | None -> Lwt.return_unit
+        | Some domain ->
+            Activity.fetch_person (`DomainUser (domain, acct#username))
+            >|= Activity.model_account_of_person ~original:acct
+            >>= Db.(e *< Account.save_one)
+            |> ignore_lwt
+  in
+  Lwt_main.run f
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.(load_file (config_path ()));
@@ -113,4 +128,5 @@ let () =
   | "db:rollback" -> db_rollback ()
   | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
   | "user:register" -> user_register ()
+  | "account:fetch" -> account_fetch ()
   | _ -> server ()

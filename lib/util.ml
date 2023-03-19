@@ -1,6 +1,13 @@
-let ( |.> ) f g x = f x |> g
+let ( |.> ) f g x = g (f x)
+let ( @.@ ) f g x = f (g x)
 let ignore_lwt (p : _ Lwt.t) = Lwt.bind p (fun _ -> Lwt.return_unit)
-let ( |=> ) = Lwt.Infix.( >|= ) (* More intuitive, isn't it? *)
+
+(* Thanks to: https://github.com/camlspotter/ocaml-zippy-tutorial-in-japanese/blob/master/langspec.md#functional-composition *)
+let ( *> ) f g x = g (f x)
+let ( *< ) f g x = f (g x)
+
+(* Thanks to: https://github.com/camlspotter/ocaml-zippy-tutorial-in-japanese/blob/master/langspec.md#haskells- *)
+external ( & ) : ('a -> 'b) -> 'a -> 'b = "%apply"
 
 let iota n =
   let rec f acc = function 0 -> acc | n -> f ((n - 1) :: acc) (n - 1) in
