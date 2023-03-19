@@ -116,17 +116,8 @@ let kick_inbox_delete (req : ap_delete) =
 
 let kick_inbox_update_person (r : ap_person) =
   let%lwt a = Db.e (Model.Account.get_one ~uri:r.id) in
-  a#set_username r.preferred_username;
-  a#set_domain (Some Uri.(of_string r.id |> domain));
-  a#set_public_key r.public_key_pem;
-  a#set_display_name r.name;
-  a#set_uri r.id;
-  a#set_url (Some r.url);
-  a#set_inbox_url r.inbox;
-  a#set_outbox_url r.outbox;
-  a#set_followers_url r.followers;
-  a#set_shared_inbox_url r.shared_inbox;
-  Db.(e @@ Account.update [ a ]) |> ignore_lwt
+  let a = Activity.model_account_of_person ~original:a r in
+  Db.(e @@ Account.save_one a) |> ignore_lwt
 
 (* Recv POST /users/:name/inbox *)
 let post req =

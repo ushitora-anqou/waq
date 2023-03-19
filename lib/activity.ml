@@ -578,55 +578,6 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
           failwith "Couldn't find the account"
       | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
 
-(*
-let rec account_person' (r : ap_person) : Db.Account.t Lwt.t =
-  let domain = Uri.of_string r.id |> Uri.domain in
-  let now = Ptime.now () in
-  Db.(
-    Account.make ~username:r.preferred_username ~domain
-      ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
-      ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
-      ~created_at:now ~updated_at:now ~shared_inbox_url:r.shared_inbox
-      ?avatar_remote_url:(r.icon |> Option.map (fun (x : ap_image) -> x.url))
-      ~header_remote_url:
-        (r.image |> Option.fold ~none:"" ~some:(fun (x : ap_image) -> x.url))
-      ()
-    |> Account.save_one |> e)
-
-and account_person (r : ap_person) : Db.Account.t Lwt.t =
-  match%lwt Db.(e Account.(get_one ~uri:r.id)) with
-  | acc -> Lwt.return acc
-  | exception Sqlx.Error.NoRowFound -> account_person' r
-
-and fetch_account ?(scheme = "https") by =
-  let make_new_account (uri : string) =
-    fetch_activity ~uri >|= of_yojson >|= get_person >|= Option.get
-    >>= account_person'
-  in
-  match by with
-  | `Webfinger (domain, username) -> (
-      match%lwt Db.(e Account.(get_one ~domain ~username)) with
-      | acc -> Lwt.return acc
-      | exception Sqlx.Error.NoRowFound when domain = None (* Local *) ->
-          failwith "Couldn't fetch the account"
-      | exception Sqlx.Error.NoRowFound ->
-          let domain = Option.get domain in
-          let%lwt webfinger = get_webfinger ~scheme ~domain ~username in
-          let href =
-            webfinger.links
-            |> List.find_map (fun l ->
-                   let l = webfinger_link_of_yojson l in
-                   if l.rel = "self" then Some l.href else None)
-            |> Option.get
-          in
-          make_new_account href)
-  | `Uri uri -> (
-      let uri = Uri.(with_fragment (of_string uri) None |> to_string) in
-      match%lwt Db.(e Account.(get_one ~uri)) with
-      | acc -> Lwt.return acc
-      | exception Sqlx.Error.NoRowFound -> make_new_account uri)
-*)
-
 let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
   let body = Yojson.Safe.to_string body in
   let sign =
