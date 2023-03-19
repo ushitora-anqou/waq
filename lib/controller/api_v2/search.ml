@@ -31,7 +31,11 @@ let parse_query_uri q =
   in
   let try_fetch_status uri =
     match%lwt Activity.fetch_status ~uri with
-    | exception _ -> Lwt.return_none
+    | exception e ->
+        Logq.debug (fun m ->
+            m "try_fetch_status failed: %s\n%s" (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        Lwt.return_none
     | s -> Lwt.return_some s
   in
   let list_of_option x = x |> Option.fold ~none:[] ~some:List.singleton in
