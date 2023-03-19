@@ -778,6 +778,8 @@ let expand_let_count loc schema =
               count id created_at updated_at c
                 [%e expand_where loc schema [%expr where] [%expr p]]]]]
 
+let expand_let_all loc _schema = [%stri let all c = select c]
+
 let expand_let_get_many loc schema =
   [%stri
     let get_many =
@@ -885,6 +887,7 @@ let expand ~ctxt (xs : structure_item list) =
       expand_let_update loc schema;
       expand_let_insert loc schema;
       expand_let_count loc schema;
+      expand_let_all loc schema;
       expand_let_get_many loc schema;
       expand_let_get_one loc schema;
       [%stri

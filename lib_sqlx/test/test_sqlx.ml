@@ -242,6 +242,15 @@ let test_account_basic_ops_case1 _ _ =
     >|= fun [ a ] -> assert (a#id = a1#id)
   in
 
+  let%lwt _ =
+    Db.e Account.all >|= fun accts ->
+    assert (
+      accts
+      |> List.map (fun a -> a#id)
+      |> List.sort compare
+      = ([ a1'#id; a2'#id ] |> List.sort compare))
+  in
+
   let%lwt [ a1'; a2' ] =
     Db.e
       Account.(update [ a1#with_username "foo"; a2#with_domain (Some "bar") ])
