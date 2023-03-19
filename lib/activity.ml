@@ -45,7 +45,7 @@ and ap_note = {
   in_reply_to : Yojson.Safe.t;
 }
 
-and ap_image = { type_ : string; media_type : string; url : string }
+and ap_image = { url : string }
 
 and ap_person = {
   id : string;
@@ -144,7 +144,7 @@ let make_like ~id ~actor ~obj : ap_like = { id; actor; obj }
 let make_delete ~id ~actor ~obj ~to_ : ap_delete = { id; actor; obj; to_ }
 let make_tombstone ~id : ap_tombstone = { id }
 let make_update ~id ~actor ~to_ ~obj : ap_update = { id; actor; to_; obj }
-let make_image ~type_ ~media_type ~url : ap_image = { type_; media_type; url }
+let make_image ~url : ap_image = { url }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
@@ -259,10 +259,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
   let image_opt name =
     assoc_opt name
     |> Option.map @@ fun x ->
-       make_image
-         ~type_:(x |> List.assoc "type" |> expect_string)
-         ~media_type:(x |> List.assoc "mediaType" |> expect_string)
-         ~url:(x |> List.assoc "url" |> expect_string)
+       make_image ~url:(x |> List.assoc "url" |> expect_string)
   in
 
   let id = string Id in
@@ -464,12 +461,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           ]
         in
         let image (i : ap_image) =
-          `Assoc
-            [
-              ("type", `String i.type_);
-              ("mediaType", `String i.media_type);
-              ("url", `String i.url);
-            ]
+          `Assoc [ ("type", `String "Image"); ("url", `String i.url) ]
         in
         let l =
           r.icon |> Option.fold ~none:l ~some:(fun i -> (Icon, image i) :: l)
@@ -796,7 +788,6 @@ let to_undo ~actor =
   | _ -> assert false
 
 let person_of_account (a : Db.Account.t) : ap_person =
-  (* FIXME: icon, image *)
   make_person ~id:a#uri ~following:(a#uri ^/ "following")
     ~followers:a#followers_url ~inbox:a#inbox_url
     ~shared_inbox:a#shared_inbox_url ~outbox:a#outbox_url
@@ -804,11 +795,8 @@ let person_of_account (a : Db.Account.t) : ap_person =
     ~summary:"FIXME: summary is here" ~url:a#uri ~tag:[]
     ~public_key_id:(a#uri ^ "#main-key") ~public_key_owner:a#uri
     ~public_key_pem:a#public_key
-    ~icon:
-      (a#avatar_remote_url
-      |> Option.map (fun url ->
-             make_image ~type_:"Image" ~media_type:"image/png" ~url))
+    ~icon:(a#avatar_remote_url |> Option.map (fun url -> make_image ~url))
     ~image:
       (match a#header_remote_url with
       | "" -> None
-      | url -> Some (make_image ~type_:"Image" ~media_type:"image/png" ~url))
+      | url -> Some (make_image ~url))
