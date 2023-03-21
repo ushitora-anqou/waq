@@ -1,7 +1,7 @@
 open Helper
 
 type t = { ancestors : Entity.status list; descendants : Entity.status list }
-[@@deriving make, yojson]
+[@@deriving make, yojson_of]
 
 let get req =
   let%lwt self_id = may_authenticate_user req in

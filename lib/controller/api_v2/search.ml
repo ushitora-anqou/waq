@@ -7,7 +7,7 @@ type t = {
   statuses : Entity.status list;
   hashtags : string (* FIXME: dummy *) list;
 }
-[@@deriving make, yojson]
+[@@deriving make, yojson_of]
 
 let parse_query_accounts q =
   let accts = [] in

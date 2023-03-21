@@ -35,6 +35,15 @@ and ap_create = {
 
 and ap_follow = { id : string; actor : string; obj : string }
 
+and ap_document = {
+  media_type : string;
+  url : string;
+  name : string option;
+  blurhash : string;
+  width : int;
+  height : int;
+}
+
 and ap_note = {
   id : string;
   published : string;
@@ -43,6 +52,7 @@ and ap_note = {
   cc : string list;
   content : string;
   in_reply_to : Yojson.Safe.t;
+  attachment : t list;
 }
 
 and ap_image = { url : string }
@@ -98,6 +108,7 @@ and ap_update = { id : string; actor : string; to_ : string list; obj : t }
 and t =
   | Accept of ap_accept
   | Announce of ap_announce
+  | Document of ap_document
   | Create of ap_create
   | Delete of ap_delete
   | Follow of ap_follow
@@ -116,6 +127,7 @@ let get_accept = function Accept r -> Some r | _ -> None
 let get_announce = function Announce r -> Some r | _ -> None
 let get_create = function Create r -> Some r | _ -> None
 let get_delete = function Delete r -> Some r | _ -> None
+let get_document = function Document r -> Some r | _ -> None
 let get_follow = function Follow r -> Some r | _ -> None
 let get_like = function Like r -> Some r | _ -> None
 let get_note = function Note r -> Some r | _ -> None
@@ -129,6 +141,7 @@ let accept r = Accept r
 let announce r = Announce r
 let create r = Create r
 let delete r = Delete r
+let document r = Document r
 let follow r = Follow r
 let like r = Like r
 let note r = Note r
@@ -146,15 +159,19 @@ let make_tombstone ~id : ap_tombstone = { id }
 let make_update ~id ~actor ~to_ ~obj : ap_update = { id; actor; to_; obj }
 let make_image ~url : ap_image = { url }
 
+let make_document ~media_type ~url ~name ~blurhash ~width ~height : ap_document
+    =
+  { media_type; url; name; blurhash; width; height }
+
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
   { id; actor; published; to_; cc; obj }
 
 let make_create ~id ~actor ~published ~to_ ~cc ~obj : ap_create =
   { id; actor; published; to_; cc; obj }
 
-let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to :
-    ap_note =
-  { id; published; attributed_to; to_; cc; content; in_reply_to }
+let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
+    ~attachment : ap_note =
+  { id; published; attributed_to; to_; cc; content; in_reply_to; attachment }
 
 let make_ordered_collection ~id ~totalItems ~first ?last () :
     ap_ordered_collection =
@@ -210,6 +227,11 @@ type property =
   | Last
   | Icon
   | Image
+  | MediaType
+  | Blurhash
+  | Width
+  | Height
+  | Attachment
 
 let string_of_property : property -> string = function
   | Id -> "id"
@@ -239,6 +261,11 @@ let string_of_property : property -> string = function
   | Last -> "last"
   | Icon -> "icon"
   | Image -> "image"
+  | MediaType -> "mediaType"
+  | Blurhash -> "blurhash"
+  | Width -> "width"
+  | Height -> "height"
+  | Attachment -> "attachment"
 
 let rec of_yojson (src : Yojson.Safe.t) =
   let expect_assoc = function `Assoc l -> l | _ -> failwith "Expect assoc" in
@@ -261,14 +288,16 @@ let rec of_yojson (src : Yojson.Safe.t) =
     |> Option.map @@ fun x ->
        make_image ~url:(x |> List.assoc "url" |> expect_string)
   in
+  let list_opt name = try Some (list name) with _ -> None in
 
-  let id = string Id in
   let typ = string Type in
   match typ with
   | "Accept" ->
+      let id = string Id in
       make_accept ~id ~actor:(get Actor) ~obj:(get Object |> of_yojson)
       |> of_accept
   | "Announce" ->
+      let id = string Id in
       let published = string Published in
       let to_ = list To |> List.map expect_string in
       let cc = list Cc |> List.map expect_string in
@@ -276,42 +305,65 @@ let rec of_yojson (src : Yojson.Safe.t) =
       make_announce ~id ~actor:(string Actor) ~published ~to_ ~cc ~obj
       |> announce
   | "Delete" ->
+      let id = string Id in
       let actor = string Actor in
       let to_ = list To |> List.map expect_string in
       let obj = get Object |> of_yojson in
       make_delete ~id ~actor ~to_ ~obj |> delete
-  | "Tombstone" -> make_tombstone ~id |> tombstone
+  | "Tombstone" ->
+      let id = string Id in
+      make_tombstone ~id |> tombstone
   | "Follow" ->
+      let id = string Id in
       make_follow ~id ~actor:(string Actor) ~obj:(string Object) |> follow
   | "Undo" ->
+      let id = string Id in
       make_undo ~id ~actor:(get Actor)
         ~obj:(get Object |> of_yojson)
         ?to_:(try Some (list To |> List.map expect_string) with _ -> None)
         ()
       |> undo
   | "Create" ->
+      let id = string Id in
       let published = string Published in
       let to_ = list To |> List.map expect_string in
       let cc = list Cc |> List.map expect_string in
       let obj = get Object |> of_yojson in
       make_create ~id ~actor:(get Actor) ~published ~to_ ~cc ~obj |> create
-  | "Like" -> make_like ~id ~actor:(string Actor) ~obj:(string Object) |> like
+  | "Like" ->
+      let id = string Id in
+      make_like ~id ~actor:(string Actor) ~obj:(string Object) |> like
+  | "Document" ->
+      let media_type = string MediaType in
+      let url = string Url in
+      let name = string_opt Name in
+      let blurhash = string Blurhash in
+      let width = int Width in
+      let height = int Height in
+      make_document ~media_type ~url ~name ~blurhash ~width ~height |> document
   | "Note" ->
+      let id = string Id in
       let published = string Published in
       let to_ = list To |> List.map expect_string in
       let cc = list Cc |> List.map expect_string in
       let attributed_to = string AttributedTo in
       let content = string Content in
       let in_reply_to = get InReplyTo in
+      let attachment =
+        list_opt Attachment |> Option.value ~default:[] |> List.map of_yojson
+      in
       make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
+        ~attachment
       |> note
   | "OrderedCollection" ->
+      let id = string Id in
       let totalItems = int TotalItems in
       let first = string First in
       let last = string_opt Last in
       make_ordered_collection ~id ~totalItems ~first ?last ()
       |> ordered_collection
   | "Person" ->
+      let id = string Id in
       let following = string Following in
       let followers = string Followers in
       let inbox = string Inbox in
@@ -352,6 +404,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
         ~public_key_owner ~public_key_pem ~icon ~image
       |> person
   | "Update" ->
+      let id = string Id in
       let actor = string Actor in
       let to_ = list To |> List.map expect_string in
       let obj = get Object |> of_yojson in
@@ -422,6 +475,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Cc, `List (r.cc |> List.map string));
           (Content, `String r.content);
           (InReplyTo, r.in_reply_to);
+          (Attachment, `List (r.attachment |> List.map to_yojson));
         ]
     | OrderedCollection r ->
         let l =
@@ -493,6 +547,16 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Actor, `String r.actor);
           (To, `List (r.to_ |> List.map string));
           (Object, to_yojson r.obj);
+        ]
+    | Document r ->
+        [
+          (Type, `String "Document");
+          (MediaType, `String r.media_type);
+          (Url, `String r.url);
+          (Name, r.name |> Option.fold ~none:`Null ~some:(fun s -> `String s));
+          (Blurhash, `String r.blurhash);
+          (Width, `Int r.width);
+          (Height, `Int r.height);
         ]
   in
   let l = l |> List.map (fun (k, v) -> (string_of_property k, v)) in
@@ -657,6 +721,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
     attributed_to = self#uri;
     content = s#text;
     in_reply_to;
+    attachment = [] (* FIXME *);
   }
   |> Lwt.return
 
@@ -673,12 +738,30 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
     | _ -> Lwt.return_none
   in
   let%lwt attributedTo = search_account (`Uri note.attributed_to) in
-  Db.(
-    e
-      Status.(
-        make ~uri:note.id ~text:note.content ~created_at:published
-          ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id ()
-        |> save_one))
+
+  let%lwt status =
+    Db.(
+      e
+        Status.(
+          make ~uri:note.id ~text:note.content ~created_at:published
+            ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id ()
+          |> save_one))
+  in
+
+  (* Handle attachments *)
+  note.attachment
+  |> List.filter_map get_document
+  |> Lwt_list.iter_p (fun (d : ap_document) ->
+         Db.(
+           e
+             MediaAttachment.(
+               make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
+                 ~status_id:(Model.Status.ID.to_int status#id)
+                 ()
+               |> save_one))
+         |> ignore_lwt);%lwt
+
+  Lwt.return status
 
 and status_of_note (note : ap_note) : Db.Status.t Lwt.t =
   match%lwt Db.(e Status.(get_one ~uri:note.id)) with

@@ -106,6 +106,88 @@ let make_account_from_model (a : Db.Account.t) : account Lwt.t =
 let make_credential_account_from_model (a : Db.Account.t) : account Lwt.t =
   load_accounts_from_db ~credential:true [ a#id ] >|= List.hd
 
+(* Entity MediaAttachment *)
+type media_attachment_meta = MAImage
+(* of {
+     original_width : int;
+     original_height : int;
+     original_size : string;
+     original_aspect : float;
+     small_width : int;
+     small_height : int;
+     small_size : string;
+     small_aspect : float;
+     focus_x : float;
+     focus_y : float;
+   }*)
+
+type media_attachment = {
+  id : string;
+  url : string;
+  preview_url : string;
+  remote_url : string option;
+  meta : media_attachment_meta;
+  description : string option;
+  blurhash : string;
+}
+[@@deriving make]
+
+let yojson_of_media_attachment (ma : media_attachment) : Yojson.Safe.t =
+  let l =
+    [
+      ("id", `String ma.id);
+      ("url", `String ma.url);
+      ("preview_url", `String ma.preview_url);
+      ( "remote_url",
+        ma.remote_url |> Option.fold ~none:`Null ~some:(fun s -> `String s) );
+      ( "description",
+        ma.description |> Option.fold ~none:`Null ~some:(fun s -> `String s) );
+      ("blurhash", `String ma.blurhash);
+    ]
+  in
+  let l =
+    ("type", `String "image") :: ("meta", `Assoc []) :: l
+    (*
+    match ma.meta with
+    | MAImage r ->
+        let meta =
+          [
+            ( "original",
+              `Assoc
+                [
+                  ("width", `Int r.original_width);
+                  ("height", `Int r.original_height);
+                  ("size", `String r.original_size);
+                  ("aspect", `Float r.original_aspect);
+                ] );
+            ( "small",
+              `Assoc
+                [
+                  ("width", `Int r.small_width);
+                  ("height", `Int r.small_height);
+                  ("size", `String r.small_size);
+                  ("aspect", `Float r.small_aspect);
+                ] );
+            ( "focus",
+              `Assoc [ ("x", `Float r.focus_x); ("y", `Float r.focus_y) ] );
+          ]
+        in
+        ("type", `String "image") :: ("meta", `Assoc meta) :: l
+        *)
+  in
+  `Assoc l
+
+let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
+    =
+  match ma#type_ with
+  | 0 ->
+      let blurhash = "LlMF%n00%#MwS|WCWEM{R*bbWBbH" (* FIXME *) in
+      let meta = MAImage in
+      make_media_attachment
+        ~id:(ma#id |> Model.MediaAttachment.ID.to_int |> string_of_int)
+        ~url:ma#remote_url ~preview_url:ma#remote_url ~meta ~blurhash ()
+  | _ -> failwith "Invalid type of media attachment"
+
 (* Entity status *)
 type status_mention = {
   id : string;
@@ -131,8 +213,9 @@ type status = {
   reblogged : bool;
   favourited : bool;
   favourites_count : int;
+  media_attachments : media_attachment list;
 }
-[@@deriving make, yojson]
+[@@deriving make, yojson_of]
 
 let status_list_to_hash (statuses : status list) =
   statuses |> List.map (fun s -> (s.id, s)) |> List.to_seq |> Hashtbl.of_seq
@@ -153,7 +236,9 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     ?reblog:(s#reblog_of |> Option.map serialize_status)
     ~reblogs_count:s#stat#reblogs_count
     ~favourites_count:s#stat#favourites_count ~reblogged:s#reblogged
-    ~favourited:s#favourited ()
+    ~favourited:s#favourited
+    ~media_attachments:(s#attachments |> List.map serialize_media_attachment)
+    ()
 
 let status_preload_spec self_id =
   [
@@ -162,6 +247,7 @@ let status_preload_spec self_id =
     `in_reply_to [];
     `reblogged self_id;
     `favourited self_id;
+    `attachments;
     `reblog_of
       [
         `stat;
@@ -170,6 +256,7 @@ let status_preload_spec self_id =
         `reblog_of [];
         `reblogged self_id;
         `favourited self_id;
+        `attachments;
       ];
   ]
 

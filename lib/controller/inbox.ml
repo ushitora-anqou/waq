@@ -137,4 +137,13 @@ let post req =
         | Update { obj = Person r; _ } -> kick_inbox_update_person r
         | _ -> failwith "activity not implemented");%lwt
         Httpq.Server.respond ~status:`Accepted ""
-      with _ -> Httpq.Server.respond ~status:`Accepted ~tags:[ "log" ] "")
+      with e ->
+        Logq.err (fun m ->
+            m
+              "Failed to handle inboxed message; the response and request will \
+               be printed in log:\n\
+               %s\n\
+               %s"
+              (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        Httpq.Server.respond ~status:`Accepted ~tags:[ "log" ] "")

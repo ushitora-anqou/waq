@@ -102,6 +102,16 @@ SET statuses_count  = account_stats.statuses_count + $2,
   end
 end
 
+module MediaAttachment = struct
+  [%%sqlx.schema
+  name "media_attachments"
+
+  val status_id : int option (* Status.ID.t option *)
+  val account_id : Account.ID.t option
+  val remote_url : string
+  val type_ : int [@@column "type"]]
+end
+
 module Status = struct
   [%%sqlx.schema
   name "statuses"
@@ -114,7 +124,8 @@ module Status = struct
   val account_id : Account.ID.t
   val stat : StatusStat.t [@@not_column]
   val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
-  val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]]
+  val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]
+  val attachments : MediaAttachment.t list [@@not_column]]
 
   let get_one' = get_one
   let get_many' = get_many
@@ -231,29 +242,42 @@ SET replies_count = status_stats.replies_count + $2,
       let favourites_count = -favourites_count in
       increment ~status_id ~replies_count ~reblogs_count ~favourites_count c
   end
-end
 
-let () =
-  (* Set callbacks for State *)
-  Status.after_create_commit (fun s c ->
-      Account.Stat.increment ~account_id:s#account_id ~statuses_count:1
-        ~last_status_at:s#created_at c;%lwt
-      s#reblog_of_id
-      |> Lwt_option.iter (fun status_id ->
-             Status.Stat.increment ~status_id ~reblogs_count:1 c);%lwt
-      s#in_reply_to_id
-      |> Lwt_option.iter (fun status_id ->
-             Status.Stat.increment ~status_id ~replies_count:1 c);%lwt
-      Lwt.return_unit);
-  Status.after_discard_with_reblogs (fun s c ->
-      Account.Stat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
-      s#reblog_of_id
-      |> Lwt_option.iter (fun status_id ->
-             Status.Stat.decrement ~status_id ~reblogs_count:1 c);%lwt
-      s#in_reply_to_id
-      |> Lwt_option.iter (fun status_id ->
-             Status.Stat.decrement ~status_id ~replies_count:1 c);%lwt
-      Lwt.return_unit)
+  let () =
+    (* Set callbacks for State *)
+    after_create_commit (fun s c ->
+        Account.Stat.increment ~account_id:s#account_id ~statuses_count:1
+          ~last_status_at:s#created_at c;%lwt
+        s#reblog_of_id
+        |> Lwt_option.iter (fun status_id ->
+               Stat.increment ~status_id ~reblogs_count:1 c);%lwt
+        s#in_reply_to_id
+        |> Lwt_option.iter (fun status_id ->
+               Stat.increment ~status_id ~replies_count:1 c);%lwt
+        Lwt.return_unit);
+    after_discard_with_reblogs (fun s c ->
+        Account.Stat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
+        s#reblog_of_id
+        |> Lwt_option.iter (fun status_id ->
+               Stat.decrement ~status_id ~reblogs_count:1 c);%lwt
+        s#in_reply_to_id
+        |> Lwt_option.iter (fun status_id ->
+               Stat.decrement ~status_id ~replies_count:1 c);%lwt
+        Lwt.return_unit)
+
+  let () =
+    loader_attachments :=
+      fun xs c ->
+        MediaAttachment.select
+          ~status_id:(`In (List.map (fun x -> ID.to_int x#id) xs))
+          c
+        >|= index_by (fun x -> Option.get x#status_id)
+        >|= fun tbl ->
+        xs
+        |> List.iter @@ fun (x : t) ->
+           x#id |> ID.to_int |> Hashtbl.find_all tbl |> Option.some
+           |> x#set_attachments
+end
 
 module User = struct
   [%%sqlx.schema
