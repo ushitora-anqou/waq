@@ -95,9 +95,10 @@ let where_int name ptn ((where, param) as cond) =
   in
   match ptn with None -> cond | Some ptn -> f ptn
 
-let where_int_opt name ptn cond =
+let where_int_opt name
+    (ptn : [ `Eq of int | `EqNone | `NeqNone | `In of int list ] option) cond =
   let f = function
-    | `Eq _ | `In _ -> where_int name ptn cond
+    | (`Eq _ | `In _) as ptn -> where_int name (Some ptn) cond
     | (`EqNone | `NeqNone) as ptn -> where_nullable name ptn cond
   in
   match ptn with None -> cond | Some ptn -> f ptn
