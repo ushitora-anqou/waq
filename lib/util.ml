@@ -15,7 +15,7 @@ let iota n =
 
 let index_by f l =
   let h = Hashtbl.create (List.length l) in
-  l |> List.iter (fun x -> Hashtbl.replace h (f x) x);
+  l |> List.iter (fun x -> Hashtbl.add h (f x) x);
   h
 
 module Lwt_list = struct
