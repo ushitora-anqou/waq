@@ -581,6 +581,7 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
       | exception Sqlx.Error.NoRowFound ->
           make_new_account (`DomainUser (Option.get domain, username)))
   | `Uri uri -> (
+      let uri = Uri.(with_fragment (of_string uri) None |> to_string) in
       match%lwt Db.(e @@ Account.get_one ~uri) with
       | acct -> Lwt.return acct
       | exception Sqlx.Error.NoRowFound when not resolve ->
