@@ -1,36 +1,4 @@
-open Common
-
-type agent = {
-  kind : [ `Waq | `Mstdn ];
-  token : string;
-  username : string;
-  domain : string;
-}
-[@@deriving make]
-
-let lookup src = lookup src.kind ~token:src.token
-let follow src = follow src.kind ~token:src.token
-let post src = post src.kind ~token:src.token
-let search src = search src.kind ~token:src.token
-let reblog src = reblog src.kind ~token:src.token
-let unreblog src = unreblog src.kind ~token:src.token
-let home_timeline src = home_timeline src.kind ~token:src.token
-let delete_status src = delete_status src.kind ~token:src.token
-let get_status src = get_status src.kind ~token:src.token
-
-let lookup_agent src dst =
-  let domain = if src.domain = dst.domain then None else Some dst.domain in
-  lookup src ~username:dst.username ?domain ()
-
-let follow_agent src dst =
-  let%lwt id, _, _ = lookup_agent src dst in
-  follow src id
-
-let expect_no_status src id =
-  try%lwt
-    get_status src id |> ignore_lwt;%lwt
-    assert false
-  with Httpq.Client.FetchFailure (Some (`Not_found, _, _)) -> Lwt.return_unit
+open Common2
 
 let f (a0 : agent) (a1 : agent) =
   (* a0: Follow a1 *)

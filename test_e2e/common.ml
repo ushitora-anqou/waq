@@ -125,6 +125,9 @@ type account = {
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
+type media_attachment = { id : string; type_ : string [@key "type"] }
+[@@deriving yojson] [@@yojson.allow_extra_fields]
+
 type status = {
   id : string;
   uri : string;
@@ -134,6 +137,7 @@ type status = {
   favourited : bool;
   account : account;
   favourites_count : int;
+  media_attachments : media_attachment list;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -291,10 +295,15 @@ let get_status_context kind status_id =
       Lwt.return (ancestors, descendants)
   | _ -> assert false
 
-let post ~token kind ?content ?in_reply_to_id () =
+let post ~token kind ?content ?in_reply_to_id ?(media_ids = []) () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let body =
-    let l = [ ("status", `String content) ] in
+    let l =
+      [
+        ("status", `String content);
+        ("media_ids", `List (media_ids |> List.map (fun s -> `String s)));
+      ]
+    in
     let l =
       in_reply_to_id
       |> Option.fold ~none:l ~some:(fun id ->
