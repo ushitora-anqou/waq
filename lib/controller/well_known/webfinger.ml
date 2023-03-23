@@ -1,4 +1,33 @@
 open Activity
+open Helper
+open Util
+
+let respond_jrd w () =
+  w |> yojson_of_webfinger |> Yojson.Safe.to_string
+  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
+
+let respond_xrd w () =
+  ({|<?xml version="1.0" encoding="UTF-8"?>|}
+  ^ Xml.(
+      Element
+        ( "XRD",
+          [ ("xmlns", "http://docs.oasis-open.org/ns/xri/xrd-1.0") ],
+          [ Element ("Subject", [], [ PCData w.subject ]) ]
+          @ (w.aliases
+            |> List.map (fun alias -> Element ("Alias", [], [ PCData alias ])))
+          @ (w.links
+            |> List.map (fun link ->
+                   let link = webfinger_link_of_yojson link in
+                   Element
+                     ( "Link",
+                       [
+                         ("href", link.href);
+                         ("rel", link.rel);
+                         ("type", link.typ);
+                       ],
+                       [] ))) )
+      |> to_string))
+  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
 
 (* Recv GET /.well-known/webfinger *)
 let get req =
@@ -16,20 +45,23 @@ let get req =
       failwith "Invalid request";
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
-    let%lwt a = Db.e (Model.Account.get_one ~domain:None ~username:name) in
-    let%lwt _ = Db.(e @@ User.get_one ~account_id:a#id) in
-    make_webfinger
-      ~subject:("acct:" ^ name ^ "@" ^ dom)
-      ~aliases:[ a#uri ]
-      ~links:
-        [
-          make_webfinger_link ~rel:"self" ~typ:"application/activity+json"
-            ~href:a#uri
-          |> yojson_of_webfinger_link;
-        ]
-      ()
-    |> yojson_of_webfinger |> Yojson.Safe.to_string
-    |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
+    let%lwt a = Db.(e & Account.get_one ~domain:None ~username:name) in
+    let%lwt _ = Db.(e & User.get_one ~account_id:a#id) in
+    let res =
+      make_webfinger
+        ~subject:("acct:" ^ name ^ "@" ^ dom)
+        ~aliases:[ a#uri ]
+        ~links:
+          [
+            make_webfinger_link ~rel:"self" ~typ:"application/activity+json"
+              ~href:a#uri
+            |> yojson_of_webfinger_link;
+          ]
+        ()
+    in
+    req
+    |> render ~default:(respond_jrd res)
+         [ ("application/xrd+xml", respond_xrd res) ]
   with e ->
     Logq.debug (fun m ->
         m "[well_known_webfinger] Can't find user: %s\n%s"

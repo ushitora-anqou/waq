@@ -54,6 +54,7 @@
   websocket
   websocket-lwt-unix
   x509
+  xml-light
   yaml
   yojson)
  (tags

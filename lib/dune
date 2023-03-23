@@ -30,6 +30,7 @@
   unix
   uri
   uuidm
+  xml-light
   yaml
   yaml.unix
   yojson))
