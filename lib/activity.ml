@@ -568,9 +568,37 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
   assert (l |> List.mem_assoc "type");
   `Assoc l
 
+let sign_spec_of_account (src : Db.Account.t) =
+  let priv_key =
+    src#private_key |> Option.get |> Httpq.Signature.decode_private_key
+  in
+  let key_id = src#uri ^ "#main-key" in
+  let signed_headers =
+    [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
+  in
+  Some (priv_key, key_id, signed_headers)
+
+let post_activity_json ~body ~sign ~url =
+  let meth = `POST in
+  let headers = [ (`Content_type, "application/activity+json") ] in
+  let%lwt res = Throttle_fetch.f ~meth ~headers ~body ~sign url in
+  Lwt.return
+  &
+  match res with
+  | Ok (status, _, _body)
+    when Cohttp.Code.(status |> code_of_status |> is_success) ->
+      ()
+  | _ -> failwith "Failed to post activity json"
+
 (* Get activity+json from the Internet *)
 let fetch_activity ~uri =
-  Throttle_fetch.f_exn ~headers:[ (`Accept, "application/activity+json") ] uri
+  Throttle_fetch.f_exn
+    ~headers:
+      [
+        (`Accept, "application/activity+json");
+        (`Content_type, "text/html" (* dummy *));
+      ]
+    uri
   >|= Yojson.Safe.from_string
 
 (* Send GET /.well-known/webfinger *)
@@ -652,20 +680,6 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
           failwith "Couldn't find the account"
       | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
 
-let sign_activity ~(body : Yojson.Safe.t) ~(src : Db.Account.t) =
-  let body = Yojson.Safe.to_string body in
-  let sign =
-    let priv_key =
-      src#private_key |> Option.get |> Httpq.Signature.decode_private_key
-    in
-    let key_id = src#uri ^ "#main-key" in
-    let signed_headers =
-      [ "(request-target)"; "host"; "date"; "digest"; "content-type" ]
-    in
-    Some (priv_key, key_id, signed_headers)
-  in
-  (sign, body)
-
 let verify_activity_json req =
   let body = Httpq.Server.body req in
   let signature = Httpq.Server.header `Signature req in
@@ -687,18 +701,6 @@ let verify_activity_json req =
   with
   | Error _ -> failwith "verification failed"
   | Ok () -> body
-
-let post_activity_json ~body ~sign ~url =
-  let meth = `POST in
-  let headers = [ (`Content_type, "application/activity+json") ] in
-  let%lwt res = Throttle_fetch.f ~meth ~headers ~body ~sign url in
-  Lwt.return
-  @@
-  match res with
-  | Ok (status, _, _body)
-    when Cohttp.Code.(status |> code_of_status |> is_success) ->
-      ()
-  | _ -> failwith "Failed to post activity json"
 
 let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in

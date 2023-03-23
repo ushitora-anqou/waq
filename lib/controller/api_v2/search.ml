@@ -26,7 +26,11 @@ let parse_query_accounts q =
 let parse_query_uri q =
   let try_search_account uri =
     match%lwt Activity.search_account (`Uri uri) with
-    | exception _ -> Lwt.return_none
+    | exception e ->
+        Logq.debug (fun m ->
+            m "try_search_account failed: %s\n%s" (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        Lwt.return_none
     | a -> Lwt.return_some a
   in
   let try_fetch_status uri =
