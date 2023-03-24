@@ -40,6 +40,7 @@ module Ptime = struct
 
   let now () = Unix.gettimeofday () |> of_float_s |> Option.get
   let to_int : t -> int = to_span |.> Span.to_int_s |.> Option.get
+  let to_rfc3339 = to_rfc3339 ~tz_offset_s:0
 end
 
 let acct (username : string) (domain : string option) : string =
