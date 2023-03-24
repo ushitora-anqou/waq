@@ -3,7 +3,8 @@ open Lwt.Infix
 open Util
 
 let respond_activity a () =
-  Activity.(person_of_account a |> person |> to_yojson) |> respond_yojson
+  Activity.(person_of_account a |> person |> to_yojson)
+  |> respond_activity_yojson
 
 let respond_html (a : Db.Account.t) () =
   let open Jingoo.Jg_types in
