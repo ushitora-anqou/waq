@@ -722,11 +722,11 @@ let expand_let_load_fields loc schema =
            ~lhs:
              (ppat_variant ~loc f.u_name
                 (if has_arg then Some (ppat_var ~loc (wloc "nested_preload"))
-                else None))
+                 else None))
            ~guard:None
            ~rhs:
              (if has_arg then [%expr [%e loader] ~preload:nested_preload xs c]
-             else [%expr [%e loader] xs c]))
+              else [%expr [%e loader] xs c]))
   in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc "load_fields"))

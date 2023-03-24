@@ -40,13 +40,13 @@ let post req =
         in
         Worker.Distribute.kick s;%lwt
         (if s#account_id = status#account_id then Lwt.return_unit
-        else if Model.Account.is_remote status#account then Lwt.return_unit
-        else
-          let%lwt src = Db.e (Model.Account.get_one ~id:s#account_id) in
-          let%lwt dst = Db.e (Model.Account.get_one ~id:status#account_id) in
-          Worker.Local_notify.kick
-            ~activity_id:(Model.Status.ID.to_int s#id)
-            ~activity_type:`Status ~typ:`reblog ~src ~dst);%lwt
+         else if Model.Account.is_remote status#account then Lwt.return_unit
+         else
+           let%lwt src = Db.e (Model.Account.get_one ~id:s#account_id) in
+           let%lwt dst = Db.e (Model.Account.get_one ~id:status#account_id) in
+           Worker.Local_notify.kick
+             ~activity_id:(Model.Status.ID.to_int s#id)
+             ~activity_type:`Status ~typ:`reblog ~src ~dst);%lwt
         Lwt.return s
   in
   make_status_from_model ~self_id s
