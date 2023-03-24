@@ -55,15 +55,18 @@ let render ~default routes req =
     Httpq.Server.header_opt `Accept req
     |> Option.map (String.split_on_char ',' |.> List.map String.trim)
   in
-  let route =
+  let default = ("default", default) in
+  let content_type, route =
     match accept with
     | None -> default
     | Some accept ->
         routes
         |> List.find_map (fun (content_type, route) ->
-               if List.mem content_type accept then Some route else None)
+               if List.mem content_type accept then Some (content_type, route)
+               else None)
         |> Option.value ~default
   in
+  Logq.debug (fun m -> m "[render] Choose %s" content_type);
   route ()
 
 let parse_webfinger_address q =
