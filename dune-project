@@ -25,7 +25,10 @@
   (alcotest :with-test)
   (alcotest-lwt :with-test)
   (merlin :with-dev-setup)
-  (ocamlformat :with-dev-setup)
+  (ocamlformat
+   (and
+    (= 0.25.1)
+    :with-dev-setup))
   base64
   cohttp
   cohttp-lwt-unix
