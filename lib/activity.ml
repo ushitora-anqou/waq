@@ -289,6 +289,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
        make_image ~url:(x |> List.assoc "url" |> expect_string)
   in
   let list_opt name = try Some (list name) with _ -> None in
+  let get_opt name = try Some (get name) with _ -> None in
 
   let typ = string Type in
   match typ with
@@ -348,7 +349,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let cc = list Cc |> List.map expect_string in
       let attributed_to = string AttributedTo in
       let content = string Content in
-      let in_reply_to = get InReplyTo in
+      let in_reply_to = get_opt InReplyTo |> Option.value ~default:`Null in
       let attachment =
         list_opt Attachment |> Option.value ~default:[] |> List.map of_yojson
       in
