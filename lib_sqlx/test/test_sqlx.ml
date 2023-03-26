@@ -4,35 +4,34 @@ open Util
 
 [@@@warning "-32-39"]
 
-module Account = struct
-  [%%sqlx.schema
+[%%sqlx.schemas
+module rec Account = struct
   name "accounts"
 
   val username : string
   val domain : string option
-  val display_name : string]
+  val display_name : string
 end
 
-module Status = struct
-  [%%sqlx.schema
+and Status = struct
   name "statuses"
 
   val text : string
-  val account_id : Account.ID.t
   val in_reply_to_id : ID.t option
-  val reblog_of_id : ID.t option]
+  val reblog_of_id : ID.t option
+  val account_id : Account.ID.t
 end
 
-module Favourite = struct
-  [%%sqlx.schema
+and Favourite = struct
   name "favourites"
 
+  val account_id : Account.ID.t
   val status_id : Status.ID.t
-  val account_id : Account.ID.t]
 end
 
-module Notification = struct
-  (* v User defined functions *)
+and Notification = struct
+  name "notifications"
+
   type activity_type_t = [ `Status | `Favourite | `Follow ]
 
   let activity_type_t_to_string : activity_type_t -> string = function
@@ -59,11 +58,6 @@ module Notification = struct
     | "follow" -> `follow
     | _ -> failwith "type_t_of_string: invalid input"
 
-  (* ^ User defined functions *)
-
-  [%%sqlx.schema
-  name "notifications"
-
   val activity_id : int
   val activity_type : activity_type_t
   val account_id : Account.ID.t
@@ -71,7 +65,11 @@ module Notification = struct
   val typ : typ_t option [@@column "type"]
 
   val target_status : Status.t
-    [@@not_column] [@@preload_spec: Status.preload_spec]]
+    [@@not_column] [@@preload_spec: Status.preload_spec]
+end]
+
+module Notification = struct
+  include Notification
 
   let () =
     loader_target_status :=

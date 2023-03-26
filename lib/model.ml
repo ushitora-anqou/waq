@@ -1,47 +1,43 @@
+[@@@warning "-32-39"]
+
 open Util
 open Lwt.Infix
-
-[@@@warning "-39"]
+open Schema
 
 module AccountStat = struct
-  [%%sqlx.schema
-  name "account_stats"
+  include AccountStat
 
-  val account_id : int (* Account.ID.t *)
-  val statuses_count : int
-  val following_count : int
-  val followers_count : int
-  val last_status_at : Ptime.t option]
-end
+  let increment ~account_id ?(statuses_count = 0) ?(following_count = 0)
+      ?(followers_count = 0) ?last_status_at (c : Sqlx.Connection.t) =
+    c#execute
+      {|
+INSERT INTO account_stats ( account_id, statuses_count, following_count, followers_count, created_at, updated_at, last_status_at )
+VALUES ( $1, $2, $3, $4, now(), now(), $5 )
+ON CONFLICT (account_id) DO UPDATE
+SET statuses_count  = account_stats.statuses_count + $2,
+    following_count = account_stats.following_count + $3,
+    followers_count = account_stats.followers_count + $4,
+    last_status_at = $5,
+    updated_at = now()|}
+      ~p:
+        [
+          `Int (Account.ID.to_int account_id);
+          `Int statuses_count;
+          `Int following_count;
+          `Int followers_count;
+          `NullTimestamp last_status_at;
+        ]
 
-module StatusStat = struct
-  [%%sqlx.schema
-  name "status_stats"
-
-  val status_id : int (* Status.ID.t *)
-  val replies_count : int
-  val reblogs_count : int
-  val favourites_count : int]
+  let decrement ~account_id ?(statuses_count = 0) ?(following_count = 0)
+      ?(followers_count = 0) c =
+    let statuses_count = -statuses_count in
+    let following_count = -following_count in
+    let followers_count = -followers_count in
+    increment ~account_id ~statuses_count ~following_count ~followers_count c
 end
 
 module Account = struct
-  [%%sqlx.schema
-  name "accounts"
-
-  val username : string
-  val domain : string option
-  val private_key : string option
-  val public_key : string
-  val display_name : string
-  val uri : string
-  val url : string option
-  val inbox_url : string
-  val outbox_url : string
-  val shared_inbox_url : string
-  val followers_url : string
-  val avatar_remote_url : string option
-  val header_remote_url : string
-  val stat : AccountStat.t [@@not_column]]
+  include Account
 
   let is_local (x : t) = Option.is_none x#domain
   let is_remote (x : t) = Option.is_some x#domain
@@ -55,14 +51,12 @@ module Account = struct
   let () =
     loader_stat :=
       fun xs c ->
-        AccountStat.select
-          ~account_id:(`In (xs |> List.map (fun x -> x#id |> ID.to_int)))
-          c
+        AccountStat.select ~account_id:(`In (xs |> List.map (fun x -> x#id))) c
         >|= index_by (fun x -> x#account_id)
         >|= fun tbl ->
         xs
         |> List.iter @@ fun (x : t) ->
-           let account_id = ID.to_int x#id in
+           let account_id = x#id in
            x#set_stat @@ Option.some
            @@
            match Hashtbl.find_opt tbl account_id with
@@ -70,62 +64,40 @@ module Account = struct
            | None ->
                AccountStat.make ~account_id ~statuses_count:0 ~following_count:0
                  ~followers_count:0 ()
-
-  module Stat = struct
-    let increment ~account_id ?(statuses_count = 0) ?(following_count = 0)
-        ?(followers_count = 0) ?last_status_at (c : Sqlx.Connection.t) =
-      c#execute
-        {|
-INSERT INTO account_stats ( account_id, statuses_count, following_count, followers_count, created_at, updated_at, last_status_at )
-VALUES ( $1, $2, $3, $4, now(), now(), $5 )
-ON CONFLICT (account_id) DO UPDATE
-SET statuses_count  = account_stats.statuses_count + $2,
-    following_count = account_stats.following_count + $3,
-    followers_count = account_stats.followers_count + $4,
-    last_status_at = $5,
-    updated_at = now()|}
-        ~p:
-          [
-            `Int (ID.to_int account_id);
-            `Int statuses_count;
-            `Int following_count;
-            `Int followers_count;
-            `NullTimestamp last_status_at;
-          ]
-
-    let decrement ~account_id ?(statuses_count = 0) ?(following_count = 0)
-        ?(followers_count = 0) c =
-      let statuses_count = -statuses_count in
-      let following_count = -following_count in
-      let followers_count = -followers_count in
-      increment ~account_id ~statuses_count ~following_count ~followers_count c
-  end
 end
 
-module MediaAttachment = struct
-  [%%sqlx.schema
-  name "media_attachments"
+module StatusStat = struct
+  include StatusStat
 
-  val status_id : int option (* Status.ID.t option *)
-  val account_id : Account.ID.t option
-  val remote_url : string
-  val type_ : int [@@column "type"]]
+  let increment ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
+      ?(favourites_count = 0) (c : Sqlx.Connection.t) =
+    c#execute
+      {|
+INSERT INTO status_stats ( status_id, replies_count, reblogs_count, favourites_count, created_at, updated_at )
+VALUES ($1, $2, $3, $4, now(), now())
+ON CONFLICT (status_id) DO UPDATE
+SET replies_count = status_stats.replies_count + $2,
+    reblogs_count = status_stats.reblogs_count + $3,
+    favourites_count = status_stats.favourites_count + $4,
+    updated_at = now()|}
+      ~p:
+        [
+          `Int (Status.ID.to_int status_id);
+          `Int replies_count;
+          `Int reblogs_count;
+          `Int favourites_count;
+        ]
+
+  let decrement ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
+      ?(favourites_count = 0) c =
+    let replies_count = -replies_count in
+    let reblogs_count = -reblogs_count in
+    let favourites_count = -favourites_count in
+    increment ~status_id ~replies_count ~reblogs_count ~favourites_count c
 end
 
 module Status = struct
-  [%%sqlx.schema
-  name "statuses"
-
-  val uri : string
-  val text : string
-  val deleted_at : Ptime.t option
-  val in_reply_to_id : ID.t option
-  val reblog_of_id : ID.t option
-  val account_id : Account.ID.t
-  val stat : StatusStat.t [@@not_column]
-  val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
-  val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]
-  val attachments : MediaAttachment.t list [@@not_column]]
+  include Status
 
   let get_one' = get_one
   let get_many' = get_many
@@ -198,9 +170,7 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
     loader_stat :=
       fun xs c ->
         (* NOTE: This function does NOT set in_reply_to#stat and reblog_of#stat *)
-        let get_id x =
-          x#reblog_of_id |> Option.value ~default:x#id |> ID.to_int
-        in
+        let get_id x = x#reblog_of_id |> Option.value ~default:x#id in
         StatusStat.select ~status_id:(`In (xs |> List.map get_id)) c
         >|= index_by (fun x -> x#status_id)
         >|= fun tbl ->
@@ -215,54 +185,26 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
                StatusStat.make ~status_id ~replies_count:0 ~reblogs_count:0
                  ~favourites_count:0 ()
 
-  module Stat = struct
-    let increment ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
-        ?(favourites_count = 0) (c : Sqlx.Connection.t) =
-      c#execute
-        {|
-INSERT INTO status_stats ( status_id, replies_count, reblogs_count, favourites_count, created_at, updated_at )
-VALUES ($1, $2, $3, $4, now(), now())
-ON CONFLICT (status_id) DO UPDATE
-SET replies_count = status_stats.replies_count + $2,
-    reblogs_count = status_stats.reblogs_count + $3,
-    favourites_count = status_stats.favourites_count + $4,
-    updated_at = now()|}
-        ~p:
-          [
-            `Int (ID.to_int status_id);
-            `Int replies_count;
-            `Int reblogs_count;
-            `Int favourites_count;
-          ]
-
-    let decrement ~status_id ?(replies_count = 0) ?(reblogs_count = 0)
-        ?(favourites_count = 0) c =
-      let replies_count = -replies_count in
-      let reblogs_count = -reblogs_count in
-      let favourites_count = -favourites_count in
-      increment ~status_id ~replies_count ~reblogs_count ~favourites_count c
-  end
-
   let () =
     (* Set callbacks for State *)
     after_create_commit (fun s c ->
-        Account.Stat.increment ~account_id:s#account_id ~statuses_count:1
+        AccountStat.increment ~account_id:s#account_id ~statuses_count:1
           ~last_status_at:s#created_at c;%lwt
         s#reblog_of_id
         |> Lwt_option.iter (fun status_id ->
-               Stat.increment ~status_id ~reblogs_count:1 c);%lwt
+               StatusStat.increment ~status_id ~reblogs_count:1 c);%lwt
         s#in_reply_to_id
         |> Lwt_option.iter (fun status_id ->
-               Stat.increment ~status_id ~replies_count:1 c);%lwt
+               StatusStat.increment ~status_id ~replies_count:1 c);%lwt
         Lwt.return_unit);
     after_discard_with_reblogs (fun s c ->
-        Account.Stat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
+        AccountStat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
         s#reblog_of_id
         |> Lwt_option.iter (fun status_id ->
-               Stat.decrement ~status_id ~reblogs_count:1 c);%lwt
+               StatusStat.decrement ~status_id ~reblogs_count:1 c);%lwt
         s#in_reply_to_id
         |> Lwt_option.iter (fun status_id ->
-               Stat.decrement ~status_id ~replies_count:1 c);%lwt
+               StatusStat.decrement ~status_id ~replies_count:1 c);%lwt
         Lwt.return_unit)
 
   let () =
@@ -277,135 +219,95 @@ SET replies_count = status_stats.replies_count + $2,
         |> List.iter @@ fun (x : t) ->
            x#id |> ID.to_int |> Hashtbl.find_all tbl |> Option.some
            |> x#set_attachments
+
+  let () =
+    loader_reblogged :=
+      fun ?preload:(self_id = None) (xs : Status.t list) c ->
+        select
+          ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
+          ~reblog_of_id:(`In (xs |> List.map (fun x -> x#id)))
+          c
+        >|= index_by (fun x -> Option.get x#reblog_of_id)
+        >|= fun tbl ->
+        xs
+        |> List.iter @@ fun (x : t) ->
+           (Hashtbl.mem tbl x#id
+           ||
+           match (x#reblog_of_id, self_id) with
+           | Some _, Some self_id -> x#account_id = self_id
+           | _ -> false)
+           |> Option.some |> x#set_reblogged
+
+  let () =
+    (loader_favourited :=
+       fun ?preload:(self_id = None) (xs : Status.t list) c ->
+         Favourite.select
+           ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
+           ~status_id:(`In (xs |> List.map (fun x -> x#id)))
+           c
+         >|= index_by (fun x -> x#status_id)
+         >|= fun tbl ->
+         xs
+         |> List.iter @@ fun (x : t) ->
+            Hashtbl.mem tbl x#id |> Option.some |> x#set_favourited);
+    ()
 end
 
 module User = struct
-  [%%sqlx.schema
-  name "users"
-
-  val email : string
-  val encrypted_password : string
-  val account_id : Account.ID.t]
+  include User
 end
 
 module Follow = struct
-  [%%sqlx.schema
-  name "follows"
-
-  val account_id : Account.ID.t
-  val target_account_id : Account.ID.t
-  val uri : string]
+  include Follow
 
   let does_follow ~account_id ~target_account_id c : bool Lwt.t =
     get_many ~account_id ~target_account_id c >|= ( <> ) []
 
   let () =
     after_create_commit (fun f c ->
-        let open Account.Stat in
+        let open AccountStat in
         increment ~account_id:f#account_id ~following_count:1 c;%lwt
         increment ~account_id:f#target_account_id ~followers_count:1 c);
     after_destroy_commit (fun f c ->
-        let open Account.Stat in
+        let open AccountStat in
         decrement ~account_id:f#account_id ~following_count:1 c;%lwt
         decrement ~account_id:f#target_account_id ~followers_count:1 c)
 end
 
 module FollowRequest = struct
-  [%%sqlx.schema
-  name "follow_requests"
-
-  val account_id : Account.ID.t
-  val target_account_id : Account.ID.t
-  val uri : string]
+  include FollowRequest
 end
 
 module OAuthApplication = struct
-  [%%sqlx.schema
-  name "oauth_applications"
-
-  val name : string
-  val uid : string
-  val secret : string
-  val redirect_uri : string
-  val scopes : string]
+  include OAuthApplication
 end
 
 module OAuthAccessGrant = struct
-  [%%sqlx.schema
-  name "oauth_access_grants"
-
-  val token : string
-  val expires_in : int
-  val redirect_uri : string
-  val scopes : string option
-  val application_id : OAuthApplication.ID.t option
-  val resource_owner_id : User.ID.t option]
+  include OAuthAccessGrant
 end
 
 module OAuthAccessToken = struct
-  [%%sqlx.schema
-  name "oauth_access_tokens"
-
-  val token : string
-  val scopes : string option
-  val application_id : OAuthApplication.ID.t option
-  val resource_owner_id : User.ID.t option]
+  include OAuthAccessToken
 end
 
 module Favourite = struct
-  [%%sqlx.schema
-  name "favourites"
-
-  val account_id : Account.ID.t
-  val status_id : Status.ID.t]
+  include Favourite
 
   let get_favourites_count ~status_id c = count ~status_id:(`Eq status_id) c
 
   let () =
     after_create_commit (fun f c ->
-        Status.Stat.increment ~status_id:f#status_id ~favourites_count:1 c);
+        StatusStat.increment ~status_id:f#status_id ~favourites_count:1 c);
     after_destroy_commit (fun f c ->
-        Status.Stat.decrement ~status_id:f#status_id ~favourites_count:1 c)
+        StatusStat.decrement ~status_id:f#status_id ~favourites_count:1 c)
+end
+
+module MediaAttachment = struct
+  include MediaAttachment
 end
 
 module Notification = struct
-  type activity_type_t = [ `Status | `Favourite | `Follow ]
-
-  let activity_type_t_to_string : activity_type_t -> string = function
-    | `Status -> "Status"
-    | `Favourite -> "Favourite"
-    | `Follow -> "Follow"
-
-  let activity_type_t_of_string : string -> activity_type_t = function
-    | "Status" -> `Status
-    | "Favourite" -> `Favourite
-    | "Follow" -> `Follow
-    | _ -> failwith "activity_type_t_of_string: invalid input"
-
-  type typ_t = [ `reblog | `favourite | `follow ]
-
-  let typ_t_to_string : typ_t -> string = function
-    | `reblog -> "reblog"
-    | `favourite -> "favourite"
-    | `follow -> "follow"
-
-  let typ_t_of_string : string -> typ_t = function
-    | "reblog" -> `reblog
-    | "favourite" -> `favourite
-    | "follow" -> `follow
-    | _ -> failwith "type_t_of_string: invalid input"
-
-  [%%sqlx.schema
-  name "notifications"
-
-  val activity_id : int
-  val activity_type : activity_type_t
-  val account_id : Account.ID.t
-  val from_account_id : Account.ID.t
-  val typ : typ_t option [@@column "type"]
-
-  val target_status : Status.t option
-    [@@not_column] [@@preload_spec: Status.preload_spec]]
+  include Notification
 
   let () =
     loader_target_status :=
@@ -592,34 +494,3 @@ let get_remote_followers ~account_id c : Account.t list Lwt.t =
   Follow.get_many ~target_account_id:account_id c ~preload:[ `account [] ]
   >|= List.filter_map (fun x ->
           x#account#domain |> Option.map (fun _ -> x#account))
-
-let () =
-  let open Status in
-  (loader_reblogged :=
-     fun ?preload:(self_id = None) (xs : Status.t list) c ->
-       select
-         ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
-         ~reblog_of_id:(`In (xs |> List.map (fun x -> x#id)))
-         c
-       >|= index_by (fun x -> Option.get x#reblog_of_id)
-       >|= fun tbl ->
-       xs
-       |> List.iter @@ fun (x : t) ->
-          (Hashtbl.mem tbl x#id
-          ||
-          match (x#reblog_of_id, self_id) with
-          | Some _, Some self_id -> x#account_id = self_id
-          | _ -> false)
-          |> Option.some |> x#set_reblogged);
-  (loader_favourited :=
-     fun ?preload:(self_id = None) (xs : Status.t list) c ->
-       Favourite.select
-         ?account_id:(self_id |> Option.map @@ fun x -> `Eq x)
-         ~status_id:(`In (xs |> List.map (fun x -> x#id)))
-         c
-       >|= index_by (fun x -> x#status_id)
-       >|= fun tbl ->
-       xs
-       |> List.iter @@ fun (x : t) ->
-          Hashtbl.mem tbl x#id |> Option.some |> x#set_favourited);
-  ()
