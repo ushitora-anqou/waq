@@ -8,25 +8,34 @@ open Util
 module rec Account = struct
   name "accounts"
 
-  val username : string
-  val domain : string option
-  val display_name : string
+  class type t =
+    object
+      val username : string
+      val domain : string option
+      val display_name : string
+    end
 end
 
 and Status = struct
   name "statuses"
 
-  val text : string
-  val in_reply_to_id : ID.t option
-  val reblog_of_id : ID.t option
-  val account_id : Account.ID.t
+  class type t =
+    object
+      val text : string
+      val in_reply_to_id : ID.t option
+      val reblog_of_id : ID.t option
+      val account_id : Account.ID.t
+    end
 end
 
 and Favourite = struct
   name "favourites"
 
-  val account_id : Account.ID.t
-  val status_id : Status.ID.t
+  class type t =
+    object
+      val account_id : Account.ID.t
+      val status_id : Status.ID.t
+    end
 end
 
 and Notification = struct
@@ -58,14 +67,17 @@ and Notification = struct
     | "follow" -> `follow
     | _ -> failwith "type_t_of_string: invalid input"
 
-  val activity_id : int
-  val activity_type : activity_type_t
-  val account_id : Account.ID.t
-  val from_account_id : Account.ID.t
-  val typ : typ_t option [@@column "type"]
+  class type t =
+    object
+      val activity_id : int
+      val activity_type : activity_type_t
+      val account_id : Account.ID.t
+      val from_account_id : Account.ID.t
+      val typ : typ_t option [@@column "type"]
 
-  val target_status : Status.t
-    [@@not_column] [@@preload_spec: Status.preload_spec]
+      val target_status : Status.t
+      [@@not_column] [@@preload_spec: Status.preload_spec]
+    end
 end]
 
 module Notification = struct

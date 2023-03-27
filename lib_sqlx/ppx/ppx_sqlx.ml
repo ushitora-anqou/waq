@@ -146,8 +146,7 @@ let parse_config (x : structure_item) =
   | "name", Pexp_constant (Pconst_string (name, _, _)) -> `Name name
   | _ -> assert false
 
-let parse_val (x : structure_item) =
-  (* Parse one value declaration e.g., val typ : typ_t [@@column "type"] *)
+let parse_item (x : structure_item) =
   let open Ast_pattern in
   let parse_attr (x : attribute) =
     match x.attr_name.txt with
@@ -172,7 +171,7 @@ let parse_val (x : structure_item) =
       | Ldot (Ldot (l, "ID"), "t") -> `ID { mod_ident = Some l }
       | s -> `User s
     in
-    match x.pval_type.ptyp_desc with
+    match x.ptyp_desc with
     | Ptyp_constr ({ txt; _ }, []) -> aux txt
     | Ptyp_constr
         ( { txt = Lident "option"; _ },
@@ -180,34 +179,50 @@ let parse_val (x : structure_item) =
         `Option (aux txt)
     | _ -> assert false
   in
+  let parse_class_type xs =
+    xs
+    |> List.map @@ fun x ->
+       let attrs = x.pctf_attributes |> List.map parse_attr in
+       let name, typ =
+         match x.pctf_desc with
+         | Pctf_val (name, _, _, typ) -> (name.txt, typ)
+         | _ -> assert false
+       in
+       if attrs |> List.mem `Not_column then
+         match typ.ptyp_desc with
+         | Ptyp_constr _ ->
+             `User_defined
+               {
+                 u_name = name;
+                 u_core_type = typ;
+                 u_preload_spec =
+                   attrs
+                   |> List.find_map (function
+                        | `Preload_spec l -> Some l
+                        | _ -> None);
+               }
+         | _ -> assert false
+       else
+         `Column
+           {
+             c_ocaml_name = name;
+             c_type = parse_type typ;
+             c_sql_name =
+               attrs
+               |> List.find_map (function `Column s -> Some s | _ -> None)
+               |> Option.value ~default:name;
+           }
+  in
   try
-    parse (pstr_primitive __) x.pstr_loc x (fun x ->
-        let name = x.pval_name.txt in
-        let attrs = x.pval_attributes |> List.map parse_attr in
-        if attrs |> List.mem `Not_column then
-          match x.pval_type.ptyp_desc with
-          | Ptyp_constr _ ->
-              `User_defined
-                {
-                  u_name = name;
-                  u_core_type = x.pval_type;
-                  u_preload_spec =
-                    attrs
-                    |> List.find_map (function
-                         | `Preload_spec l -> Some l
-                         | _ -> None);
-                }
-          | _ -> assert false
-        else
-          `Column
-            {
-              c_ocaml_name = name;
-              c_type = parse_type x;
-              c_sql_name =
-                attrs
-                |> List.find_map (function `Column s -> Some s | _ -> None)
-                |> Option.value ~default:name;
-            })
+    (* Parse `class type t = object val xxx : yyy ... end` *)
+    parse
+      (pstr_class_type
+         (class_infos ~virt:concrete ~params:nil ~name:(string "t")
+            ~expr:
+              (pcty_signature (class_signature ~self:drop ~fields:(many __)))
+         ^:: nil))
+      x.pstr_loc x
+      (fun xs -> `Columns (parse_class_type xs))
   with _ -> `NotField x
 
 let construct_schema ctxt xs =
@@ -221,10 +236,13 @@ let construct_schema ctxt xs =
          match parse_config x with
          | `Name name -> sql_name := name
          | exception _ -> (
-             match parse_val x with
-             | `User_defined r -> user_defined := r :: !user_defined
-             | `Column column -> columns := CNormal column :: !columns
-             | `NotField x -> not_field := x :: !not_field));
+             match parse_item x with
+             | `NotField x -> not_field := x :: !not_field
+             | `Columns xs -> (
+                 xs
+                 |> List.iter @@ function
+                    | `User_defined r -> user_defined := r :: !user_defined
+                    | `Column column -> columns := CNormal column :: !columns)));
   let derived =
     !columns
     |> List.filter_map @@ function
