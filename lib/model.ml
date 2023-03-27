@@ -1,5 +1,3 @@
-[@@@warning "-32-39"]
-
 open Util
 open Lwt.Infix
 open Schema
