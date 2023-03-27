@@ -45,23 +45,6 @@ module Account = struct
 
   let preferred_inbox_urls (accts : t list) =
     accts |> List.map preferred_inbox_url |> List.sort_uniq compare
-
-  let () =
-    loader_stat :=
-      fun xs c ->
-        AccountStat.select ~account_id:(`In (xs |> List.map (fun x -> x#id))) c
-        >|= index_by (fun x -> x#account_id)
-        >|= fun tbl ->
-        xs
-        |> List.iter @@ fun (x : t) ->
-           let account_id = x#id in
-           x#set_stat @@ Option.some
-           @@
-           match Hashtbl.find_opt tbl account_id with
-           | Some stat -> stat
-           | None ->
-               AccountStat.make ~account_id ~statuses_count:0 ~following_count:0
-                 ~followers_count:0 ()
 end
 
 module StatusStat = struct
@@ -165,25 +148,6 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
     Lwt.return status
 
   let () =
-    loader_stat :=
-      fun xs c ->
-        (* NOTE: This function does NOT set in_reply_to#stat and reblog_of#stat *)
-        let get_id x = x#reblog_of_id |> Option.value ~default:x#id in
-        StatusStat.select ~status_id:(`In (xs |> List.map get_id)) c
-        >|= index_by (fun x -> x#status_id)
-        >|= fun tbl ->
-        xs
-        |> List.iter @@ fun (x : t) ->
-           let status_id = get_id x in
-           x#set_stat @@ Option.some
-           @@
-           match Hashtbl.find_opt tbl status_id with
-           | Some stat -> stat
-           | None ->
-               StatusStat.make ~status_id ~replies_count:0 ~reblogs_count:0
-                 ~favourites_count:0 ()
-
-  let () =
     (* Set callbacks for State *)
     after_create_commit (fun s c ->
         AccountStat.increment ~account_id:s#account_id ~statuses_count:1
@@ -204,19 +168,6 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
         |> Lwt_option.iter (fun status_id ->
                StatusStat.decrement ~status_id ~replies_count:1 c);%lwt
         Lwt.return_unit)
-
-  let () =
-    loader_attachments :=
-      fun xs c ->
-        MediaAttachment.select
-          ~status_id:(`In (List.map (fun x -> ID.to_int x#id) xs))
-          c
-        >|= index_by (fun x -> Option.get x#status_id)
-        >|= fun tbl ->
-        xs
-        |> List.iter @@ fun (x : t) ->
-           x#id |> ID.to_int |> Hashtbl.find_all tbl |> Option.some
-           |> x#set_attachments
 
   let () =
     loader_reblogged :=

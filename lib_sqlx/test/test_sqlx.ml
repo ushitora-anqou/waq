@@ -13,6 +13,20 @@ module rec Account = struct
       val username : string
       val domain : string option
       val display_name : string
+      val stat : AccountStat.t option [@@foreign_key "account_id"]
+    end
+end
+
+and AccountStat = struct
+  name "account_stats"
+
+  class type t =
+    object
+      val account_id : Account.ID.t
+      val statuses_count : int
+      val following_count : int
+      val followers_count : int
+      val last_status_at : Ptime.t option
     end
 end
 
@@ -191,6 +205,21 @@ CREATE TABLE favourites (
   FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   FOREIGN KEY (status_id) REFERENCES statuses(id) ON DELETE CASCADE,
   UNIQUE (account_id, status_id)
+)|};%lwt
+  c#execute
+    {|
+CREATE TABLE account_stats (
+  id SERIAL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  statuses_count BIGINT NOT NULL,
+  following_count BIGINT NOT NULL,
+  followers_count BIGINT NOT NULL,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  last_status_at TIMESTAMP WITHOUT TIME ZONE,
+
+  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  UNIQUE (account_id)
 )|}
 
 let test_account_basic_ops_case1 _ _ =
@@ -276,6 +305,33 @@ let test_account_basic_ops_case1 _ _ =
   Db.e Account.(delete [ a1 ]);%lwt
   (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun r -> assert (r = []));%lwt
 
+  Lwt.return_unit
+  [@@warning "-8"]
+
+let test_account_preload _ _ =
+  setup1 ();%lwt
+  let%lwt [ a1; _a2 ] =
+    Db.e
+      Account.(
+        insert
+          [
+            make ~username:"user1" ~display_name:"User 1" ();
+            make ~username:"user2" ~display_name:"User 2" ~domain:"example.com"
+              ();
+          ])
+  in
+  let%lwt [ a ] = Db.e Account.(select ~id:(`Eq a1#id) ~preload:[ `stat [] ]) in
+  assert (Option.is_none a#stat);
+  Db.e
+    AccountStat.(
+      insert
+        [
+          make ~account_id:a1#id ~followers_count:0 ~following_count:0
+            ~statuses_count:0 ();
+        ])
+  |> ignore_lwt;%lwt
+  let%lwt [ a ] = Db.e Account.(select ~id:(`Eq a1#id) ~preload:[ `stat [] ]) in
+  assert (Option.is_some a#stat);
   Lwt.return_unit
   [@@warning "-8"]
 
@@ -586,6 +642,7 @@ let () =
              Alcotest_lwt.test_case "status" `Quick test_status_preload;
              Alcotest_lwt.test_case "notification" `Quick
                test_notification_target_status;
+             Alcotest_lwt.test_case "account" `Quick test_account_preload;
            ] );
          ( "transaction",
            [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );

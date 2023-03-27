@@ -80,6 +80,13 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
     if a#header_remote_url = "" then Config.notfound_header_url ()
     else a#header_remote_url
   in
+  let stat =
+    let default =
+      Model.AccountStat.make ~account_id:a#id ~statuses_count:0
+        ~following_count:0 ~followers_count:0 ()
+    in
+    a#stat |> Option.value ~default
+  in
   make_account
     ~id:(a#id |> Model.Account.ID.to_int |> string_of_int)
     ~username:a#username ~acct:(acct a#username a#domain) ~url:a#uri
@@ -87,14 +94,13 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
     ~header_static:header ~locked:false ~fields:[] ~emojis:[] ~bot:false
     ~group:false ~discoverable:true
     ~created_at:(Ptime.to_rfc3339 a#created_at)
-    ?last_status_at:(a#stat#last_status_at |> Option.map Ptime.to_rfc3339)
-    ~statuses_count:a#stat#statuses_count
-    ~followers_count:a#stat#followers_count
-    ~following_count:a#stat#following_count ?source ()
+    ?last_status_at:(stat#last_status_at |> Option.map Ptime.to_rfc3339)
+    ~statuses_count:stat#statuses_count ~followers_count:stat#followers_count
+    ~following_count:stat#following_count ?source ()
 
 let load_accounts_from_db ?(credential = false)
     (account_ids : Model.Account.ID.t list) : account list Lwt.t =
-  Db.(e Account.(select ~id:(`In account_ids) ~preload:[ `stat ]))
+  Db.(e Account.(select ~id:(`In account_ids) ~preload:[ `stat [] ]))
   >|= index_by (fun x -> x#id)
   >|= fun accts ->
   account_ids
@@ -223,40 +229,48 @@ let status_list_to_hash (statuses : status list) =
 let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     =
   let id_to_string x = x |> Model.Status.ID.to_int |> string_of_int in
+  let stat =
+    let default =
+      Model.StatusStat.make ~status_id:s#id ~replies_count:0 ~reblogs_count:0
+        ~favourites_count:0 ()
+    in
+    match s#reblog_of_id with
+    | None -> s#stat |> Option.value ~default
+    | Some _ -> (Option.get s#reblog_of)#stat |> Option.value ~default
+  in
   make_status ~id:(s#id |> id_to_string)
     ~created_at:(Ptime.to_rfc3339 s#created_at)
     ~visibility ~uri:s#uri ~content:s#text
     ~account:(serialize_account s#account)
-    ~replies_count:s#stat#replies_count
+    ~replies_count:stat#replies_count
     ?in_reply_to_id:(s#in_reply_to_id |> Option.map id_to_string)
     ?in_reply_to_account_id:
       (s#in_reply_to
       |> Option.map @@ fun x ->
          x#account_id |> Model.Account.ID.to_int |> string_of_int)
     ?reblog:(s#reblog_of |> Option.map serialize_status)
-    ~reblogs_count:s#stat#reblogs_count
-    ~favourites_count:s#stat#favourites_count ~reblogged:s#reblogged
-    ~favourited:s#favourited
+    ~reblogs_count:stat#reblogs_count ~favourites_count:stat#favourites_count
+    ~reblogged:s#reblogged ~favourited:s#favourited
     ~media_attachments:(s#attachments |> List.map serialize_media_attachment)
     ()
 
 let status_preload_spec self_id =
   [
-    `stat;
-    `account [ `stat ];
+    `stat [];
+    `account [ `stat [] ];
     `in_reply_to [];
     `reblogged self_id;
     `favourited self_id;
-    `attachments;
+    `attachments [];
     `reblog_of
       [
-        `stat;
-        `account [ `stat ];
+        `stat [];
+        `account [ `stat [] ];
         `in_reply_to [];
         `reblog_of [];
         `reblogged self_id;
         `favourited self_id;
-        `attachments;
+        `attachments [];
       ];
   ]
 
@@ -357,7 +371,7 @@ let load_notifications_from_db ?self_id
         select ~id:(`In noti_ids)
           ~preload:
             [
-              `from_account [ `stat ];
+              `from_account [ `stat [] ];
               `target_status (status_preload_spec self_id);
             ]))
   >|= index_by (fun x -> x#id)

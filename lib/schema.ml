@@ -17,7 +17,7 @@ module rec Account = struct
       val followers_url : string
       val avatar_remote_url : string option
       val header_remote_url : string
-      val stat : AccountStat.t [@@not_column]
+      val stat : AccountStat.t option [@@foreign_key "account_id"]
     end
 end
 
@@ -45,10 +45,10 @@ and Status = struct
       val in_reply_to_id : ID.t option
       val reblog_of_id : ID.t option
       val account_id : Account.ID.t
-      val stat : StatusStat.t [@@not_column]
+      val stat : StatusStat.t option [@@foreign_key "status_id"]
       val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
       val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]
-      val attachments : MediaAttachment.t list [@@not_column]
+      val attachments : MediaAttachment.t list [@@foreign_key "status_id"]
     end
 end
 
@@ -69,7 +69,7 @@ and MediaAttachment = struct
 
   class type t =
     object
-      val status_id : int option (* Status.ID.t option *)
+      val status_id : Status.ID.t option
       val account_id : Account.ID.t option
       val remote_url : string
       val type_ : int [@@column "type"]

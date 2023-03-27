@@ -10,13 +10,13 @@ let env_get_mod_opt env key = Hashtbl.find_opt env.e_mod_name key
 let env_get_mod env key = env_get_mod_opt env key |> Option.get
 
 let env_replace_mod_name env ty =
+  (* Convert e.g., Status.t ==> Status_001_.t *)
   let rec aux ty =
     match ty.ptyp_desc with
     | Ptyp_constr (body, args) ->
         let body =
           match body with
-          | { txt = Ldot (Lident ident, (("t" | "preload_spec") as key)); loc }
-            ->
+          | { txt = Ldot (Lident ident, ("t" as key)); loc } ->
               let txt =
                 Ldot
                   ( Lident
@@ -104,6 +104,17 @@ type user_defined_field = {
   u_preload_spec : core_type option;
 }
 
+type related_field = {
+  r_name : string;
+  r_relation :
+    [ `HasOneOrZero (* M.t option *)
+    | `HasOne (* M.t *)
+    | `HasMany (* M.t list *) ];
+  r_foregin_mod_name : string;
+  r_foregin_key : string;
+  r_is_foregin_key_opt : bool;
+}
+
 type schema = {
   s_ocaml_mod_name : string;
   s_sql_name : string;
@@ -112,6 +123,7 @@ type schema = {
   s_user_defined : user_defined_field list;
   s_code_path : Code_path.t;
   s_custom_header : structure_item list;
+  s_related_field : related_field list;
 }
 
 let loadable_fields_of_schema schema =
@@ -151,6 +163,13 @@ let parse_item (x : structure_item) =
   let parse_attr (x : attribute) =
     match x.attr_name.txt with
     | "not_column" -> `Not_column
+    | "foreign_key" -> (
+        parse
+          (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
+          x.attr_loc x.attr_payload
+        @@ function
+        | Pconst_string (v, _, _) -> `Foreign_key v
+        | _ -> assert false)
     | "preload_spec" ->
         parse (ptyp __) x.attr_loc x.attr_payload @@ fun l -> `Preload_spec l
     | "column" -> (
@@ -203,15 +222,49 @@ let parse_item (x : structure_item) =
                }
          | _ -> assert false
        else
-         `Column
-           {
-             c_ocaml_name = name;
-             c_type = parse_type typ;
-             c_sql_name =
-               attrs
-               |> List.find_map (function `Column s -> Some s | _ -> None)
-               |> Option.value ~default:name;
-           }
+         match
+           attrs
+           |> List.find_map @@ function `Foreign_key s -> Some s | _ -> None
+         with
+         | Some foreign_key ->
+             let r_relation, r_foregin_mod_name =
+               let parse_M_t = function
+                 | {
+                     ptyp_desc =
+                       Ptyp_constr ({ txt = Ldot (Lident s, "t"); _ }, []);
+                     _;
+                   } ->
+                     Some s
+                 | _ -> None
+               in
+               match parse_M_t typ with
+               | Some s -> (`HasOne, s)
+               | None -> (
+                   match typ.ptyp_desc with
+                   | Ptyp_constr ({ txt = Lident "list"; _ }, [ arg ]) ->
+                       (`HasMany, Option.get (parse_M_t arg))
+                   | Ptyp_constr ({ txt = Lident "option"; _ }, [ arg ]) ->
+                       (`HasOneOrZero, Option.get (parse_M_t arg))
+                   | _ -> assert false)
+             in
+             `Related_field
+               {
+                 r_name = name;
+                 r_relation;
+                 r_foregin_mod_name;
+                 r_foregin_key = foreign_key;
+                 r_is_foregin_key_opt = false (* dummy *);
+               }
+         | None ->
+             `Column
+               {
+                 c_ocaml_name = name;
+                 c_type = parse_type typ;
+                 c_sql_name =
+                   attrs
+                   |> List.find_map (function `Column s -> Some s | _ -> None)
+                   |> Option.value ~default:name;
+               }
   in
   try
     (* Parse `class type t = object val xxx : yyy ... end` *)
@@ -231,6 +284,7 @@ let construct_schema ctxt xs =
   let columns = ref [ CID; CCreatedAt; CUpdatedAt ] in
   let user_defined = ref [] in
   let not_field = ref [] in
+  let related_field = ref [] in
   xs
   |> List.iter (fun x ->
          match parse_config x with
@@ -241,6 +295,7 @@ let construct_schema ctxt xs =
              | `Columns xs -> (
                  xs
                  |> List.iter @@ function
+                    | `Related_field r -> related_field := r :: !related_field
                     | `User_defined r -> user_defined := r :: !user_defined
                     | `Column column -> columns := CNormal column :: !columns)));
   let derived =
@@ -270,7 +325,36 @@ let construct_schema ctxt xs =
     s_code_path = code_path;
     s_derived = derived;
     s_custom_header = List.rev !not_field;
+    s_related_field = !related_field;
   }
+
+let analyze_schemas (schemas : schema list) =
+  let schemas =
+    schemas
+    |> List.map @@ fun schema ->
+       let s_related_field =
+         schema.s_related_field
+         |> List.map @@ fun rel ->
+            let schema' =
+              schemas
+              |> List.find (fun s ->
+                     s.s_ocaml_mod_name = rel.r_foregin_mod_name)
+            in
+            let foregin =
+              schema'.s_columns
+              |> List.find_map (function
+                   | CNormal c when c.c_ocaml_name = rel.r_foregin_key -> Some c
+                   | _ -> None)
+              |> Option.get
+            in
+            match foregin.c_type with
+            | `Option (`ID _) -> { rel with r_is_foregin_key_opt = true }
+            | `ID _ -> { rel with r_is_foregin_key_opt = false }
+            | _ -> assert false
+       in
+       { schema with s_related_field }
+  in
+  schemas
 
 let expand_type_column loc schema =
   let rtags =
@@ -379,19 +463,32 @@ let expand_class_t_fields env loc schema a replace_rec_type =
   let obj_vals_and_methods_for_derived =
     (schema.s_derived
     |> List.map (fun { d_name; d_opt; d_id_ident } ->
-           let mod_ident = env_get_mod_ident env d_id_ident in
            let d_type =
-             if d_opt then `Option (`User (in_mod_ident mod_ident "t"))
-             else `User (in_mod_ident mod_ident "t")
+             if d_opt then `Option (`User (in_mod_ident d_id_ident "t"))
+             else `User (in_mod_ident d_id_ident "t")
            in
            let core_type = core_type_of_type loc d_type in
-           (d_name, replace_rec_type schema core_type)))
+           (d_name, core_type)))
     @ (schema.s_user_defined
       |> List.map (fun { u_name; u_core_type; _ } ->
-             ( u_name,
-               replace_rec_type schema (env_replace_mod_name env u_core_type) ))
+             (u_name, env_replace_mod_name env u_core_type)))
+    @ (schema.s_related_field
+      |> List.map (fun { r_name; r_relation; r_foregin_mod_name; _ } ->
+             let type_M_t =
+               ptyp_constr ~loc
+                 { loc; txt = Ldot (Lident r_foregin_mod_name, "t") }
+                 []
+             in
+             ( r_name,
+               match r_relation with
+               | `HasOne -> type_M_t
+               | `HasOneOrZero ->
+                   ptyp_constr ~loc { loc; txt = Lident "option" } [ type_M_t ]
+               | `HasMany ->
+                   ptyp_constr ~loc { loc; txt = Lident "list" } [ type_M_t ] ))
       )
     |> List.map @@ fun (name, typ) ->
+       let typ = typ |> env_replace_mod_name env |> replace_rec_type schema in
        let e_name = evar ~loc name in
        [
          obj_val name [%expr (None : [%t typ] option)];
@@ -456,96 +553,6 @@ let expand_class_t env loc schemas =
          in
          class_infos ~loc ~virt:Concrete ~params:[] ~name ~expr)
   |> pstr_class ~loc
-
-let expand_class_model loc schema =
-  let a = gen_symbol ~prefix:"a" () in
-  let fields =
-    let obj_val name e =
-      pcf_val ~loc ({ loc; txt = name }, Mutable, Cfk_concrete (Fresh, e))
-    in
-    let obj_method name e =
-      pcf_method ~loc
-        ( { loc; txt = name },
-          Public,
-          Cfk_concrete (Fresh, pexp_poly ~loc e None) )
-    in
-    let obj_method_with loc name =
-      let x = gen_symbol () in
-      obj_method ("with_" ^ name)
-        [%expr
-          fun [%p ppat_var ~loc (wloc x)] ->
-            [%e pexp_override ~loc [ (wloc name, evar ~loc x) ]]]
-    in
-    let obj_method_set loc name =
-      let x = gen_symbol () in
-      obj_method ("set_" ^ name)
-        [%expr
-          fun [%p ppat_var ~loc (wloc x)] ->
-            [%e pexp_setinstvar ~loc (wloc name) (evar ~loc x)]]
-    in
-    let obj_vals_and_methods_for_columns =
-      schema.s_columns
-      |> List.map @@ function
-         | CID ->
-             [
-               obj_val "id" [%expr [%e evar ~loc a].id];
-               obj_method "id" [%expr Sqlx.Ppx_runtime.expect_loaded id];
-               obj_method "id_opt" [%expr id];
-             ]
-         | CCreatedAt ->
-             [
-               obj_val "created_at" [%expr [%e evar ~loc a].created_at];
-               obj_method "created_at"
-                 [%expr Sqlx.Ppx_runtime.expect_loaded created_at];
-               obj_method "created_at_opt" [%expr created_at];
-             ]
-         | CUpdatedAt ->
-             [
-               obj_val "updated_at" [%expr [%e evar ~loc a].updated_at];
-               obj_method "updated_at"
-                 [%expr Sqlx.Ppx_runtime.expect_loaded updated_at];
-               obj_method "updated_at_opt" [%expr updated_at];
-             ]
-         | CNormal { c_ocaml_name = name; _ } ->
-             let e_name = evar ~loc name in
-             [
-               obj_val name (pexp_field ~loc (evar ~loc a) (wloc (lident name)));
-               obj_method name e_name;
-               obj_method_set loc name;
-               obj_method_with loc name;
-             ]
-    in
-    let obj_vals_and_methods_for_derived =
-      (schema.s_derived
-      |> List.map (fun { d_name; d_opt; d_id_ident } ->
-             let d_type =
-               if d_opt then `Option (`User (in_mod_ident d_id_ident "t"))
-               else `User (in_mod_ident d_id_ident "t")
-             in
-             (d_name, core_type_of_type loc d_type)))
-      @ (schema.s_user_defined
-        |> List.map (fun { u_name; u_core_type; _ } -> (u_name, u_core_type)))
-      |> List.map @@ fun (name, typ) ->
-         let e_name = evar ~loc name in
-         [
-           obj_val name [%expr (None : [%t typ] option)];
-           obj_method name [%expr Sqlx.Ppx_runtime.expect_loaded [%e e_name]];
-           obj_method_set loc name;
-           obj_method_with loc name;
-         ]
-    in
-    obj_vals_and_methods_for_columns @ obj_vals_and_methods_for_derived
-    |> List.flatten
-  in
-  pstr_class ~loc
-    [
-      class_infos ~loc ~virt:Concrete ~params:[] ~name:{ loc; txt = "t" }
-        ~expr:
-          (pcl_fun ~loc Nolabel None
-             (ppat_var ~loc { loc; txt = a })
-             (pcl_structure ~loc
-                (class_structure ~self:(ppat_any ~loc) ~fields)));
-    ]
 
 let expand_let_make loc schema =
   let xs =
@@ -813,36 +820,85 @@ let expand_type_user_defined_field loc schema =
   | _ ->
       [%stri type user_defined_field = [%t ptyp_variant ~loc rtags Closed None]]
 
-let expand_type_preload_spec env loc schema =
-  let rtags =
+let expand_type_preload_spec env loc schemas =
+  let rtags schema =
     (schema.s_derived
     |> List.map (fun f ->
            let name = f.d_name in
-           let mod_ident = env_get_mod_ident env f.d_id_ident in
-           let arg =
-             ptyp_constr ~loc (wloc (in_mod_ident mod_ident "preload_spec")) []
+           let preload_spec_name =
+             "preload_spec_"
+             ^ Option.fold ~none:schema.s_ocaml_mod_name
+                 ~some:(function Lident s -> s | _ -> assert false)
+                 f.d_id_ident.mod_ident
            in
-           rtag ~loc (wloc name) false [ arg ]))
+           let arg =
+             ptyp_constr ~loc { loc; txt = Lident preload_spec_name } []
+           in
+           rtag ~loc { loc; txt = name } false [ arg ]))
     @ (schema.s_user_defined
       |> List.map (fun f ->
              match f.u_preload_spec with
              | None -> rtag ~loc (wloc f.u_name) true []
              | Some preload_spec_core_type ->
+                 let rec replace_preload_spec_name ty =
+                   (* Convert e.g., Status.preload_spec -> preload_spec_Status *)
+                   match ty.ptyp_desc with
+                   | Ptyp_constr (body, args) ->
+                       let body =
+                         match body with
+                         | { txt = Ldot (Lident ident, "preload_spec"); loc } ->
+                             let txt = Lident ("preload_spec_" ^ ident) in
+                             { txt; loc }
+                         | _ -> body
+                       in
+                       {
+                         ty with
+                         ptyp_desc =
+                           Ptyp_constr
+                             (body, List.map replace_preload_spec_name args);
+                       }
+                   | _ -> ty
+                 in
                  rtag ~loc (wloc f.u_name) false
-                   [ env_replace_mod_name env preload_spec_core_type ]))
+                   [
+                     preload_spec_core_type |> env_replace_mod_name env
+                     |> replace_preload_spec_name;
+                   ]))
+    @ (schema.s_related_field
+      |> List.map (fun f ->
+             let name = f.r_name in
+             let preload_spec_name = "preload_spec_" ^ f.r_foregin_mod_name in
+             let arg =
+               ptyp_constr ~loc { loc; txt = Lident preload_spec_name } []
+             in
+             rtag ~loc (wloc name) false [ arg ]))
   in
-  match rtags with
-  | [] ->
-      [%stri
-        include struct
-          [%%i empty_variant_type ~loc "preload_spec_elm"]
-
-          type preload_spec = preload_spec_elm list
-        end]
-  | _ ->
-      [%stri
-        type preload_spec_elm = [%t ptyp_variant ~loc rtags Closed None]
-        and preload_spec = preload_spec_elm list]
+  schemas
+  |> List.map (fun schema ->
+         let name = "preload_spec_" ^ schema.s_ocaml_mod_name in
+         let name_elm = name ^ "_elm" in
+         type_declaration ~loc ~name:{ loc; txt = name } ~params:[] ~cstrs:[]
+           ~kind:Ptype_abstract ~private_:Public
+           ~manifest:
+             (Some
+                (ptyp_constr ~loc
+                   { loc; txt = Lident "list" }
+                   [ ptyp_constr ~loc { loc; txt = Lident name_elm } [] ]))
+         ::
+         (match rtags schema with
+         | [] ->
+             [
+               type_declaration ~loc ~name:{ loc; txt = name_elm } ~params:[]
+                 ~cstrs:[] ~kind:(Ptype_variant []) ~private_:Public
+                 ~manifest:None;
+             ]
+         | rtags ->
+             [
+               type_declaration ~loc ~params:[] ~cstrs:[] ~kind:Ptype_abstract
+                 ~private_:Public ~name:{ loc; txt = name_elm }
+                 ~manifest:(Some (ptyp_variant ~loc rtags Closed None));
+             ]))
+  |> List.flatten |> pstr_type ~loc Recursive
 
 let expand_let_default_preload loc _schema =
   [%stri let default_preload : preload_spec ref = ref []]
@@ -1005,6 +1061,21 @@ let expand_let_load_fields env loc schema =
            ~rhs:
              (if has_arg then [%expr [%e loader] ~preload:nested_preload xs c]
               else [%expr [%e loader] xs c]))
+    @ (schema.s_related_field
+      |> List.map @@ fun f ->
+         case
+           ~lhs:
+             (ppat_variant ~loc f.r_name
+                (Some (ppat_var ~loc (wloc "nested_preload"))))
+           ~guard:None
+           ~rhs:
+             [%expr
+               [%e
+                 pexp_ident ~loc
+                   (wloc
+                      (lident
+                         ("load_" ^ schema.s_ocaml_mod_name ^ "_" ^ f.r_name)))]
+                 ~preload:nested_preload xs c])
   in
   value_binding ~loc
     ~pat:(ppat_var ~loc (wloc ("load_" ^ schema.s_ocaml_mod_name ^ "_fields")))
@@ -1025,15 +1096,54 @@ let expand_let_load_fields env loc schema =
                   Lwt.return_unit
               | _ -> preload |> Lwt_list.iter_s [%e pexp_function ~loc cases]])
 
+let expand_let_load_related_field loc schema rel =
+  let mod_name = rel.r_foregin_mod_name in
+  let select = lident ("select_" ^ mod_name) |> wloc |> pexp_ident ~loc in
+  value_binding ~loc
+    ~pat:
+      (ppat_var ~loc
+         { loc; txt = "load_" ^ schema.s_ocaml_mod_name ^ "_" ^ rel.r_name })
+    ~expr:
+      [%expr
+        fun ?preload xs (c : Sqlx.Ppx_runtime.connection) ->
+          let ( >|= ) x f = Lwt.map f x in
+          let ids = xs |> List.map (fun x -> x#id) in
+          [%e
+            pexp_apply ~loc select
+              [
+                (Optional "preload", [%expr preload]);
+                (Labelled rel.r_foregin_key, [%expr `In ids]);
+                (Nolabel, [%expr c]);
+              ]]
+          >|= Sqlx.Ppx_runtime.index_by (fun y ->
+                  [%e
+                    let e =
+                      pexp_send ~loc [%expr y] { loc; txt = rel.r_foregin_key }
+                    in
+                    if rel.r_is_foregin_key_opt then [%expr Option.get [%e e]]
+                    else e])
+          >|= fun tbl ->
+          xs
+          |> List.iter @@ fun x ->
+             [%e pexp_send ~loc [%expr x] { loc; txt = "set_" ^ rel.r_name }]
+               (Some
+                  [%e
+                    match rel.r_relation with
+                    | `HasOne -> [%expr Hashtbl.find tbl x#id]
+                    | `HasOneOrZero -> [%expr Hashtbl.find_opt tbl x#id]
+                    | `HasMany -> [%expr Hashtbl.find_all tbl x#id]])]
+
 let expand_let_select_and_load_columns_and_load_fields env loc schemas =
   schemas
   |> List.map (fun schema ->
-         schema.s_columns
+         (schema.s_columns
          |> List.filter_map (fun c ->
                 match c with
                 | CNormal { c_type = `ID _ | `Option (`ID _); _ } ->
                     Some (expand_let_load_column loc schema c)
-                | _ -> None)
+                | _ -> None))
+         @ (schema.s_related_field
+           |> List.map (expand_let_load_related_field loc schema))
          |> List.cons (expand_let_load_fields env loc schema)
          |> List.cons (expand_let_select env loc schema))
   |> List.flatten |> pstr_value ~loc Recursive
@@ -1150,11 +1260,18 @@ let expand_0 env loc schemas =
       expand_type_user_defined_field loc schema;
     ]
 
+let expand_0' env loc schemas = [ expand_type_preload_spec env loc schemas ]
+
 let expand_1 env loc schemas =
   generate_modules env loc schemas @@ fun old_name _name schema ->
   [
     include_module_lident loc old_name;
-    expand_type_preload_spec env loc schema;
+    [%stri
+      type preload_spec =
+        [%t
+          ptyp_constr ~loc
+            { loc; txt = Lident ("preload_spec_" ^ schema.s_ocaml_mod_name) }
+            []]];
     expand_let_default_preload loc schema;
     expand_type_args env loc schema;
   ]
@@ -1265,14 +1382,24 @@ let expand ~ctxt (xs : module_binding list) =
   let loc = !Ast_helper.default_loc in
   let schemas =
     xs
-    |> List.map @@ fun (x : module_binding) ->
-       let mod_name = Option.get x.pmb_name.txt in
-       Ast_pattern.(parse (pmod_structure __)) loc x.pmb_expr @@ fun ys ->
-       let schema = construct_schema ctxt ys in
-       { schema with s_ocaml_mod_name = mod_name }
+    |> List.map (fun (x : module_binding) ->
+           let mod_name = Option.get x.pmb_name.txt in
+           Ast_pattern.(parse (pmod_structure __)) loc x.pmb_expr @@ fun ys ->
+           let schema = construct_schema ctxt ys in
+           { schema with s_ocaml_mod_name = mod_name })
+    |> analyze_schemas
   in
   let env = init_expand_env in
-  [ expand_0; expand_1; expand_2; expand_3; expand_4; expand_5; expand_6 ]
+  [
+    expand_0;
+    expand_0';
+    expand_1;
+    expand_2;
+    expand_3;
+    expand_4;
+    expand_5;
+    expand_6;
+  ]
   |> List.fold_left
        (fun acc f -> wrap_include loc (f env loc schemas) :: acc)
        []
