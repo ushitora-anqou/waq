@@ -13,7 +13,7 @@ module rec Account = struct
       val username : string
       val domain : string option
       val display_name : string
-      val stat : AccountStat.t option [@@foreign_key "account_id"]
+      val stat : AccountStat.t option [@@foreign_key `account_id]
     end
 end
 

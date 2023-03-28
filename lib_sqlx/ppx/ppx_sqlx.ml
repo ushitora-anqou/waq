@@ -163,13 +163,11 @@ let parse_item (x : structure_item) =
   let parse_attr (x : attribute) =
     match x.attr_name.txt with
     | "not_column" -> `Not_column
-    | "foreign_key" -> (
+    | "foreign_key" ->
         parse
-          (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
+          (pstr (pstr_eval (pexp_variant __ none) drop ^:: nil))
           x.attr_loc x.attr_payload
-        @@ function
-        | Pconst_string (v, _, _) -> `Foreign_key v
-        | _ -> assert false)
+          (fun v -> `Foreign_key v)
     | "preload_spec" ->
         parse (ptyp __) x.attr_loc x.attr_payload @@ fun l -> `Preload_spec l
     | "column" -> (
