@@ -353,7 +353,37 @@ let analyze_schemas (schemas : schema list) =
             | `ID _ -> { rel with r_is_foregin_key_opt = false }
             | _ -> assert false
        in
-       { schema with s_related_field }
+       let s_user_defined =
+         schema.s_user_defined
+         |> List.map @@ fun u ->
+            match u.u_preload_spec with
+            | Some
+                ({
+                   ptyp_desc =
+                     Ptyp_constr ({ txt = Lident "preload_spec"; loc }, args);
+                   _;
+                 } as ty) ->
+                {
+                  u with
+                  u_preload_spec =
+                    Some
+                      {
+                        ty with
+                        ptyp_desc =
+                          Ptyp_constr
+                            ( {
+                                txt =
+                                  Ldot
+                                    ( Lident schema.s_ocaml_mod_name,
+                                      "preload_spec" );
+                                loc;
+                              },
+                              args );
+                      };
+                }
+            | _ -> u
+       in
+       { schema with s_related_field; s_user_defined }
   in
   schemas
 
