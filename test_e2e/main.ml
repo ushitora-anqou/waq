@@ -14,6 +14,10 @@ let all_tests =
     ("waq-mstdn-9-1", Waq_mstdn_9_delete.f_waq_mstdn);
     ("waq-mstdn-9-2", Waq_mstdn_9_delete.f_mstdn_waq);
     ("waq-mstdn-10-1", Waq_mstdn_10_attachment.f_waq_mstdn);
+    (*
+    ("waq-mstdn-11-1", Waq_mstdn_11_mention.f_waq_mstdn);
+    *)
+    ("waq-mstdn-11-2", Waq_mstdn_11_mention.f_mstdn_waq);
     ("waq-1", Waq_1.f);
     ("waq-2", Waq_2_ws.f);
     ("waq-3", Waq_3.f);

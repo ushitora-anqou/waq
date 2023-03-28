@@ -203,6 +203,12 @@ type status_mention = {
 }
 [@@deriving make, yojson]
 
+let serialize_mention (m : Model.Mention.t) : status_mention =
+  let a = Option.get m#account in
+  make_status_mention
+    ~id:(Model.Account.ID.to_int a#id |> string_of_int)
+    ~username:a#username ~url:a#uri ~acct:(acct a#username a#domain)
+
 type status = {
   id : string;
   created_at : string;
@@ -252,9 +258,10 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     ~reblogs_count:stat#reblogs_count ~favourites_count:stat#favourites_count
     ~reblogged:s#reblogged ~favourited:s#favourited
     ~media_attachments:(s#attachments |> List.map serialize_media_attachment)
+    ~mentions:(s#mentions |> List.map serialize_mention)
     ()
 
-let status_preload_spec self_id =
+let status_preload_spec self_id : Model.Status.preload_spec =
   [
     `stat [];
     `account [ `stat [] ];
@@ -262,6 +269,7 @@ let status_preload_spec self_id =
     `reblogged self_id;
     `favourited self_id;
     `attachments [];
+    `mentions [ `account [] ];
     `reblog_of
       [
         `stat [];
@@ -271,6 +279,7 @@ let status_preload_spec self_id =
         `reblogged self_id;
         `favourited self_id;
         `attachments [];
+        `mentions [ `account [] ];
       ];
   ]
 

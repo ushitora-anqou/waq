@@ -8,15 +8,23 @@ type agent = {
 }
 [@@deriving make]
 
+let acct_of_agent (a : agent) = a.username ^ "@" ^ a.domain
 let lookup src = lookup src.kind ~token:src.token
 let follow src = follow src.kind ~token:src.token
 let post src = post src.kind ~token:src.token
 let search src = search src.kind ~token:src.token
 let reblog src = reblog src.kind ~token:src.token
 let unreblog src = unreblog src.kind ~token:src.token
-let home_timeline src = home_timeline src.kind ~token:src.token
+
+let home_timeline src =
+  home_timeline src.kind ~token:src.token >|= List.map status_of_yojson
+
 let delete_status src = delete_status src.kind ~token:src.token
 let get_status src = get_status src.kind ~token:src.token
+let get_notifications src = get_notifications src.kind ~token:src.token
+
+let websocket src ?target handler f =
+  websocket src.kind ~token:src.token ?target handler f
 
 let upload_media src ~filename ~data ~content_type =
   let target = "/api/v2/media" in

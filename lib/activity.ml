@@ -763,6 +763,16 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
                |> save_one))
          |> ignore_lwt);%lwt
 
+  (* Handle mentions *)
+  (note.cc
+  |> List.filter (fun s -> Uri.(of_string s |> domain) = Config.server_name ())
+  |> Lwt_list.map_p (fun uri -> Db.(e @@ Account.get_one ~uri))
+  >>= Lwt_list.iter_p @@ fun acct ->
+      let m =
+        Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
+      in
+      Db.(e @@ Mention.(save_one m)) |> ignore_lwt);%lwt
+
   Lwt.return status
 
 and status_of_note (note : ap_note) : Db.Status.t Lwt.t =

@@ -21,6 +21,7 @@ let migrations : (int * (module Sqlx.Migration.S)) list =
         (module M20230321_215500_create_unique_index_on_accounts_username_domain)
       );
       (20230321_215501, (module M20230321_215501_create_media_attachments));
+      (20230328_233800, (module M20230328_233800_create_mentions));
     ]
 
 let verify_migration_status () =

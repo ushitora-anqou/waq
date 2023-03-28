@@ -18,6 +18,7 @@ module rec Account = struct
       val avatar_remote_url : string option
       val header_remote_url : string
       val stat : AccountStat.t option [@@foreign_key `account_id]
+      val user : User.t option [@@foreign_key `account_id]
     end
 end
 
@@ -49,6 +50,7 @@ and Status = struct
       val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
       val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]
       val attachments : MediaAttachment.t list [@@foreign_key `status_id]
+      val mentions : Mention.t list [@@foreign_key `status_id]
     end
 end
 
@@ -161,30 +163,34 @@ end
 and Notification = struct
   name "notifications"
 
-  type activity_type_t = [ `Status | `Favourite | `Follow ]
+  type activity_type_t = [ `Status | `Favourite | `Follow | `Mention ]
 
   let activity_type_t_to_string : activity_type_t -> string = function
     | `Status -> "Status"
     | `Favourite -> "Favourite"
     | `Follow -> "Follow"
+    | `Mention -> "Mention"
 
   let activity_type_t_of_string : string -> activity_type_t = function
     | "Status" -> `Status
     | "Favourite" -> `Favourite
     | "Follow" -> `Follow
+    | "Mention" -> `Mention
     | _ -> failwith "activity_type_t_of_string: invalid input"
 
-  type typ_t = [ `reblog | `favourite | `follow ]
+  type typ_t = [ `reblog | `favourite | `follow | `mention ]
 
   let typ_t_to_string : typ_t -> string = function
     | `reblog -> "reblog"
     | `favourite -> "favourite"
     | `follow -> "follow"
+    | `mention -> "mention"
 
   let typ_t_of_string : string -> typ_t = function
     | "reblog" -> `reblog
     | "favourite" -> `favourite
     | "follow" -> `follow
+    | "mention" -> `mention
     | _ -> failwith "type_t_of_string: invalid input"
 
   class type t =
@@ -197,5 +203,15 @@ and Notification = struct
 
       val target_status : Status.t option
       [@@not_column] [@@preload_spec: Status.preload_spec]
+    end
+end
+
+and Mention = struct
+  name "mentions"
+
+  class type t =
+    object
+      val status_id : Status.ID.t option
+      val account_id : Account.ID.t option
     end
 end]

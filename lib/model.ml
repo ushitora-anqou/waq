@@ -308,18 +308,49 @@ module Notification = struct
          |> List.iter (fun (status_id, f) ->
                 f (Some (Some (Hashtbl.find tbl status_id)))));%lwt
 
+        (* Load mentions *)
+        (let targets =
+           ns
+           |> List.filter_map (fun n ->
+                  match (n#activity_type, n#typ) with
+                  | `Mention, _ | _, Some `mention ->
+                      Some (Mention.ID.of_int n#activity_id, n#set_target_status)
+                  | _ -> None)
+         in
+         let%lwt tbl =
+           Mention.select ~id:(`In (map_fst_sort_uniq targets)) c
+           >|= index_by (fun x -> x#id)
+         in
+         let targets =
+           targets
+           |> List.filter_map (fun (men_id, f) ->
+                  (Hashtbl.find tbl men_id)#status_id
+                  |> Option.map (fun id -> (id, f)))
+         in
+         Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
+         >|= index_by (fun x -> x#id)
+         >|= fun tbl ->
+         targets
+         |> List.iter @@ fun (status_id, f) ->
+            f (Some (Some (Hashtbl.find tbl status_id))));%lwt
+
         Lwt.return_unit
+end
+
+module Mention = struct
+  include Mention
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id (c : Sqlx.Connection.t) :
     Status.t list Lwt.t =
   c#query
     {|
-SELECT * FROM statuses
+SELECT * FROM statuses s
 WHERE
   deleted_at IS NULL AND
   ( account_id = $1 OR
-    account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) ) AND
+    account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) OR
+    EXISTS (SELECT 1 FROM mentions WHERE status_id = s.id AND account_id = $1) ) AND
   ( $3 = 0 OR id >= $3 ) AND ( $4 = 0 OR id <= $4 )
 ORDER BY created_at DESC LIMIT $2|}
     ~p:
