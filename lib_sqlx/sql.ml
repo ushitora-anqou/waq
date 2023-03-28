@@ -103,6 +103,20 @@ let where_int_opt name
   in
   match ptn with None -> cond | Some ptn -> f ptn
 
+let where_bool name ptn ((where, param) as cond) =
+  match ptn with
+  | None -> cond
+  | Some (`Eq x) ->
+      let where = `Eq (`C name, `M name) :: where in
+      let param = (`M name, `Bool x) :: param in
+      (where, param)
+
+let where_bool_opt name ptn cond =
+  match ptn with
+  | None -> cond
+  | Some ((`EqNone | `NeqNone) as ptn) -> where_nullable name ptn cond
+  | Some (`Eq _ as ptn) -> where_bool name (Some ptn) cond
+
 let where_string ~encode name ptn ((where, param) as cond) =
   match ptn with
   | None -> cond

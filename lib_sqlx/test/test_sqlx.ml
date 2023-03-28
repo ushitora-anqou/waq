@@ -5,7 +5,16 @@ open Util
 [@@@warning "-32-39"]
 
 [%%sqlx.schemas
-module rec Account = struct
+module rec TestBool = struct
+  name "test_bool"
+
+  class type t =
+    object
+      val x : bool
+    end
+end
+
+and Account = struct
   name "accounts"
 
   class type t =
@@ -155,6 +164,14 @@ let setup1 () =
   Db.e @@ fun c ->
   c#execute
     {|
+CREATE TABLE test_bool (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  x BOOLEAN NOT NULL
+)|};%lwt
+  c#execute
+    {|
 CREATE TABLE accounts (
   id SERIAL PRIMARY KEY,
   username TEXT NOT NULL,
@@ -221,6 +238,19 @@ CREATE TABLE account_stats (
   FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   UNIQUE (account_id)
 )|}
+
+let test_bool _ _ =
+  setup1 ();%lwt
+  let%lwt [ r1 ] = Db.e TestBool.(insert [ make ~x:true () ]) in
+  let%lwt [ r2 ] = Db.e TestBool.(insert [ make ~x:false () ]) in
+  let%lwt [ r1' ] = Db.e TestBool.(select ~x:(`Eq true)) in
+  let%lwt [ r2' ] = Db.e TestBool.(select ~x:(`Eq false)) in
+  assert r1#x;
+  assert (not r2#x);
+  assert r1'#x;
+  assert (not r2'#x);
+  Lwt.return_unit
+  [@@warning "-8"]
 
 let test_account_basic_ops_case1 _ _ =
   setup1 ();%lwt
@@ -636,6 +666,7 @@ let () =
            [
              Alcotest_lwt.test_case "account" `Quick
                test_account_basic_ops_case1;
+             Alcotest_lwt.test_case "bool" `Quick test_bool;
            ] );
          ( "preload",
            [

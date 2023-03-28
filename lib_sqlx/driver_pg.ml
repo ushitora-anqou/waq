@@ -18,6 +18,7 @@ let ftype_mapper (ty : Pg.ftype) f =
   | INT2 | INT4 | INT8 -> f `Int
   | FLOAT4 | FLOAT8 -> f `Float
   | TIMESTAMP | TIMESTAMPTZ -> f `Timestamp
+  | BOOL -> f `Bool
   | _ ->
       failwithf "Not implemented ftype in ftype_mapper: %s"
         (Pg.string_of_ftype ty)
@@ -30,6 +31,7 @@ let value_to_string_for_pg ~(ty : Pg.ftype) (v : value) : string =
   | `Int, `Int i -> string_of_int i
   | `Float, `Float f -> string_of_float f
   | `Timestamp, `Timestamp t -> Ptime.to_rfc3339 ~frac_s:6 t
+  | `Bool, `Bool b -> string_of_bool b
   | _ ->
       failwithf "Invalid pair of type and value: \"%s\" and \"%s\""
         (Pg.string_of_ftype ty) (Value.show v)
@@ -45,6 +47,7 @@ let value_of_string_for_pg ~(ty : Pg.ftype) (s : string option) : value =
         match Ptime.of_rfc3339 (s ^ "Z") with
         | Ok (t, _, _) -> `Timestamp t
         | Error _ -> failwithf "Invalid format of timestamp: %s" s)
+    | `Bool -> `Bool (if s = "t" then true else false)
     | _ -> failwithf "Not implemented pg datatype: %s" (Pg.string_of_ftype ty)
   in
   s |> Option.fold ~none:`Null ~some:(fun s -> ftype_mapper ty (aux s))

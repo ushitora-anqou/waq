@@ -5,7 +5,8 @@ type t =
   | `String of string
   | `Int of int
   | `Float of float
-  | `Timestamp of Ptime.t ]
+  | `Timestamp of Ptime.t
+  | `Bool of bool ]
 [@@deriving show]
 
 type null_t =
@@ -45,6 +46,15 @@ let expect_timestamp_opt : t -> Ptime.t option = function
   | `Timestamp t -> Some t
   | v -> failwithf "Expect timestamp or null, got: %s" (show v)
 
+let expect_bool : t -> bool = function
+  | `Bool b -> b
+  | v -> failwithf "Expect bool, got: %s" (show v)
+
+let expect_bool_opt : t -> bool option = function
+  | `Null -> None
+  | `Bool b -> Some b
+  | v -> failwithf "Expect bool or null, got: %s" (show v)
+
 let of_int (n : int) = `Int n
 let of_string (s : string) = `String s
 let of_timestamp (t : Ptime.t) = `Timestamp t
@@ -57,3 +67,8 @@ let of_string_opt (s : string option) =
 
 let of_timestamp_opt (t : Ptime.t option) =
   match t with None -> `Null | Some t -> `Timestamp t
+
+let of_bool (b : bool) = `Bool b
+
+let of_bool_opt (b : bool option) =
+  match b with None -> `Null | Some b -> `Bool b

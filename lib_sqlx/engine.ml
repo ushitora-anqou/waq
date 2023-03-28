@@ -53,6 +53,7 @@ module Make (D : Driver) = struct
         | `Int i -> string_of_int i
         | `Float f -> string_of_float f
         | `Timestamp t -> Ptime.to_rfc3339 t
+        | `Bool b -> string_of_bool b
       in
       fun sql params ->
         Logq.debug (fun m ->

@@ -69,6 +69,7 @@ type typ =
   [ `Int
   | `String
   | `Ptime
+  | `Bool
   | `ID of id_ident
   | `User of longident
   | `Option of typ ]
@@ -77,6 +78,7 @@ let rec core_type_of_type loc : typ -> core_type = function
   | `Int -> [%type: int]
   | `String -> [%type: string]
   | `Ptime -> [%type: Ptime.t]
+  | `Bool -> [%type: bool]
   | `ID { mod_ident = None; _ } ->
       ptyp_constr ~loc { loc; txt = Ldot (Lident "ID", "t") } []
   | `ID { mod_ident = Some m; _ } ->
@@ -183,6 +185,7 @@ let parse_item (x : structure_item) =
     let aux : longident -> typ = function
       | Lident "int" -> `Int
       | Lident "string" -> `String
+      | Lident "bool" -> `Bool
       | Ldot (Lident "Ptime", "t") -> `Ptime
       | Ldot (Lident "ID", "t") -> `ID { mod_ident = None }
       | Ldot (Ldot (l, "ID"), "t") -> `ID { mod_ident = Some l }
@@ -609,6 +612,7 @@ let expand_let_pack env loc schema =
              match c_type with
              | `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int]
              | `String -> [%expr fun x -> x |> Sqlx.Value.expect_string]
+             | `Bool -> [%expr fun x -> x |> Sqlx.Value.expect_bool]
              | `Ptime -> [%expr fun x -> x |> Sqlx.Value.expect_timestmap]
              | `ID l ->
                  [%expr fun x -> x |> Sqlx.Value.expect_int |> [%e decode_id l]]
@@ -616,6 +620,7 @@ let expand_let_pack env loc schema =
                  [%expr
                    fun x -> x |> Sqlx.Value.expect_string |> [%e decode_user l]]
              | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int_opt]
+             | `Option `Bool -> [%expr fun x -> x |> Sqlx.Value.expect_bool_opt]
              | `Option `String ->
                  [%expr fun x -> x |> Sqlx.Value.expect_string_opt]
              | `Option `Ptime ->
@@ -682,6 +687,7 @@ let expand_let_unpack env loc schema =
              in
              match c_type with
              | `Int -> [%expr fun x -> x |> Sqlx.Value.of_int]
+             | `Bool -> [%expr fun x -> x |> Sqlx.Value.of_bool]
              | `String -> [%expr fun x -> x |> Sqlx.Value.of_string]
              | `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
              | `ID l ->
@@ -690,6 +696,7 @@ let expand_let_unpack env loc schema =
                  [%expr
                    fun x -> x |> [%e encode_user l] |> Sqlx.Value.of_string]
              | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
+             | `Option `Bool -> [%expr fun x -> x |> Sqlx.Value.of_bool_opt]
              | `Option `String -> [%expr fun x -> x |> Sqlx.Value.of_string_opt]
              | `Option `Ptime ->
                  [%expr fun x -> x |> Sqlx.Value.of_timestamp_opt]
@@ -946,12 +953,14 @@ let expand_where env loc schema where p =
              let where =
                match c_type with
                | `Int -> [%expr Sqlx.Sql.where_int]
+               | `Bool -> [%expr Sqlx.Sql.where_bool]
                | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
                | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
                | `ID l -> where_id l
                | `User l ->
                    [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
                | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
+               | `Option `Bool -> [%expr Sqlx.Sql.where_bool_opt]
                | `Option `String ->
                    [%expr Sqlx.Sql.where_string_opt ~encode:Fun.id]
                | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
