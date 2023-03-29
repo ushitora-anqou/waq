@@ -24,6 +24,7 @@
   ptime
   re
   re.pcre
+  re2
   result
   safepass
   sqlx

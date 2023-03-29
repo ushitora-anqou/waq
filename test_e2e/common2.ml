@@ -8,7 +8,9 @@ type agent = {
 }
 [@@deriving make]
 
-let acct_of_agent (a : agent) = a.username ^ "@" ^ a.domain
+let acct_of_agent ~(from : agent) (a : agent) =
+  if a.domain = from.domain then a.username else a.username ^ "@" ^ a.domain
+
 let lookup src = lookup src.kind ~token:src.token
 let follow src = follow src.kind ~token:src.token
 let post src = post src.kind ~token:src.token

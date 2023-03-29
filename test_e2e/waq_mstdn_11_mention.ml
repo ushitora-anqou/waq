@@ -26,7 +26,9 @@ let f (a0 : agent) (a1 : agent) =
   websocket a1 handler (fun pushf ->
       (* a0: Post with mentions *)
       let%lwt { uri; _ } =
-        post a0 ~content:(Printf.sprintf "@%s てすと" (acct_of_agent a1)) ()
+        post a0
+          ~content:(Printf.sprintf "@%s てすと" (acct_of_agent ~from:a0 a1))
+          ()
       in
       Lwt_unix.sleep 1.0;%lwt
 
@@ -37,7 +39,8 @@ let f (a0 : agent) (a1 : agent) =
       (* a1: Check its notification *)
       let%lwt [ n ] = get_notifications a1 in
       assert ((Option.get n.status).uri = uri);
-      assert (n.account.acct = acct_of_agent a0);
+      assert (n.account.acct = acct_of_agent ~from:a1 a0);
+
       rest_notif := Some n;
 
       pushf None);%lwt
@@ -74,3 +77,15 @@ let f_mstdn_waq =
   in
   f a0 a1;%lwt
   Lwt.return_unit
+
+let f_waq_waq =
+  make_waq_scenario @@ fun token ->
+  let%lwt token2 = fetch_access_token ~username:"user2" in
+  let a0 =
+    make_agent ~kind:`Waq ~token ~username:"user1" ~domain:waq_server_domain
+  in
+  let a1 =
+    make_agent ~kind:`Waq ~token:token2 ~username:"user2"
+      ~domain:waq_server_domain
+  in
+  f a0 a1

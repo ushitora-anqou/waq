@@ -14,10 +14,6 @@ let all_tests =
     ("waq-mstdn-9-1", Waq_mstdn_9_delete.f_waq_mstdn);
     ("waq-mstdn-9-2", Waq_mstdn_9_delete.f_mstdn_waq);
     ("waq-mstdn-10-1", Waq_mstdn_10_attachment.f_waq_mstdn);
-    (*
-    ("waq-mstdn-11-1", Waq_mstdn_11_mention.f_waq_mstdn);
-    *)
-    ("waq-mstdn-11-2", Waq_mstdn_11_mention.f_mstdn_waq);
     ("waq-1", Waq_1.f);
     ("waq-2", Waq_2_ws.f);
     ("waq-3", Waq_3.f);
@@ -27,6 +23,13 @@ let all_tests =
     ("waq-7", Waq_7_reblog.f);
     ("waq-8", Waq_8_delete.f);
     ("waq-9", Waq_9_ap.f);
+    ("waq-10", Waq_10_mention.f);
+    (* ********** *)
+    (*
+    ("01-mention-waq-mstdn", Waq_mstdn_11_mention.f_waq_mstdn);
+    *)
+    ("01-mention-mstdn-waq", Waq_mstdn_11_mention.f_mstdn_waq);
+    ("01-mention-waq-waq", Waq_mstdn_11_mention.f_waq_waq);
   ]
 
 let execute_one_test (name, f) =

@@ -49,6 +49,7 @@
   ppx_yojson_conv
   ptime
   re
+  re2
   result
   safepass
   sha

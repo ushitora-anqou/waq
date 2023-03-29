@@ -666,6 +666,11 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
   in
   match by with
   | `Webfinger (domain, username) -> (
+      let domain =
+        match domain with
+        | Some s when s <> Config.server_name () -> Some s
+        | _ -> None
+      in
       match%lwt Db.(e @@ Account.get_one ~domain ~username) with
       | acc -> Lwt.return acc
       | exception Sqlx.Error.NoRowFound

@@ -17,6 +17,15 @@ let get req =
       |> Httpq.Server.respond ~headers:[ content_type_app_json ]
 
 (* Recv POST /api/v1/statuses *)
+let match_mention =
+  let open Re2 in
+  let r =
+    of_string {|(?:^|[^\w\\])@([\w.-]+)(?:@([\w.-]+))?(?:$|[^\w@\\.-])|}
+  in
+  get_matches r *> Result.value ~default:[]
+  *> List.map (fun r ->
+         (Match.get ~sub:(`Index 1) r |> Option.get, Match.get ~sub:(`Index 2) r))
+
 let post req =
   let%lwt self_id = authenticate_user req in
   let status = req |> Httpq.Server.query "status" in
@@ -26,18 +35,37 @@ let post req =
     |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
 
-  let now = Ptime.now () in
-  (* Insert status *)
+  (* Handle mentions *)
+  let%lwt mentioned_accts =
+    match_mention status
+    |> Lwt_list.filter_map_p (fun (username, domain) ->
+           try%lwt
+             Activity.search_account (`Webfinger (domain, username))
+             >|= Option.some
+           with _ ->
+             Logq.debug (fun m ->
+                 m "Couldn't find the mentioned account: %s"
+                   (username
+                   ^ match domain with None -> "" | Some s -> "@" ^ s));
+             Lwt.return_none)
+  in
+
+  (* Insert status and mentions *)
   let%lwt s =
     Db.(
       e
-      @@ Status.(
-           save_one_with_uri
-           @@ make ~text:status ~created_at:now ~updated_at:now ~uri:""
-                ~account_id:self_id ?in_reply_to_id ()))
+        Status.(
+          save_one_with_uri
+            (make ~text:status ~uri:"" ~account_id:self_id ?in_reply_to_id ())))
   in
+  (mentioned_accts
+  |> Lwt_list.iter_p @@ fun acct ->
+     Db.(e Mention.(make ~account_id:acct#id ~status_id:s#id () |> save_one))
+     |> ignore_lwt);%lwt
+
   (* Deliver the status to others *)
   Worker.Distribute.kick s;%lwt
+
   (* Return the result to the client *)
   let%lwt s = make_status_from_model ~self_id s in
   s |> yojson_of_status |> Yojson.Safe.to_string
