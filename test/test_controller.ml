@@ -6,6 +6,7 @@ let test_mention_regex () =
   assert (m "test @foo@example.com" = [ ("foo", Some "example.com") ]);
   assert (m "test@foo" = []);
   assert (m "\\@foo" = []);
+  assert (m "https://example.com/@foo" = []);
   assert (m "@foo@example\\.com" = []);
   assert (
     m "@f-_oo@exa-mple.comてすと@bar-_@waq.exa_mple.com"
