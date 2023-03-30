@@ -800,7 +800,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
          |> ignore_lwt);%lwt
 
   (* Handle mentions *)
-  (note.cc
+  (note.cc @ note.to_
   |> List.filter (fun s -> Uri.(of_string s |> domain) = Config.server_name ())
   |> Lwt_list.map_p (fun uri -> Db.(e @@ Account.get_one ~uri))
   >>= Lwt_list.iter_p @@ fun acct ->
