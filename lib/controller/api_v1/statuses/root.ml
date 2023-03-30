@@ -20,7 +20,8 @@ let get req =
 let match_mention =
   let open Re2 in
   let r =
-    of_string {|(?:^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+))?(?:$|[^\w@\\.-])|}
+    of_string
+      {|(?:^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
   in
   get_matches r *> Result.value ~default:[]
   *> List.map (fun r ->
