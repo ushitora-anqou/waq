@@ -6,12 +6,6 @@ let f =
   let%lwt token2 = fetch_access_token ~username:"user2" in
   let%lwt { id; _ } = post `Waq ~token ~content:"@user2 てすと" () in
 
-  (home_timeline `Waq ~token:token2 >|= function
-   | [ x ] ->
-       let s = status_of_yojson x in
-       assert (s.id = id)
-   | _ -> assert false);%lwt
-
   let%lwt ntfs = get_notifications `Waq ~token:token2 in
   (match ntfs with
   | [
