@@ -406,14 +406,17 @@ let websocket ?mtx ~token kind ?target handler f =
   let target =
     match target with
     | Some target -> target
-    | None ->
-        Printf.sprintf "/api/v1/streaming?access_token=%s&stream=user" token
+    | None -> "/api/v1/streaming?stream=user"
   in
   let uri = Uri.of_string (url kind target) in
   let%lwt endp = Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system in
   let ctx = Lazy.force Conduit_lwt_unix.default_ctx in
   let%lwt client = Conduit_lwt_unix.endp_to_client ~ctx endp in
-  let%lwt conn = connect ~ctx client uri in
+
+  let extra_headers =
+    Cohttp.Header.of_list [ ("Sec-WebSocket-Protocol", token) ]
+  in
+  let%lwt conn = connect ~extra_headers ~ctx client uri in
   let close_sent = ref false in
   let pushf msg =
     match msg with

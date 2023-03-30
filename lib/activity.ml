@@ -53,6 +53,7 @@ and ap_note = {
   content : string;
   in_reply_to : Yojson.Safe.t;
   attachment : t list;
+  tag : Yojson.Safe.t list;
 }
 
 and ap_image = { url : string }
@@ -170,8 +171,18 @@ let make_create ~id ~actor ~published ~to_ ~cc ~obj : ap_create =
   { id; actor; published; to_; cc; obj }
 
 let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-    ~attachment : ap_note =
-  { id; published; attributed_to; to_; cc; content; in_reply_to; attachment }
+    ~attachment ~tag : ap_note =
+  {
+    id;
+    published;
+    attributed_to;
+    to_;
+    cc;
+    content;
+    in_reply_to;
+    attachment;
+    tag;
+  }
 
 let make_ordered_collection ~id ~totalItems ~first ?last () :
     ap_ordered_collection =
@@ -353,8 +364,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let attachment =
         list_opt Attachment |> Option.value ~default:[] |> List.map of_yojson
       in
+      let tag = list Tag in
       make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-        ~attachment
+        ~attachment ~tag
       |> note
   | "OrderedCollection" ->
       let id = string Id in
@@ -477,6 +489,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Content, `String r.content);
           (InReplyTo, r.in_reply_to);
           (Attachment, `List (r.attachment |> List.map to_yojson));
+          (Tag, `List r.tag);
         ]
     | OrderedCollection r ->
         let l =
@@ -717,7 +730,15 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   in
   let published = s#created_at |> Ptime.to_rfc3339 in
   let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-  let cc = [ self#followers_url ] in
+  let%lwt mentions =
+    Db.(e Mention.(get_many ~status_id:(Some s#id) ~preload:[ `account [] ]))
+  in
+  let cc =
+    mentions
+    |> List.filter_map (fun m -> m#account)
+    |> List.map (fun a -> a#uri)
+    |> List.cons self#followers_url
+  in
   let in_reply_to =
     in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s#uri)
   in
@@ -730,6 +751,16 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
     content = s#text;
     in_reply_to;
     attachment = [] (* FIXME *);
+    tag =
+      mentions
+      |> List.map (fun m ->
+             let a = Option.get m#account in
+             `Assoc
+               [
+                 ("type", `String "Mention");
+                 ("href", `String a#uri);
+                 ("name", `String ("@" ^ Model.Account.acct a));
+               ]);
   }
   |> Lwt.return
 

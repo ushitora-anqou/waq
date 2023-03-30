@@ -45,6 +45,8 @@ module Account = struct
 
   let preferred_inbox_urls (accts : t list) =
     accts |> List.map preferred_inbox_url |> List.sort_uniq compare
+
+  let acct (a : t) = acct a#username a#domain
 end
 
 module StatusStat = struct

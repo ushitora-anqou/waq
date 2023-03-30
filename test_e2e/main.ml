@@ -25,9 +25,7 @@ let all_tests =
     ("waq-9", Waq_9_ap.f);
     ("waq-10", Waq_10_mention.f);
     (* ********** *)
-    (*
     ("01-mention-waq-mstdn", Waq_mstdn_11_mention.f_waq_mstdn);
-    *)
     ("01-mention-mstdn-waq", Waq_mstdn_11_mention.f_mstdn_waq);
     ("01-mention-waq-waq", Waq_mstdn_11_mention.f_waq_waq);
   ]

@@ -1,6 +1,6 @@
 open Common2
 
-let f (a0 : agent) (a1 : agent) =
+let f_ws (a0 : agent) (a1 : agent) =
   let ws_notif = ref None in
   let _, handler =
     websocket_handler_state_machine ~init:`Recv
@@ -32,10 +32,6 @@ let f (a0 : agent) (a1 : agent) =
       in
       Lwt_unix.sleep 1.0;%lwt
 
-      (* a1: Check its home timeline *)
-      let%lwt [ { uri = uri'; _ } ] = home_timeline a1 in
-      assert (uri = uri');
-
       (* a1: Check its notification *)
       let%lwt [ n ] = get_notifications a1 in
       assert ((Option.get n.status).uri = uri);
@@ -48,6 +44,21 @@ let f (a0 : agent) (a1 : agent) =
   assert (Option.is_some !ws_notif);
   assert (Option.is_some !rest_notif);
   assert (!ws_notif = !rest_notif);
+
+  Lwt.return_unit
+  [@@warning "-8"]
+
+let f (a0 : agent) (a1 : agent) =
+  (* a0: Post with mentions *)
+  let%lwt { uri; _ } =
+    post a0 ~content:(Printf.sprintf "@%s てすと" (acct_of_agent ~from:a0 a1)) ()
+  in
+  Lwt_unix.sleep 1.0;%lwt
+
+  (* a1: Check its notification *)
+  let%lwt [ n ] = get_notifications a1 in
+  assert ((Option.get n.status).uri = uri);
+  assert (n.account.acct = acct_of_agent ~from:a1 a0);
 
   Lwt.return_unit
   [@@warning "-8"]
@@ -75,7 +86,7 @@ let f_mstdn_waq =
     make_agent ~kind:`Waq ~token:waq_token ~username:"user1"
       ~domain:waq_server_domain
   in
-  f a0 a1;%lwt
+  f_ws a0 a1;%lwt
   Lwt.return_unit
 
 let f_waq_waq =
@@ -88,4 +99,4 @@ let f_waq_waq =
     make_agent ~kind:`Waq ~token:token2 ~username:"user2"
       ~domain:waq_server_domain
   in
-  f a0 a1
+  f_ws a0 a1
