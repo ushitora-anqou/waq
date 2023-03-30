@@ -351,8 +351,7 @@ SELECT * FROM statuses s
 WHERE
   deleted_at IS NULL AND
   ( account_id = $1 OR
-    account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) OR
-    EXISTS (SELECT 1 FROM mentions WHERE status_id = s.id AND account_id = $1) ) AND
+    account_id IN (SELECT target_account_id FROM follows WHERE account_id = $1) ) AND
   ( $3 = 0 OR id >= $3 ) AND ( $4 = 0 OR id <= $4 )
 ORDER BY created_at DESC LIMIT $2|}
     ~p:

@@ -32,6 +32,9 @@ let f_ws (a0 : agent) (a1 : agent) =
       in
       Lwt_unix.sleep 1.0;%lwt
 
+      (* a1: Check home timeline, which should be empty *)
+      let%lwt [] = home_timeline a1 in
+
       (* a1: Check its notification *)
       let%lwt [ n ] = get_notifications a1 in
       assert ((Option.get n.status).uri = uri);
@@ -54,6 +57,9 @@ let f (a0 : agent) (a1 : agent) =
     post a0 ~content:(Printf.sprintf "@%s てすと" (acct_of_agent ~from:a0 a1)) ()
   in
   Lwt_unix.sleep 1.0;%lwt
+
+  (* a1: Check home timeline, which should be empty *)
+  let%lwt [] = home_timeline a1 in
 
   (* a1: Check its notification *)
   let%lwt [ n ] = get_notifications a1 in
