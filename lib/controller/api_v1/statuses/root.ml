@@ -18,14 +18,19 @@ let get req =
 
 (* Recv POST /api/v1/statuses *)
 let match_mention =
-  let open Re2 in
-  let r =
-    of_string
-      {|(?:^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
+  let open Pcre in
+  let rex =
+    regexp
+      {|(?<=^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
   in
-  get_matches r *> Result.value ~default:[]
-  *> List.map (fun r ->
-         (Match.get ~sub:(`Index 1) r |> Option.get, Match.get ~sub:(`Index 2) r))
+  fun s ->
+    try
+      exec_all ~rex s
+      |> Array.map
+           ( get_substrings *> fun a ->
+             (a.(1), if a.(2) = "" then None else Some a.(2)) )
+      |> Array.to_list
+    with Not_found -> []
 
 let post req =
   let%lwt self_id = authenticate_user req in

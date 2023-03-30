@@ -20,11 +20,11 @@
   lwt.unix
   mirage-crypto-rng
   mirage-crypto-rng.lwt
+  pcre
   postgresql
   ptime
   re
   re.pcre
-  re2
   result
   safepass
   sqlx

@@ -44,12 +44,12 @@
   multipart_form
   multipart_form-lwt
   ocaml
+  pcre
   postgresql
   ppx_deriving_yaml
   ppx_yojson_conv
   ptime
   re
-  re2
   result
   safepass
   sha
