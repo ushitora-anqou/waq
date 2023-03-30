@@ -125,6 +125,7 @@ let post req =
   | exception _ -> Httpq.Server.respond ~status:`Unauthorized ""
   | body -> (
       try
+        (*Logq.debug (fun m -> m ">>>>>>>>\n%s" body);*)
         (match Yojson.Safe.from_string body |> of_yojson with
         | Accept r -> kick_inbox_accept r
         | Announce r -> kick_inbox_announce r
