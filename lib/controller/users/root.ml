@@ -24,7 +24,7 @@ let respond_html (a : Db.Account.t) () =
       | None ->
           [
             ("kind", Tstr "post");
-            ("content", Tstr s.content);
+            ("content", Tstr (omit_html_tags s.content));
             ("acct", Tstr s.account.acct);
             ( "rel_created_at",
               Tstr

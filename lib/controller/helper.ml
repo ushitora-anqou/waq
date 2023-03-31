@@ -81,3 +81,7 @@ let raise_if_no_row_found ?(status = `Bad_request) f =
 
 let string_to_status_id s = s |> int_of_string |> Model.Status.ID.of_int
 let string_to_account_id s = s |> int_of_string |> Model.Account.ID.of_int
+
+let omit_html_tags =
+  let r = Regex.e {|<[^>]*>|} in
+  Regex.replace r (fun _ -> "")
