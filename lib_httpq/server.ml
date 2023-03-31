@@ -16,7 +16,7 @@ type request =
       meth : Method.t;
       uri : Uri.t;
       path : string;
-      query : (string * string list) list;
+      query : (string, string) Hashtbl.t;
       param : (string * string) list;
       body : request_body option;
       raw_body : string option;
@@ -49,16 +49,8 @@ let body = function
 
 let param name = function Request { param; _ } -> List.assoc name param
 
-let query_many_opt name : request -> string list option = function
-  | Request { query; _ } ->
-      (* FIXME: parse body *)
-      List.assoc_opt name query
-
-let query_many ?default name req =
-  match query_many_opt name req with
-  | Some r -> r
-  | None when default <> None -> Option.get default
-  | None -> raise_error_response `Bad_request
+let query_many name : request -> string list = function
+  | Request { query; _ } -> Hashtbl.find_all query name
 
 let query ?default name = function
   | Request { body = Some body; query; _ } -> (
@@ -72,8 +64,8 @@ let query ?default name = function
             | _ -> failwith "json assoc")
         | JSON _ -> failwith "json"
         | Form body -> (
-            match List.assoc_opt name query with
-            | Some l -> List.hd l
+            match Hashtbl.find_opt query name with
+            | Some x -> x
             | None -> body |> List.assoc name |> List.hd)
         | MultipartFormdata { loaded; _ } -> loaded |> List.assoc name
       with
@@ -169,7 +161,12 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
   let meth = Bare_server.Request.meth req in
   let headers = Bare_server.Request.headers req |> Headers.of_list in
   let path = Uri.path uri in
-  let query = Uri.query uri in
+  let query =
+    let h = Hashtbl.create 0 in
+    Uri.query uri
+    |> List.iter (fun (k, xs) -> Hashtbl.add h k (xs |> String.concat ","));
+    h
+  in
   let%lwt raw_body, parsed_body =
     match%lwt parse_body ~body ~headers with
     | exception _ -> Lwt.return (None, None)
