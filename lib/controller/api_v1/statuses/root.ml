@@ -24,13 +24,30 @@ let match_mention =
       {|(?<=^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
   in
   fun s ->
-    try
-      exec_all ~rex s
-      |> Array.map
-           ( get_substrings *> fun a ->
-             (a.(1), if a.(2) = "" then None else Some a.(2)) )
-      |> Array.to_list
-    with Not_found -> []
+    (try exec_all ~rex s with Not_found -> [||])
+    |> Array.map (fun sub ->
+           try
+             let off1, off1' = get_substring_ofs sub 1 in
+             let a = get_substrings sub in
+             let username = a.(1) in
+             let domain = a.(2) in
+             if domain = "" then (off1 - 1, off1' - off1 + 1, username, None)
+             else
+               let _off2, off2' = get_substring_ofs sub 2 in
+               (off1 - 1, off2' - off1 + 1, username, Some domain)
+           with _ -> assert false)
+    |> Array.to_list
+
+let replace_mention spec text =
+  let cur, subs =
+    spec |> List.sort compare
+    |> List.fold_left
+         (fun (cur, subs) (off, len, subtext) ->
+           (off + len, subtext :: String.sub text cur (off - cur) :: subs))
+         (0, [])
+  in
+  String.(sub text cur (length text - cur)) :: subs
+  |> List.rev |> String.concat ""
 
 let post req =
   let%lwt self_id = authenticate_user req in
@@ -42,18 +59,33 @@ let post req =
   in
 
   (* Handle mentions *)
-  let%lwt mentioned_accts =
+  let%lwt mentioned_spots, mentioned_accts =
     match_mention status
-    |> Lwt_list.filter_map_p (fun (username, domain) ->
+    |> Lwt_list.filter_map_p (fun (off, len, username, domain) ->
            try%lwt
              Activity.search_account (`Webfinger (domain, username))
-             >|= Option.some
+             >|= fun a -> Some ((off, len, a), a)
            with _ ->
              Logq.debug (fun m ->
                  m "Couldn't find the mentioned account: %s"
                    (username
                    ^ match domain with None -> "" | Some s -> "@" ^ s));
              Lwt.return_none)
+    >|= List.split
+  in
+  let status =
+    let spec =
+      mentioned_spots
+      |> List.map @@ fun (off, len, a) ->
+         let open Jingoo.Jg_types in
+         let models = [ ("username", Tstr a#username); ("uri", Tstr a#uri) ] in
+         let text =
+           Jingoo.Jg_template.from_string ~models
+             {|<span class="h-card"><a href="{{ uri }}" class="u-url mention">@<span>{{ username }}</span></a></span>|}
+         in
+         (off, len, text)
+    in
+    replace_mention spec status
   in
 
   (* Insert status and mentions *)
