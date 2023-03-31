@@ -18,25 +18,23 @@ let get req =
 
 (* Recv POST /api/v1/statuses *)
 let match_mention =
-  let open Pcre in
-  let rex =
-    regexp
-      {|(?<=^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
+  let r =
+    {|(?<=^|[^\w/\\])@([\w.-]+)(?:@([\w.-]+(?::[0-9]+)?))?(?:$|[^\w@\\.-])|}
+    |> Regex.e
   in
   fun s ->
-    (try exec_all ~rex s with Not_found -> [||])
-    |> Array.map (fun sub ->
-           try
-             let off1, off1' = get_substring_ofs sub 1 in
-             let a = get_substrings sub in
-             let username = a.(1) in
-             let domain = a.(2) in
-             if domain = "" then (off1 - 1, off1' - off1 + 1, username, None)
-             else
-               let _off2, off2' = get_substring_ofs sub 2 in
-               (off1 - 1, off2' - off1 + 1, username, Some domain)
-           with _ -> assert false)
-    |> Array.to_list
+    Regex.match_ r s
+    |> List.map (fun r ->
+           let open Regex in
+           let username = Option.get r.(1) in
+           let domain = r.(2) in
+           match domain with
+           | None -> (username.offset, username.length, username.substr, None)
+           | Some domain ->
+               ( username.offset,
+                 domain.offset + domain.length - username.offset,
+                 username.substr,
+                 Some domain.substr ))
 
 let replace_mention spec text =
   let cur, subs =

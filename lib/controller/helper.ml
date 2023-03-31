@@ -71,10 +71,9 @@ let render ~default routes req =
 
 let parse_webfinger_address q =
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
-  match Regex.match_group re q with
-  | Ok [ _; username; domain ] ->
-      let domain = if domain = "" then None else Some domain in
-      (username, domain)
+  match Regex.match_ re q with
+  | [ [| _; Some username; domain |] ] ->
+      (username.substr, domain |> Option.map (fun (x : Regex.group) -> x.substr))
   | _ -> raise_error_response `Bad_request
 
 let raise_if_no_row_found ?(status = `Bad_request) f =

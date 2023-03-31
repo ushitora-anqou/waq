@@ -13,12 +13,13 @@ let parse_query_accounts q =
   let accts = [] in
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
   try%lwt
-    match Regex.match_group re q with
-    | Ok [ _; username; "" ] ->
-        Activity.search_account (`Webfinger (None, username)) >|= fun a ->
-        a :: accts
-    | Ok [ _; username; domain ] ->
-        Activity.search_account (`Webfinger (Some domain, username))
+    match Regex.match_ re q with
+    | [ [| _; Some username; None |] ] ->
+        Activity.search_account (`Webfinger (None, username.substr))
+        >|= fun a -> a :: accts
+    | [ [| _; Some username; Some domain |] ] ->
+        Activity.search_account
+          (`Webfinger (Some domain.substr, username.substr))
         >|= fun a -> a :: accts
     | _ -> Lwt.return accts
   with _ -> Lwt.return accts
