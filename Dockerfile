@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 RUN apt-get update && apt-get install -y \
-    pkg-config libpq-dev libgmp-dev libssl-dev \
+    pkg-config libpq-dev libgmp-dev libssl-dev libpcre3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
