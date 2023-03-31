@@ -343,6 +343,10 @@ module Mention = struct
   include Mention
 end
 
+module Marker = struct
+  include Marker
+end
+
 let home_timeline ~id ~limit ~max_id ~since_id (c : Sqlx.Connection.t) :
     Status.t list Lwt.t =
   c#query

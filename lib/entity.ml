@@ -387,3 +387,13 @@ let load_notifications_from_db ?self_id
   >|= fun notis ->
   noti_ids
   |> List.map (fun id -> Hashtbl.find notis id |> serialize_notification)
+
+(* Entity marker *)
+type marker = { last_read_id : string; version : int; updated_at : string }
+[@@deriving make, yojson]
+
+let serialize_marker (x : Model.Marker.t) : marker =
+  make_marker
+    ~last_read_id:(string_of_int x#last_read_id)
+    ~version:1 (* FIXME: dummy *)
+    ~updated_at:(Ptime.to_rfc3339 x#updated_at)

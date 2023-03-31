@@ -66,6 +66,8 @@ let routes =
           post "" Root.post;
           get "/verify_credentials" Verify_credentials.get;
         ];
+        get "/markers" Markers.get;
+        post "/markers" Markers.post;
       ];
       scope "/api/v2" Api_v2.[
         get "/search" Search.get;

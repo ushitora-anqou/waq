@@ -214,4 +214,15 @@ and Mention = struct
       val status_id : Status.ID.t option
       val account_id : Account.ID.t option
     end
+end
+
+and Marker = struct
+  name "markers"
+
+  class type t =
+    object
+      val user_id : User.ID.t option
+      val timeline : string
+      val last_read_id : int
+    end
 end]

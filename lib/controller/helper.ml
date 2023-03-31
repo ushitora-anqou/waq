@@ -85,3 +85,7 @@ let string_to_account_id s = s |> int_of_string |> Model.Account.ID.of_int
 let omit_html_tags =
   let r = Regex.e {|<[^>]*>|} in
   Regex.replace r (fun _ -> "")
+
+let expect_assoc = function
+  | `Assoc l -> l
+  | _ -> raise_error_response `Bad_request

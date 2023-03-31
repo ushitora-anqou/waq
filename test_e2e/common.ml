@@ -153,6 +153,9 @@ type notification = {
 }
 [@@deriving make, yojson]
 
+type marker = { last_read_id : string; version : int; updated_at : string }
+[@@deriving make, yojson]
+
 let update_credentials ~token kind ?display_name () =
   let target = "/api/v1/accounts/update_credentials" in
   let headers =
@@ -258,6 +261,28 @@ let get_notifications ?token kind =
   do_fetch ?token kind "/api/v1/notifications"
   >|= Yojson.Safe.from_string >|= expect_list
   >|= List.map notification_of_yojson
+
+let markers_of_yojson j =
+  let l = expect_assoc j in
+  ( List.assoc_opt "home" l |> Option.map marker_of_yojson,
+    List.assoc_opt "notifications" l |> Option.map marker_of_yojson )
+
+let get_markers ?token kind timelines =
+  do_fetch ?token kind
+    ("/api/v1/markers?"
+    ^ (timelines |> List.map (fun s -> "timeline[]=" ^ s) |> String.concat "&")
+    )
+  >|= Yojson.Safe.from_string >|= markers_of_yojson
+
+let post_markers ?token kind values =
+  let body =
+    values
+    |> List.map (fun (timeline, last_read_id) ->
+           (timeline, `Assoc [ ("last_read_id", `String last_read_id) ]))
+    |> fun l -> `Assoc l |> Yojson.Safe.to_string
+  in
+  do_fetch ~meth:`POST ?token kind ~body "/api/v1/markers"
+  >|= Yojson.Safe.from_string >|= markers_of_yojson
 
 let follow ~token kind account_id =
   let%lwt r =

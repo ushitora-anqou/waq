@@ -26,7 +26,7 @@ let f (a0 : agent) (a1 : agent) =
 
   (* a1: Delete the post *)
   delete_status a1 a1_post_id |> ignore_lwt;%lwt
-  Lwt_unix.sleep 1.0;%lwt
+  Lwt_unix.sleep 2.0;%lwt
 
   (* a0: Check the posts *)
   expect_no_status a0 a0_post_id;%lwt
