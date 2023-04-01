@@ -32,6 +32,7 @@
   xml-light
   yaml
   yaml.unix
-  yojson))
+  yojson)
+ (flags :standard -warn-error -33))
 
 (include_subdirs qualified)
