@@ -3,8 +3,7 @@ open Lwt.Infix
 open Helper
 
 let get req =
-  let%lwt self_id = authenticate_user req in
-  let%lwt self = Db.(e @@ Account.get_one ~id:self_id) in
+  let%lwt self = authenticate_account req in
   let account_ids =
     req
     |> Httpq.Server.query_many "id[]"

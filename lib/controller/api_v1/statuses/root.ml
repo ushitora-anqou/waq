@@ -8,7 +8,9 @@ let get req =
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
-  let%lwt self_id = may_authenticate_user req in
+  let%lwt self_id =
+    may_authenticate_account req >|= fun a -> a |> Option.map (fun x -> x#id)
+  in
   match%lwt Db.(e @@ Status.get_one ~id:status_id |> maybe_no_row) with
   | None -> Httpq.Server.raise_error_response `Not_found
   | Some s ->
@@ -48,7 +50,7 @@ let replace_mention spec text =
   |> List.rev |> String.concat ""
 
 let post req =
-  let%lwt self_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let status = req |> Httpq.Server.query "status" in
   let in_reply_to_id =
     req
@@ -92,7 +94,7 @@ let post req =
       e
         Status.(
           save_one_with_uri
-            (make ~text:status ~uri:"" ~account_id:self_id ?in_reply_to_id ())))
+            (make ~text:status ~uri:"" ~account_id:self#id ?in_reply_to_id ())))
   in
   (mentioned_accts
   |> Lwt_list.iter_p @@ fun acct ->
@@ -103,12 +105,12 @@ let post req =
   Worker.Distribute.kick s;%lwt
 
   (* Return the result to the client *)
-  let%lwt s = make_status_from_model ~self_id s in
+  let%lwt s = make_status_from_model ~self_id:self#id s in
   s |> yojson_of_status |> Yojson.Safe.to_string
   |> Httpq.Server.respond ~headers:[ content_type_app_json ]
 
 let delete req =
-  let%lwt self_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
@@ -118,6 +120,8 @@ let delete req =
   in
 
   (* We should construct the result BEFORE the removal *)
-  let%lwt status_to_be_returned = make_status_from_model ~self_id status in
-  Worker.Removal.kick ~account_id:self_id ~status_id;%lwt
+  let%lwt status_to_be_returned =
+    make_status_from_model ~self_id:self#id status
+  in
+  Worker.Removal.kick ~account_id:self#id ~status_id;%lwt
   yojson_of_status status_to_be_returned |> respond_yojson

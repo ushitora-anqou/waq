@@ -66,6 +66,6 @@ let parse_query q =
   make ~accounts ~statuses ~hashtags () |> Lwt.return
 
 let get req =
-  let%lwt _ = authenticate_user req in
+  let%lwt _ = authenticate_account req in
   let q = req |> Httpq.Server.query "q" in
   parse_query q >|= yojson_of_t >>= respond_yojson

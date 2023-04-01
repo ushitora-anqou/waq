@@ -13,7 +13,7 @@ let string_to_notification_id s =
 
 let parse_req req =
   let open Httpq.Server in
-  let%lwt self_id = authenticate_user req in
+  let%lwt self_id = authenticate_account req >|= fun a -> a#id in
   let limit = req |> query ~default:"15" "limit" |> int_of_string in
   let limit = min limit 30 in
   let max_id =

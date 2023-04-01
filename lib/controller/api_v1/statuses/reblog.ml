@@ -4,7 +4,7 @@ open Entity
 open Lwt.Infix
 
 let post req =
-  let%lwt self_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
@@ -23,7 +23,7 @@ let post req =
   let%lwt s =
     match%lwt
       Db.e
-        (Model.Status.get_one ~account_id:self_id ~reblog_of_id:(Some status#id))
+        (Model.Status.get_one ~account_id:self#id ~reblog_of_id:(Some status#id))
     with
     | s ->
         (* Already reblogged *)
@@ -35,7 +35,7 @@ let post req =
             e
             @@ Status.(
                  make ~text:"" ~created_at:now ~updated_at:now ~uri:""
-                   ~account_id:self_id ~reblog_of_id:status#id ()
+                   ~account_id:self#id ~reblog_of_id:status#id ()
                  |> save_one_with_uri))
         in
         Worker.Distribute.kick s;%lwt
@@ -49,5 +49,5 @@ let post req =
              ~activity_type:`Status ~typ:`reblog ~src ~dst);%lwt
         Lwt.return s
   in
-  make_status_from_model ~self_id s
+  make_status_from_model ~self_id:self#id s
   >|= yojson_of_status >>= Helper.respond_yojson

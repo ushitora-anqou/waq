@@ -24,17 +24,16 @@ let service (self : Db.Account.t) (acc : Db.Account.t) (f : Db.Follow.t) =
 
 (* Recv POST /api/v1/accounts/:id/unfollow *)
 let post req =
-  let%lwt self_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let id = req |> Httpq.Server.param ":id" |> string_to_account_id in
 
   (* Check if accounts are valid *)
-  let%lwt self = Db.e (Model.Account.get_one ~id:self_id) in
   let%lwt acc = Db.e (Model.Account.get_one ~id) in
 
   (* Check if followed *)
   let%lwt f =
     Db.(
-      e @@ Follow.get_one ~account_id:self_id ~target_account_id:id
+      e @@ Follow.get_one ~account_id:self#id ~target_account_id:id
       |> maybe_no_row)
   in
   (* If valid, send Undo of Follow to the server *)

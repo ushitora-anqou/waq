@@ -10,8 +10,7 @@ let serialize_markers xs =
   |> fun j -> `Assoc j
 
 let get req =
-  let%lwt account_id = authenticate_user req in
-  let%lwt user = Db.(e User.(get_one ~account_id)) in
+  let%lwt user = authenticate_user req in
   Httpq.Server.query_many "timeline[]" req
   |> List.filter (function "home" | "notifications" -> true | _ -> false)
   |> List.sort_uniq compare
@@ -27,8 +26,7 @@ let get req =
   >|= serialize_markers >>= respond_yojson
 
 let post req =
-  let%lwt account_id = authenticate_user req in
-  let%lwt user = Db.(e User.(get_one ~account_id)) in
+  let%lwt user = authenticate_user req in
   let home_last_read_id, noti_last_read_id =
     Httpq.Server.body req |> Yojson.Safe.from_string |> expect_assoc
     |> List.fold_left

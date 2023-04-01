@@ -1,10 +1,13 @@
 open Helper
+open Lwt.Infix
 
 type t = { ancestors : Entity.status list; descendants : Entity.status list }
 [@@deriving make, yojson_of]
 
 let get req =
-  let%lwt self_id = may_authenticate_user req in
+  let%lwt self_id =
+    may_authenticate_account req >|= fun a -> a |> Option.map (fun x -> x#id)
+  in
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in

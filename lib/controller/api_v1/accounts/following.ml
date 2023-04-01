@@ -13,7 +13,9 @@ let string_to_follow_id s = s |> int_of_string |> Model.Follow.ID.of_int
 
 let parse_req req =
   let open Httpq.Server in
-  let%lwt self_id = may_authenticate_user req in
+  let%lwt self_id =
+    may_authenticate_account req >|= fun a -> a |> Option.map (fun a -> a#id)
+  in
   let id = req |> param ":id" |> int_of_string |> Model.Account.ID.of_int in
   let limit = req |> query ~default:"40" "limit" |> int_of_string in
   let limit = min limit 80 in

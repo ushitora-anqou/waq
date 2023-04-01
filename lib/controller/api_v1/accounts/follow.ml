@@ -74,10 +74,9 @@ let service ~(src : Db.Account.t) ~(dst : Db.Account.t) : unit Lwt.t =
 
 (* Recv POST /api/v1/accounts/:id/follow *)
 let post req =
-  let%lwt self_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let acct_id = req |> Httpq.Server.param ":id" |> string_to_account_id in
 
-  let%lwt self = Db.e (Model.Account.get_one ~id:self_id) in
   let%lwt acct = Db.e (Model.Account.get_one ~id:acct_id) in
   service ~src:self ~dst:acct;%lwt
 

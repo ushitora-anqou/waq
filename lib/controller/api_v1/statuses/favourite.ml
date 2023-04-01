@@ -4,7 +4,7 @@ open Entity
 open Lwt.Infix
 
 let post req =
-  let%lwt account_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
@@ -18,7 +18,7 @@ let post req =
     | s -> Lwt.return s
   in
 
-  (match%lwt Db.(e @@ Favourite.get_one ~status_id ~account_id) with
+  (match%lwt Db.(e @@ Favourite.get_one ~status_id ~account_id:self#id) with
   | _ -> (* Already favourited *) Lwt.return_unit
   | exception Sqlx.Error.NoRowFound ->
       let now = Ptime.now () in
@@ -26,12 +26,13 @@ let post req =
         Db.(
           e
           @@ Favourite.(
-               make ~created_at:now ~updated_at:now ~account_id ~status_id ()
+               make ~created_at:now ~updated_at:now ~account_id:self#id
+                 ~status_id ()
                |> save_one))
       in
-      if%lwt Lwt.return (account_id = status#account_id) then Lwt.return_unit
+      if%lwt Lwt.return (self#id = status#account_id) then Lwt.return_unit
       else
-        let%lwt src = Db.e (Model.Account.get_one ~id:account_id) in
+        let src = self in
         let%lwt dst = Db.e (Model.Account.get_one ~id:status#account_id) in
         if Db.Account.is_remote status#account then
           let%lwt activity = Activity.(like_of_favourite fav >|= like) in
@@ -41,5 +42,5 @@ let post req =
             ~activity_id:(Model.Favourite.ID.to_int fav#id)
             ~activity_type:`Favourite ~typ:`favourite ~src ~dst);%lwt
 
-  make_status_from_model ~self_id:account_id status
+  make_status_from_model ~self_id:self#id status
   >|= yojson_of_status >>= respond_yojson

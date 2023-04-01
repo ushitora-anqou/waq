@@ -3,7 +3,7 @@ open Entity
 open Lwt.Infix
 
 let post req =
-  let%lwt account_id = authenticate_user req in
+  let%lwt self = authenticate_account req in
   let status_id =
     req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
@@ -17,13 +17,13 @@ let post req =
     | s -> Lwt.return s
   in
 
-  (match%lwt Db.(e @@ Favourite.get_one ~status_id ~account_id) with
+  (match%lwt Db.(e @@ Favourite.get_one ~status_id ~account_id:self#id) with
   | exception Sqlx.Error.NoRowFound ->
       (* Already unfavourited *) Lwt.return_unit
   | fav ->
       Db.(e @@ Favourite.delete [ fav ]);%lwt
       if%lwt Model.Account.is_remote status#account |> Lwt.return then
-        let%lwt src = Db.e (Model.Account.get_one ~id:account_id) in
+        let src = self in
         let%lwt dst = Db.e (Model.Account.get_one ~id:status#account_id) in
         let%lwt activity =
           Activity.(
@@ -31,5 +31,5 @@ let post req =
         in
         Worker.Delivery.kick ~activity ~src ~url:dst#inbox_url);%lwt
 
-  make_status_from_model ~self_id:account_id status
+  make_status_from_model ~self_id:self#id status
   >|= yojson_of_status >>= respond_yojson

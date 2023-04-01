@@ -23,14 +23,23 @@ let authenticate_bearer = function
         Oauth_helper.authenticate_access_token bearer_token
       with _ -> raise_error_response `Unauthorized)
 
-let authenticate_user (r : Httpq.Server.request) =
+let authenticate_user (r : Httpq.Server.request) : Model.User.t Lwt.t =
   try
     let%lwt token = authenticate_bearer r in
-    (Option.get token#resource_owner)#account_id |> Lwt.return
+    Db.(e User.(get_one ~id:(Option.get token#resource_owner_id)))
+  with _ -> raise_error_response `Unauthorized
+
+let authenticate_account (r : Httpq.Server.request) : Model.Account.t Lwt.t =
+  try
+    let%lwt user = authenticate_user r in
+    Db.(e Account.(get_one ~id:user#account_id))
   with _ -> raise_error_response `Unauthorized
 
 let may_authenticate_user r =
   try%lwt authenticate_user r >|= Option.some with _ -> Lwt.return_none
+
+let may_authenticate_account r =
+  try%lwt authenticate_account r >|= Option.some with _ -> Lwt.return_none
 
 let int_of_string s =
   match int_of_string_opt s with
