@@ -29,11 +29,10 @@ setup.log
 _opam/
 
 # Written for Waq
-config.yml
-config
-misc/
-Makefile
-log
-ctl
-docker/config
-docker/data
+/config/dev.yml
+/config/test.yml
+/misc/
+/Makefile
+/log
+/ctl
+/docker/data
