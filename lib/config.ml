@@ -42,6 +42,14 @@ let default_header_url () = absolute_url !c.default_header_url
 let notfound_avatar_url () = absolute_url !c.notfound_avatar_url
 let notfound_header_url () = absolute_url !c.notfound_header_url
 
+let media_attachment_path filename =
+  [ "system"; "media_attachments"; filename ]
+  |> List.fold_left Filename.concat (static_root ())
+
+let media_attachment_url filename =
+  "/" ^ ([ "system"; "media_attachments"; filename ] |> String.concat "/")
+  |> absolute_url
+
 let config_path () =
   Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"
 

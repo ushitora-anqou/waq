@@ -3,6 +3,7 @@ open Helper
 let get_content_type = function
   | ".html" | ".htm" -> "text/html"
   | ".png" -> "image/png"
+  | ".jpg" | ".jpeg" -> "image/jpeg"
   | _ -> raise_error_response `Not_found
 
 let get_body path =

@@ -11,7 +11,7 @@ let serialize_markers xs =
 
 let get req =
   let%lwt user = authenticate_user req in
-  Httpq.Server.query_many "timeline[]" req
+  Httpq.Server.query_many "timeline" req
   |> List.filter (function "home" | "notifications" -> true | _ -> false)
   |> List.sort_uniq compare
   |> Lwt_list.map_p (fun timeline ->

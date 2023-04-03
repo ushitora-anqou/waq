@@ -6,7 +6,7 @@ let get req =
   let%lwt self = authenticate_account req in
   let account_ids =
     req
-    |> Httpq.Server.query_many "id[]"
+    |> Httpq.Server.query_many "id"
     |> List.map (fun s -> s |> int_of_string |> Model.Account.ID.of_int)
   in
   account_ids

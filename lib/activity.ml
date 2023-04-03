@@ -36,12 +36,12 @@ and ap_create = {
 and ap_follow = { id : string; actor : string; obj : string }
 
 and ap_document = {
-  media_type : string;
+  media_type : string option;
   url : string;
   name : string option;
-  blurhash : string;
-  width : int;
-  height : int;
+  blurhash : string option;
+  width : int option;
+  height : int option;
 }
 
 and ap_note = {
@@ -160,8 +160,8 @@ let make_tombstone ~id : ap_tombstone = { id }
 let make_update ~id ~actor ~to_ ~obj : ap_update = { id; actor; to_; obj }
 let make_image ~url : ap_image = { url }
 
-let make_document ~media_type ~url ~name ~blurhash ~width ~height : ap_document
-    =
+let make_document ?media_type ~url ?name ?blurhash ?width ?height () :
+    ap_document =
   { media_type; url; name; blurhash; width; height }
 
 let make_announce ~id ~actor ~published ~to_ ~cc ~obj : ap_announce =
@@ -301,6 +301,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
   in
   let list_opt name = try Some (list name) with _ -> None in
   let get_opt name = try Some (get name) with _ -> None in
+  let int_opt name = try Some (int name) with _ -> None in
 
   let typ = string Type in
   match typ with
@@ -346,13 +347,14 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let id = string Id in
       make_like ~id ~actor:(string Actor) ~obj:(string Object) |> like
   | "Document" ->
-      let media_type = string MediaType in
+      let media_type = string_opt MediaType in
       let url = string Url in
       let name = string_opt Name in
-      let blurhash = string Blurhash in
-      let width = int Width in
-      let height = int Height in
-      make_document ~media_type ~url ~name ~blurhash ~width ~height |> document
+      let blurhash = string_opt Blurhash in
+      let width = int_opt Width in
+      let height = int_opt Height in
+      make_document ?media_type ~url ?name ?blurhash ?width ?height ()
+      |> document
   | "Note" ->
       let id = string Id in
       let published = string Published in
@@ -563,15 +565,20 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Object, to_yojson r.obj);
         ]
     | Document r ->
-        [
-          (Type, `String "Document");
-          (MediaType, `String r.media_type);
-          (Url, `String r.url);
-          (Name, r.name |> Option.fold ~none:`Null ~some:(fun s -> `String s));
-          (Blurhash, `String r.blurhash);
-          (Width, `Int r.width);
-          (Height, `Int r.height);
-        ]
+        let may_cons ctor ?(null = false) k v_opt xs =
+          v_opt
+          |> Option.fold
+               ~none:(if null then (k, `Null) :: xs else xs)
+               ~some:(fun v -> (k, ctor v) :: xs)
+        in
+        let may_cons_string = may_cons (fun v -> `String v) in
+        let may_cons_int = may_cons (fun v -> `Int v) in
+        [ (Type, `String "Document"); (Url, `String r.url) ]
+        |> may_cons_string MediaType r.media_type
+        |> may_cons_string ~null:true Name r.name
+        |> may_cons_string Blurhash r.blurhash
+        |> may_cons_int Width r.width
+        |> may_cons_int Height r.height
   in
   let l = l |> List.map (fun (k, v) -> (string_of_property k, v)) in
   let l =
@@ -742,6 +749,13 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   let in_reply_to =
     in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s#uri)
   in
+  let%lwt media_attachments =
+    Db.(e MediaAttachment.(get_many ~status_id:(Some s#id)))
+  in
+  let attachment =
+    media_attachments
+    |> List.map (fun ma -> make_document ~url:ma#remote_url () |> document)
+  in
   {
     id = s#uri;
     published;
@@ -750,7 +764,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
     attributed_to = self#uri;
     content = s#text;
     in_reply_to;
-    attachment = [] (* FIXME *);
+    attachment;
     tag =
       mentions
       |> List.map (fun m ->

@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 let ( |.> ) f g x = g (f x)
 let ( @.@ ) f g x = f (g x)
 let ignore_lwt (p : _ Lwt.t) = Lwt.bind p (fun _ -> Lwt.return_unit)
@@ -23,7 +25,6 @@ module Lwt_list = struct
 
   let partition_map_p (f : 'a -> ('b, 'c) Either.t Lwt.t) (l : 'a list) :
       ('b list * 'c list) Lwt.t =
-    let open Lwt.Infix in
     l |> List.map f
     |> List.fold_left
          (fun a p ->
@@ -70,7 +71,37 @@ module Lwt_option = struct
   let iter f = function None -> Lwt.return_unit | Some v -> f v
 end
 
+module Lwt_io = struct
+  include Lwt_io
+
+  let rec write_stream oc s =
+    match%lwt Lwt_stream.get s with
+    | None -> Lwt.return_unit
+    | Some c ->
+        Lwt_io.write oc c;%lwt
+        write_stream oc s
+end
+
 type json_any = Yojson.Safe.t
 
 let yojson_of_json_any : json_any -> Yojson.Safe.t = Fun.id
 let json_any_of_yojson : Yojson.Safe.t -> json_any = Fun.id
+
+module ImageMagick = struct
+  let convert_exe = "/usr/bin/convert"
+
+  let convert ~(input_type : [ `PNG | `JPEG ])
+      ~(input_data : string Lwt_stream.t) ~(output_file_name : string) =
+    Lwt_io.with_temp_file
+      ~suffix:(match input_type with `PNG -> ".png" | `JPEG -> ".jpeg")
+    @@ fun (temp_file_name, oc) ->
+    Lwt_io.write_stream oc input_data;%lwt
+    Lwt_io.flush oc;%lwt
+    let com =
+      ( convert_exe,
+        [| convert_exe; temp_file_name; "-strip"; output_file_name |] )
+    in
+    Lwt_process.exec com >|= function
+    | WEXITED 0 -> ()
+    | _ -> failwith "ImageMagick.convert: failed to convert"
+end

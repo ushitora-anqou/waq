@@ -53,3 +53,28 @@ let f_waq_mstdn =
   in
   f a0 a1;%lwt
   Lwt.return_unit
+
+let f_mstdn_waq =
+  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
+  let a0 =
+    make_agent ~kind:`Mstdn ~token:mstdn_token ~username:"admin"
+      ~domain:"localhost:3000"
+  in
+  let a1 =
+    make_agent ~kind:`Waq ~token:waq_token ~username:"user1"
+      ~domain:waq_server_domain
+  in
+  f a0 a1;%lwt
+  Lwt.return_unit
+
+let f_waq_waq =
+  make_waq_scenario @@ fun token ->
+  let%lwt token2 = fetch_access_token ~username:"user2" in
+  let a0 =
+    make_agent ~kind:`Waq ~token ~username:"user1" ~domain:waq_server_domain
+  in
+  let a1 =
+    make_agent ~kind:`Waq ~token:token2 ~username:"user2"
+      ~domain:waq_server_domain
+  in
+  f a0 a1

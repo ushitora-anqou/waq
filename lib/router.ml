@@ -68,9 +68,11 @@ let routes =
         ];
         get "/markers" Markers.get;
         post "/markers" Markers.post;
+        post "/media" Media.post;
       ];
       scope "/api/v2" Api_v2.[
         get "/search" Search.get;
+        post "/media" Media.post;
       ];
       scope "/oauth" Oauth.[
         get "/authorize" Authorize.get;

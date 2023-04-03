@@ -49,19 +49,29 @@ let body = function
 
 let param name = function Request { param; _ } -> List.assoc name param
 
+let string_of_yojson_atom = function
+  | `Bool b -> string_of_bool b
+  | `Int i -> string_of_int i
+  | `String s -> s
+  | _ -> failwith "string_of_yojson_atom"
+
 let query_many name : request -> string list = function
-  | Request { query; _ } -> Hashtbl.find_all query name
+  | Request { body; query; _ } -> (
+      match Hashtbl.find_all query (name ^ "[]") with
+      | _ :: _ as res -> res
+      | [] -> (
+          match body with
+          | Some (JSON (`Assoc l)) -> (
+              match List.assoc_opt name l with
+              | Some (`List l) -> l |> List.map string_of_yojson_atom
+              | _ -> failwith "json list assoc")
+          | _ -> failwith "query many"))
 
 let query ?default name = function
   | Request { body = Some body; query; _ } -> (
       try
         match body with
-        | JSON (`Assoc l) -> (
-            match List.assoc name l with
-            | `Bool b -> string_of_bool b
-            | `Int i -> string_of_int i
-            | `String s -> s
-            | _ -> failwith "json assoc")
+        | JSON (`Assoc l) -> List.assoc name l |> string_of_yojson_atom
         | JSON _ -> failwith "json"
         | Form body -> (
             match Hashtbl.find_opt query name with
@@ -75,18 +85,32 @@ let query ?default name = function
 
 let query_opt name r = try Some (query name r) with _ -> None
 
+type formdata_t = {
+  filename : string option;
+  content_type : Multipart_form.Content_type.t;
+  stream : string Lwt_stream.t;
+}
+[@@deriving make]
+
 let formdata name r =
   let open Multipart_form in
   try
     match r with
-    | Request { body = Some (MultipartFormdata { raw; _ }); _ } ->
+    | Request { body = Some (MultipartFormdata { raw; _ }); _ } -> (
         raw
-        |> List.find (fun (hdr, _stream) ->
-               let ( let* ) v f = v |> Option.fold ~none:false ~some:f in
+        |> List.find_map (fun (hdr, stream) ->
+               let ( let* ) = Option.bind in
                let* cd = Header.content_disposition hdr in
                let* name' = Content_disposition.name cd in
-               name = name')
-        |> snd
+               if name = name' then
+                 Some
+                   (make_formdata_t
+                      ?filename:(Content_disposition.filename cd)
+                      ~content_type:(Header.content_type hdr) ~stream ())
+               else None)
+        |> function
+        | Some v -> v
+        | None -> raise_error_response `Bad_request)
     | _ -> failwith "formdata: not MultipartFormdata"
   with _ -> raise_error_response `Bad_request
 

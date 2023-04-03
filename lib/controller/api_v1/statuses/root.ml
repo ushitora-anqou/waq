@@ -51,12 +51,32 @@ let replace_mention spec text =
 
 let post req =
   let%lwt self = authenticate_account req in
-  let status = req |> Httpq.Server.query "status" in
+  let status =
+    req
+    |> Httpq.Server.query_opt "status"
+    |> Option.value ~default:"" |> String.trim
+  in
   let in_reply_to_id =
     req
     |> Httpq.Server.query_opt "in_reply_to_id"
     |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
+  let media_ids = req |> Httpq.Server.query_many "media_ids" in
+
+  (* Sanity check *)
+  (match (status = "", media_ids) with
+  | false, _ | true, _ :: _ -> ()
+  | _ -> raise_error_response `Unprocessable_entity);
+
+  (* Handle media attachments *)
+  let%lwt attachments =
+    let ids =
+      media_ids |> List.map (int_of_string *> Model.MediaAttachment.ID.of_int)
+    in
+    Db.(e MediaAttachment.(select ~id:(`In ids)))
+  in
+  if List.length attachments <> List.length media_ids then
+    raise_error_response `Bad_request;
 
   (* Handle mentions *)
   let%lwt mentioned_spots, mentioned_accts =
@@ -100,6 +120,10 @@ let post req =
   |> Lwt_list.iter_p @@ fun acct ->
      Db.(e Mention.(make ~account_id:acct#id ~status_id:s#id () |> save_one))
      |> ignore_lwt);%lwt
+
+  (* Update attachments *)
+  ( attachments |> List.map (fun m -> m#with_status_id (Some s#id)) |> fun xs ->
+    Db.(e MediaAttachment.(update xs)) |> ignore_lwt );%lwt
 
   (* Deliver the status to others *)
   Worker.Distribute.kick s;%lwt
