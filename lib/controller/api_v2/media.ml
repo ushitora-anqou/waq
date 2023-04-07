@@ -6,7 +6,7 @@ let post req =
   let%lwt self = authenticate_account req in
 
   (* Retrieve inputs *)
-  let fdata = Httpq.Server.formdata "file" req in
+  let%lwt fdata = Httpq.Server.formdata "file" req in
   let content_type =
     match Multipart_form.Content_type.to_string fdata.content_type with
     | "image/png" -> `PNG

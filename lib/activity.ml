@@ -707,7 +707,7 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
       | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
 
 let verify_activity_json req =
-  let body = Httpq.Server.body req in
+  let%lwt body = Httpq.Server.body req in
   let signature = Httpq.Server.header `Signature req in
   let headers = Httpq.Server.headers req in
   let path = Httpq.Server.path req in

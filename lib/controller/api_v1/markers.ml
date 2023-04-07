@@ -12,31 +12,31 @@ let serialize_markers xs =
 let get req =
   let%lwt user = authenticate_user req in
   Httpq.Server.query_many "timeline" req
-  |> List.filter (function "home" | "notifications" -> true | _ -> false)
-  |> List.sort_uniq compare
-  |> Lwt_list.map_p (fun timeline ->
-         Db.(
-           e Marker.(get_one ~timeline ~user_id:(Some user#id)) |> maybe_no_row)
-         >|= fun x ->
-         let default =
-           Model.Marker.make ~updated_at:(Ptime.now ()) ~last_read_id:0
-             ~user_id:user#id ~timeline ()
-         in
-         (timeline, x |> Option.value ~default))
+  >|= List.filter (function "home" | "notifications" -> true | _ -> false)
+  >|= List.sort_uniq compare
+  >>= Lwt_list.map_p (fun timeline ->
+          Db.(
+            e Marker.(get_one ~timeline ~user_id:(Some user#id)) |> maybe_no_row)
+          >|= fun x ->
+          let default =
+            Model.Marker.make ~updated_at:(Ptime.now ()) ~last_read_id:0
+              ~user_id:user#id ~timeline ()
+          in
+          (timeline, x |> Option.value ~default))
   >|= serialize_markers >>= respond_yojson
 
 let post req =
   let%lwt user = authenticate_user req in
-  let home_last_read_id, noti_last_read_id =
-    Httpq.Server.body req |> Yojson.Safe.from_string |> expect_assoc
-    |> List.fold_left
-         (fun (home, noti) -> function
-           | "home", `Assoc [ ("last_read_id", `String id) ] ->
-               (Some (int_of_string id), noti)
-           | "notifications", `Assoc [ ("last_read_id", `String id) ] ->
-               (home, Some (int_of_string id))
-           | _ -> raise_error_response `Bad_request)
-         (None, None)
+  let%lwt home_last_read_id, noti_last_read_id =
+    Httpq.Server.body req >|= Yojson.Safe.from_string >|= expect_assoc
+    >|= List.fold_left
+          (fun (home, noti) -> function
+            | "home", `Assoc [ ("last_read_id", `String id) ] ->
+                (Some (int_of_string id), noti)
+            | "notifications", `Assoc [ ("last_read_id", `String id) ] ->
+                (home, Some (int_of_string id))
+            | _ -> raise_error_response `Bad_request)
+          (None, None)
   in
 
   let home_marker = ref None in

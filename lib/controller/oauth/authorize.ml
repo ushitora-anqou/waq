@@ -1,12 +1,12 @@
 open Helper
 
 let post req =
-  let response_type = req |> Httpq.Server.query "response_type" in
-  let client_id = req |> Httpq.Server.query "client_id" in
-  let redirect_uri = req |> Httpq.Server.query "redirect_uri" in
-  let scope = req |> Httpq.Server.query ~default:"read" "scope" in
-  let username = req |> Httpq.Server.query "username" in
-  let password = req |> Httpq.Server.query "password" in
+  let%lwt response_type = req |> Httpq.Server.query "response_type" in
+  let%lwt client_id = req |> Httpq.Server.query "client_id" in
+  let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
+  let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
+  let%lwt username = req |> Httpq.Server.query "username" in
+  let%lwt password = req |> Httpq.Server.query "password" in
 
   if response_type <> "code" then raise_error_response `Bad_request;
   let%lwt app = Oauth_helper.authenticate_application client_id in
@@ -38,10 +38,10 @@ let post req =
       ""
 
 let get req =
-  let response_type = req |> Httpq.Server.query "response_type" in
-  let client_id = req |> Httpq.Server.query "client_id" in
-  let redirect_uri = req |> Httpq.Server.query "redirect_uri" in
-  let scope = req |> Httpq.Server.query ~default:"read" "scope" in
+  let%lwt response_type = req |> Httpq.Server.query "response_type" in
+  let%lwt client_id = req |> Httpq.Server.query "client_id" in
+  let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
+  let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
 
   Httpq.Server.respond ~status:`OK
     (String.trim

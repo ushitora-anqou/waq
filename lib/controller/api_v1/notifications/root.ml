@@ -14,13 +14,13 @@ let string_to_notification_id s =
 let parse_req req =
   let open Httpq.Server in
   let%lwt self_id = authenticate_account req >|= fun a -> a#id in
-  let limit = req |> query ~default:"15" "limit" |> int_of_string in
+  let%lwt limit = req |> query ~default:"15" "limit" >|= int_of_string in
   let limit = min limit 30 in
-  let max_id =
-    req |> query_opt "max_id" |> Option.map string_to_notification_id
+  let%lwt max_id =
+    req |> query_opt "max_id" >|= Option.map string_to_notification_id
   in
-  let since_id =
-    req |> query_opt "since_id" |> Option.map string_to_notification_id
+  let%lwt since_id =
+    req |> query_opt "since_id" >|= Option.map string_to_notification_id
   in
   Lwt.return { self_id; max_id; since_id; limit }
 

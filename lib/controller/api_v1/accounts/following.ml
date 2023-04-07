@@ -17,11 +17,13 @@ let parse_req req =
     may_authenticate_account req >|= fun a -> a |> Option.map (fun a -> a#id)
   in
   let id = req |> param ":id" |> int_of_string |> Model.Account.ID.of_int in
-  let limit = req |> query ~default:"40" "limit" |> int_of_string in
+  let%lwt limit = req |> query ~default:"40" "limit" >|= int_of_string in
   let limit = min limit 80 in
-  let max_id = req |> query_opt "max_id" |> Option.map string_to_follow_id in
-  let since_id =
-    req |> query_opt "since_id" |> Option.map string_to_follow_id
+  let%lwt max_id =
+    req |> query_opt "max_id" >|= Option.map string_to_follow_id
+  in
+  let%lwt since_id =
+    req |> query_opt "since_id" >|= Option.map string_to_follow_id
   in
   Lwt.return { id; self_id; max_id; since_id; limit }
 

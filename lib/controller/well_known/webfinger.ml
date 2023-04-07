@@ -32,7 +32,7 @@ let respond_xrd w () =
 (* Recv GET /.well-known/webfinger *)
 let get req =
   try%lwt
-    let s = req |> Httpq.Server.query "resource" in
+    let%lwt s = req |> Httpq.Server.query "resource" in
     let s =
       (* Remove 'acct:' prefix if exists *)
       if String.starts_with ~prefix:"acct:" s then

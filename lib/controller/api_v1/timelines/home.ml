@@ -4,11 +4,13 @@ open Lwt.Infix
 let parse_req req =
   let open Httpq.Server in
   let%lwt self = authenticate_account req in
-  let limit = req |> query ~default:"20" "limit" |> int_of_string in
+  let%lwt limit = req |> query ~default:"20" "limit" >|= int_of_string in
   let limit = min limit 40 in
-  let max_id = req |> query_opt "max_id" |> Option.map string_to_status_id in
-  let since_id =
-    req |> query_opt "since_id" |> Option.map string_to_status_id
+  let%lwt max_id =
+    req |> query_opt "max_id" >|= Option.map string_to_status_id
+  in
+  let%lwt since_id =
+    req |> query_opt "since_id" >|= Option.map string_to_status_id
   in
   Lwt.return (self#id, max_id, since_id, limit)
 

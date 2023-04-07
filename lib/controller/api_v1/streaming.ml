@@ -1,13 +1,13 @@
 open Lwt.Infix
 
 let get req =
-  let access_token =
+  let%lwt access_token =
     let open Httpq.Server in
-    match req |> query_opt "access_token" with
+    req |> query_opt "access_token" >|= function
     | Some v -> v
     | None -> req |> header `Sec_websocket_protocol
   in
-  let stream = req |> Httpq.Server.query "stream" in
+  let%lwt stream = req |> Httpq.Server.query "stream" in
   if stream <> "user" then Httpq.Server.raise_error_response `Bad_request;
   let stream = `User in
 

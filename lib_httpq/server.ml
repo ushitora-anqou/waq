@@ -22,8 +22,7 @@ type request =
       path : string;
       query : (string, string) Hashtbl.t;
       param : (string * string) list;
-      body : request_body option;
-      raw_body : string option;
+      body : (string option * request_body option) Lwt.t Lazy.t;
       headers : Headers.t;
     }
 
@@ -48,8 +47,10 @@ let respond ?(status = `OK) ?(headers = []) ?(tags = []) (body : string) =
   Response { status; headers; body; tags } |> Lwt.return
 
 let body = function
-  | Request { raw_body = Some raw_body; _ } -> raw_body
-  | _ -> failwith "body: none"
+  | Request { body; _ } -> (
+      Lazy.force body >|= function
+      | Some raw_body, _ -> raw_body
+      | _ -> failwith "body: none")
 
 let param name = function Request { param; _ } -> List.assoc name param
 
@@ -59,44 +60,49 @@ let string_of_yojson_atom = function
   | `String s -> s
   | _ -> failwith "string_of_yojson_atom"
 
-let query_many name : request -> string list = function
+let query_many name : request -> string list Lwt.t = function
   | Request { body; query; _ } -> (
       match Hashtbl.find_all query (name ^ "[]") with
-      | _ :: _ as res -> res
+      | _ :: _ as res -> Lwt.return res
       | [] -> (
-          match body with
-          | Some (JSON (`Assoc l)) -> (
+          Lazy.force body >|= function
+          | _, Some (JSON (`Assoc l)) -> (
               match List.assoc_opt name l with
               | Some (`List l) -> l |> List.map string_of_yojson_atom
               | _ -> failwith "json list assoc")
           | _ -> failwith "query many"))
 
 let formdata name r =
-  try
+  try%lwt
     match r with
-    | Request { body = Some (MultipartFormdata { loaded; _ }); _ } ->
-        List.assoc name loaded
-    | _ -> failwith "formdata: not MultipartFormdata"
+    | Request { body; _ } -> (
+        Lazy.force body >|= function
+        | _, Some (MultipartFormdata { loaded; _ }) -> List.assoc name loaded
+        | _ -> failwith "formdata: not MultipartFormdata")
   with _ -> raise_error_response `Bad_request
 
 let query ?default name req =
   match req with
-  | Request { body = Some body; query; _ } -> (
-      try
-        match body with
-        | JSON (`Assoc l) -> List.assoc name l |> string_of_yojson_atom
-        | JSON _ -> failwith "json"
-        | Form body -> (
-            match Hashtbl.find_opt query name with
-            | Some x -> x
-            | None -> body |> List.assoc name |> List.hd)
-        | MultipartFormdata _ -> (formdata name req).content
+  | Request { body; query; _ } -> (
+      try%lwt
+        Lazy.force body >|= snd >>= function
+        | None -> failwith "query: body none"
+        | Some x -> (
+            match x with
+            | JSON (`Assoc l) ->
+                List.assoc name l |> string_of_yojson_atom |> Lwt.return
+            | JSON _ -> failwith "json"
+            | Form body -> (
+                match Hashtbl.find_opt query name with
+                | Some x -> Lwt.return x
+                | None -> body |> List.assoc name |> List.hd |> Lwt.return)
+            | MultipartFormdata _ -> formdata name req >|= fun f -> f.content)
       with
-      | _ when default <> None -> Option.get default
+      | _ when default <> None -> Option.get default |> Lwt.return
       | _ -> raise_error_response `Bad_request)
-  | _ -> failwith "query: body none"
 
-let query_opt name r = try Some (query name r) with _ -> None
+let query_opt name r =
+  try%lwt query name r >|= Option.some with _ -> Lwt.return_none
 
 let header_opt name : request -> string option = function
   | Request { headers; _ } -> headers |> List.assoc_opt name
@@ -110,46 +116,49 @@ let meth = function Request { meth; _ } -> meth
 
 let parse_body ~body ~headers =
   match List.assoc_opt `Content_type headers with
-  | Some s when String.starts_with ~prefix:"multipart/form-data" s -> (
-      let open Multipart_form in
-      let content_type =
-        match Content_type.of_string (s ^ "\r\n") with
-        | Ok s -> s
-        | Error (`Msg _msg) -> raise_error_response `Bad_request
-      in
-      let `Parse th, stream =
-        Multipart_form_lwt.stream ~identify:Fun.id
-          (Bare_server.Body.to_stream body)
-          content_type
-      in
-      let rec save_part loaded raw =
-        match%lwt Lwt_stream.get stream with
-        | None -> Lwt.return (MultipartFormdata { loaded })
-        | Some (_, hdr, contents) ->
-            (* FIXME: Currenty all contents are stored on memory.
-               This is not the best choice from perspective of space efficiency.
-               We should utilize files on disk *)
-            let%lwt loaded =
-              let ( let* ) v f =
-                v |> Option.fold ~none:(Lwt.return loaded) ~some:f
+  | Some s when String.starts_with ~prefix:"multipart/form-data" s ->
+      let load_body () =
+        let open Multipart_form in
+        let content_type =
+          match Content_type.of_string (s ^ "\r\n") with
+          | Ok s -> s
+          | Error (`Msg _msg) -> raise_error_response `Bad_request
+        in
+        let `Parse th, stream =
+          Multipart_form_lwt.stream ~identify:Fun.id
+            (Bare_server.Body.to_stream body)
+            content_type
+        in
+        let rec save_part loaded raw =
+          match%lwt Lwt_stream.get stream with
+          | None -> Lwt.return loaded
+          | Some (_, hdr, contents) ->
+              (* FIXME: Currenty all contents are stored on memory.
+                 This is not the best choice from perspective of space efficiency.
+                 We should utilize files on disk *)
+              let%lwt loaded =
+                let ( let* ) v f =
+                  v |> Option.fold ~none:(Lwt.return loaded) ~some:f
+                in
+                let* cd = Header.content_disposition hdr in
+                let* name = Content_disposition.name cd in
+                let filename = Content_disposition.filename cd in
+                let buf = Buffer.create 0 in
+                Lwt_stream.iter (Buffer.add_string buf) contents;%lwt
+                Lwt.return
+                  (( name,
+                     make_formdata_t ?filename
+                       ~content_type:(Header.content_type hdr)
+                       ~content:(Buffer.contents buf) () )
+                  :: loaded)
               in
-              let* cd = Header.content_disposition hdr in
-              let* name = Content_disposition.name cd in
-              let filename = Content_disposition.filename cd in
-              let buf = Buffer.create 0 in
-              Lwt_stream.iter (Buffer.add_string buf) contents;%lwt
-              Lwt.return
-                (( name,
-                   make_formdata_t ?filename
-                     ~content_type:(Header.content_type hdr)
-                     ~content:(Buffer.contents buf) () )
-                :: loaded)
-            in
-            save_part loaded raw
+              save_part loaded raw
+        in
+        match%lwt Lwt.both th (save_part [] []) with
+        | Error _, _ -> raise_error_response `Bad_request
+        | Ok _, data -> Lwt.return data
       in
-      match%lwt Lwt.both th (save_part [] []) with
-      | Error _, _ -> raise_error_response `Bad_request
-      | Ok _, data -> Lwt.return (None, data))
+      load_body () >|= fun loaded -> (None, MultipartFormdata { loaded })
   | Some "application/json" -> (
       Bare_server.Body.to_string body >|= fun raw_body ->
       ( Some raw_body,
@@ -180,10 +189,11 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
     |> List.iter (fun (k, xs) -> Hashtbl.add h k (xs |> String.concat ","));
     h
   in
-  let%lwt raw_body, parsed_body =
-    match%lwt parse_body ~body ~headers with
-    | exception _ -> Lwt.return (None, None)
-    | raw_body, parsed_body -> Lwt.return (raw_body, Some parsed_body)
+  let lazy_parsed_body =
+    lazy
+      (match%lwt parse_body ~body ~headers with
+      | exception _ -> Lwt.return (None, None)
+      | raw_body, parsed_body -> Lwt.return (raw_body, Some parsed_body))
   in
   let req =
     Request
@@ -195,8 +205,7 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
         path;
         query;
         param = [];
-        body = parsed_body;
-        raw_body;
+        body = lazy_parsed_body;
         headers;
       }
   in
@@ -358,21 +367,22 @@ end
 module Logger = struct
   let string_of_request_response req res =
     match (req, res) with
-    | Request { bare_req; raw_body; _ }, Response { status; _ } ->
+    | Request { bare_req; body; _ }, Response { status; _ } ->
         let open Buffer in
         let buf = create 0 in
         let fmt = Format.formatter_of_buffer buf in
         Bare_server.Request.pp_hum fmt bare_req;
         Format.pp_print_flush fmt ();
         add_string buf "\n";
-        raw_body
-        |> Option.iter (fun s ->
-               add_string buf "\n";
-               add_string buf s;
-               add_string buf "\n");
+        ( body |> Lazy.force >|= fst >|= fun raw_body ->
+          raw_body
+          |> Option.iter (fun s ->
+                 add_string buf "\n";
+                 add_string buf s;
+                 add_string buf "\n") );%lwt
         add_string buf "\n==============================\n";
         add_string buf ("Status: " ^ Status.to_string status);
-        Buffer.contents buf
+        Buffer.contents buf |> Lwt.return
     | _ -> assert false
 
   let use ?dump_req_dir (inner_handler : handler) (req : request) :
@@ -393,17 +403,15 @@ module Logger = struct
     | Response { tags; _ } when List.mem "log" tags -> (
         match dump_req_dir with
         | None ->
-            Logq.info (fun m ->
-                m "Detail of request and response:\n%s"
-                  (string_of_request_response req resp));
-            Lwt.return_unit
+            string_of_request_response req resp >|= fun s ->
+            Logq.info (fun m -> m "Detail of request and response:\n%s" s)
         | Some dir ->
             (* NOTE: We use open_temp_file to make sure that each request is written to each file. So, this file should NOT be removed after we write the content to it. *)
             let prefix =
               Ptime.(now () |> to_float_s |> Printf.sprintf "%.2f") ^ "."
             in
             let%lwt _, oc = Lwt_io.open_temp_file ~temp_dir:dir ~prefix () in
-            Lwt_io.write oc (string_of_request_response req resp))
+            string_of_request_response req resp >>= Lwt_io.write oc)
     | _ -> Lwt.return_unit);%lwt
 
     Lwt.return resp

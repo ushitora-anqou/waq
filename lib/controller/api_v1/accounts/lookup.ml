@@ -2,10 +2,10 @@ open Entity
 open Helper
 open Lwt.Infix
 
-let parse_req req = req |> Httpq.Server.query "acct" |> parse_webfinger_address
+let parse_req req = req |> Httpq.Server.query "acct" >|= parse_webfinger_address
 
 let get req =
-  let username, domain = parse_req req in
+  let%lwt username, domain = parse_req req in
   let%lwt a =
     match%lwt Db.e (Model.Account.get_one ~domain ~username) with
     | a -> Lwt.return a

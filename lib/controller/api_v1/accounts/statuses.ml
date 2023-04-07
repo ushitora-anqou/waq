@@ -16,21 +16,21 @@ let parse_req req =
     may_authenticate_account req >|= fun a -> a |> Option.map (fun a -> a#id)
   in
   let id = req |> param ":id" |> int_of_string |> Model.Account.ID.of_int in
-  let limit = req |> query ~default:"20" "limit" |> int_of_string in
+  let%lwt limit = req |> query ~default:"20" "limit" >|= int_of_string in
   let limit = min limit 40 in
-  let max_id =
+  let%lwt max_id =
     req |> query_opt "max_id"
-    |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
+    >|= Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
-  let since_id =
+  let%lwt since_id =
     req |> query_opt "since_id"
-    |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
+    >|= Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
-  let exclude_replies =
+  let%lwt exclude_replies =
     req
     |> query_opt "exclude_replies"
-    |> Option.map bool_of_string
-    |> Option.value ~default:false
+    >|= Option.map bool_of_string
+    >|= Option.value ~default:false
   in
   Lwt.return { id; self_id; max_id; since_id; limit; exclude_replies }
 

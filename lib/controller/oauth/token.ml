@@ -9,12 +9,12 @@ type res = {
 [@@deriving make, yojson]
 
 let post req =
-  let grant_type = req |> Httpq.Server.query "grant_type" in
-  let code = req |> Httpq.Server.query "code" in
-  let client_id = req |> Httpq.Server.query "client_id" in
-  let client_secret = req |> Httpq.Server.query "client_secret" in
-  let redirect_uri = req |> Httpq.Server.query "redirect_uri" in
-  let scope = req |> Httpq.Server.query ~default:"read" "scope" in
+  let%lwt grant_type = req |> Httpq.Server.query "grant_type" in
+  let%lwt code = req |> Httpq.Server.query "code" in
+  let%lwt client_id = req |> Httpq.Server.query "client_id" in
+  let%lwt client_secret = req |> Httpq.Server.query "client_secret" in
+  let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
+  let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
 
   if grant_type <> "authorization_code" then
     Httpq.Server.raise_error_response `Bad_request;

@@ -67,5 +67,5 @@ let parse_query q =
 
 let get req =
   let%lwt _ = authenticate_account req in
-  let q = req |> Httpq.Server.query "q" in
+  let%lwt q = req |> Httpq.Server.query "q" in
   parse_query q >|= yojson_of_t >>= respond_yojson

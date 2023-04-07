@@ -9,9 +9,9 @@ type res = {
 [@@deriving make, yojson]
 
 let post req =
-  let client_name = req |> Httpq.Server.query "client_name" in
-  let redirect_uris = req |> Httpq.Server.query "redirect_uris" in
-  let scopes = req |> Httpq.Server.query ~default:"read" "scopes" in
+  let%lwt client_name = req |> Httpq.Server.query "client_name" in
+  let%lwt redirect_uris = req |> Httpq.Server.query "redirect_uris" in
+  let%lwt scopes = req |> Httpq.Server.query ~default:"read" "scopes" in
 
   let%lwt app =
     Oauth_helper.generate_application ~name:client_name

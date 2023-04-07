@@ -51,17 +51,15 @@ let replace_mention spec text =
 
 let post req =
   let%lwt self = authenticate_account req in
-  let status =
-    req
-    |> Httpq.Server.query_opt "status"
-    |> Option.value ~default:"" |> String.trim
+  let%lwt status =
+    req |> Httpq.Server.query ~default:"" "status" >|= String.trim
   in
-  let in_reply_to_id =
+  let%lwt in_reply_to_id =
     req
     |> Httpq.Server.query_opt "in_reply_to_id"
-    |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
+    >|= Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
-  let media_ids = req |> Httpq.Server.query_many "media_ids" in
+  let%lwt media_ids = req |> Httpq.Server.query_many "media_ids" in
 
   (* Sanity check *)
   (match (status = "", media_ids) with

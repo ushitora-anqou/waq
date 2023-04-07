@@ -1,3 +1,4 @@
+open Lwt.Infix
 open Activity
 open Helper
 
@@ -14,12 +15,14 @@ type t = entry list [@@deriving yojson]
 
 let parse_req req =
   let open Httpq.Server in
-  let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
-  let username, domain = req |> query "q" |> parse_webfinger_address in
+  let%lwt resolve =
+    req |> query ~default:"false" "resolve" >|= bool_of_string
+  in
+  req |> query "q" >|= parse_webfinger_address >|= fun (username, domain) ->
   (resolve, username, domain)
 
 let get req =
-  let _resolve, username, domain = parse_req req in
+  let%lwt _resolve, username, domain = parse_req req in
   try%lwt
     let%lwt acc = search_account (`Webfinger (domain, username)) in
     let acct =
