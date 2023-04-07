@@ -1,13 +1,17 @@
 open Util
 open Lwt.Infix
 
+type formdata_t = {
+  filename : string option;
+  content_type : Multipart_form.Content_type.t;
+  content : string;
+}
+[@@deriving make]
+
 type request_body =
   | JSON of Yojson.Safe.t
   | Form of (string * string list) list
-  | MultipartFormdata of {
-      loaded : (string * string) list;
-      raw : (Multipart_form.Header.t * string Lwt_stream.t) list;
-    }
+  | MultipartFormdata of { loaded : (string * formdata_t) list }
 
 type request =
   | Request of {
@@ -67,7 +71,16 @@ let query_many name : request -> string list = function
               | _ -> failwith "json list assoc")
           | _ -> failwith "query many"))
 
-let query ?default name = function
+let formdata name r =
+  try
+    match r with
+    | Request { body = Some (MultipartFormdata { loaded; _ }); _ } ->
+        List.assoc name loaded
+    | _ -> failwith "formdata: not MultipartFormdata"
+  with _ -> raise_error_response `Bad_request
+
+let query ?default name req =
+  match req with
   | Request { body = Some body; query; _ } -> (
       try
         match body with
@@ -77,42 +90,13 @@ let query ?default name = function
             match Hashtbl.find_opt query name with
             | Some x -> x
             | None -> body |> List.assoc name |> List.hd)
-        | MultipartFormdata { loaded; _ } -> loaded |> List.assoc name
+        | MultipartFormdata _ -> (formdata name req).content
       with
       | _ when default <> None -> Option.get default
       | _ -> raise_error_response `Bad_request)
   | _ -> failwith "query: body none"
 
 let query_opt name r = try Some (query name r) with _ -> None
-
-type formdata_t = {
-  filename : string option;
-  content_type : Multipart_form.Content_type.t;
-  stream : string Lwt_stream.t;
-}
-[@@deriving make]
-
-let formdata name r =
-  let open Multipart_form in
-  try
-    match r with
-    | Request { body = Some (MultipartFormdata { raw; _ }); _ } -> (
-        raw
-        |> List.find_map (fun (hdr, stream) ->
-               let ( let* ) = Option.bind in
-               let* cd = Header.content_disposition hdr in
-               let* name' = Content_disposition.name cd in
-               if name = name' then
-                 Some
-                   (make_formdata_t
-                      ?filename:(Content_disposition.filename cd)
-                      ~content_type:(Header.content_type hdr) ~stream ())
-               else None)
-        |> function
-        | Some v -> v
-        | None -> raise_error_response `Bad_request)
-    | _ -> failwith "formdata: not MultipartFormdata"
-  with _ -> raise_error_response `Bad_request
 
 let header_opt name : request -> string option = function
   | Request { headers; _ } -> headers |> List.assoc_opt name
@@ -140,26 +124,31 @@ let parse_body ~body ~headers =
       in
       let rec save_part loaded raw =
         match%lwt Lwt_stream.get stream with
-        | None -> Lwt.return (MultipartFormdata { loaded; raw })
+        | None -> Lwt.return (MultipartFormdata { loaded })
         | Some (_, hdr, contents) ->
-            let raw = (hdr, contents) :: raw in
+            (* FIXME: Currenty all contents are stored on memory.
+               This is not the best choice from perspective of space efficiency.
+               We should utilize files on disk *)
             let%lwt loaded =
               let ( let* ) v f =
                 v |> Option.fold ~none:(Lwt.return loaded) ~some:f
               in
               let* cd = Header.content_disposition hdr in
               let* name = Content_disposition.name cd in
-              match Content_disposition.filename cd with
-              | Some _ -> Lwt.return loaded
-              | None -> (
-                  match%lwt Lwt_stream.get contents with
-                  | None -> Lwt.return loaded
-                  | Some contents -> Lwt.return ((name, contents) :: loaded))
+              let filename = Content_disposition.filename cd in
+              let buf = Buffer.create 0 in
+              Lwt_stream.iter (Buffer.add_string buf) contents;%lwt
+              Lwt.return
+                (( name,
+                   make_formdata_t ?filename
+                     ~content_type:(Header.content_type hdr)
+                     ~content:(Buffer.contents buf) () )
+                :: loaded)
             in
             save_part loaded raw
       in
       match%lwt Lwt.both th (save_part [] []) with
-      | Error (`Msg _msg), _ -> raise_error_response `Bad_request
+      | Error _, _ -> raise_error_response `Bad_request
       | Ok _, data -> Lwt.return (None, data))
   | Some "application/json" -> (
       Bare_server.Body.to_string body >|= fun raw_body ->

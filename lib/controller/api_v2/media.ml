@@ -23,7 +23,8 @@ let post req =
   let file_url = Config.media_attachment_url file_name in
 
   (* Convert the media *)
-  ImageMagick.convert ~input_type:content_type ~input_data:fdata.stream
+  ImageMagick.convert ~input_type:content_type
+    ~input_data:(Lwt_stream.of_list [ fdata.content ])
     ~output_file_name:file_path;%lwt
 
   (* Make records *)
