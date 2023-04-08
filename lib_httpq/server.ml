@@ -69,7 +69,7 @@ let query_many name : request -> string list Lwt.t = function
           | _, Some (JSON (`Assoc l)) -> (
               match List.assoc_opt name l with
               | Some (`List l) -> l |> List.map string_of_yojson_atom
-              | _ -> failwith "json list assoc")
+              | _ -> [])
           | _ -> failwith "query many"))
 
 let formdata name r =
