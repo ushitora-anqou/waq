@@ -18,7 +18,7 @@ RUN eval $(opam env) && dune build
 FROM debian:11-slim
 
 RUN apt-get update && apt-get install -y \
-    libpq5 libgmp10 netbase ca-certificates \
+    libpq5 libgmp10 netbase ca-certificates imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
