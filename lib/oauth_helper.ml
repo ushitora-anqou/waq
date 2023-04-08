@@ -18,12 +18,12 @@ let generate_access_grant ~expires_in ~redirect_uri ~scopes ~resource_owner_id
     ~resource_owner_id ~application_id:app#id ()
   |> save_one |> Db.e
 
-let generate_access_token ~scopes ~resource_owner_id
-    ~(app : Db.OAuthApplication.t) =
+let generate_access_token ~scopes ?resource_owner_id
+    ~(app : Db.OAuthApplication.t) () =
   let open Db.OAuthAccessToken in
   let now = Ptime.now () in
   let token = Crypto.SecureRandom.unique_token () in
-  make ~token ~created_at:now ~scopes ~application_id:app#id ~resource_owner_id
+  make ~token ~created_at:now ~scopes ~application_id:app#id ?resource_owner_id
     ()
   |> save_one |> Db.e
 

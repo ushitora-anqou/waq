@@ -56,7 +56,7 @@ let oauth_generate_access_token username =
     in
     let%lwt access_token =
       Oauth_helper.generate_access_token ~scopes:"read write follow push"
-        ~resource_owner_id:user#id ~app:web
+        ~resource_owner_id:user#id ~app:web ()
     in
     Lwt_io.printf "%s\n%!" access_token#token;%lwt
     Lwt.return_unit
