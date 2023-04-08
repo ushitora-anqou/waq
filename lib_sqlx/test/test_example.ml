@@ -3,15 +3,19 @@ open Lwt.Infix
 
 [@@@warning "-32"]
 
+(* Define two RDB schemas (accounts and statuses) *)
 [%%sqlx.schemas
 module rec Account = struct
   name "accounts"
 
   class type t =
     object
+      (* Table `accounts` has 3 columns ... *)
       val username : string
       val domain : string option
       val display_name : string
+
+      (* ... and also has many `statuses` thorugh foreign key *)
       val statuses : Status.t list [@@foreign_key `account_id]
     end
 end
@@ -21,6 +25,7 @@ and Status = struct
 
   class type t =
     object
+      (* Table `statuses` has 4 columns *)
       val text : string
       val in_reply_to_id : ID.t option
       val reblog_of_id : ID.t option
@@ -34,25 +39,33 @@ end
 
 (**)
 
+(* Insert some records into table `statuses` for testing *)
 let insert_some_statuses () : unit Lwt.t =
-  let%lwt a =
+  (* Insert two accounts (`a1` and `a2`) *)
+  let%lwt a1 =
+    Db.e Account.(make ~username:"user1" ~display_name:"User 1" () |> save_one)
+  in
+  let%lwt a2 =
     Db.e
       Account.(
-        make ~username:"anqou" ~domain:"example.com" ~display_name:"Anqou" ()
+        make ~username:"user2" ~domain:"example.com" ~display_name:"User 2" ()
         |> save_one)
   in
+  (* Insert two statuses published by the accounts `a1` and `a2`. The second status is a reply to the first one.  *)
   let%lwt s1 =
-    Db.e Status.(make ~account_id:a#id ~text:"Hello" () |> save_one)
+    Db.e Status.(make ~account_id:a1#id ~text:"Hello" () |> save_one)
   in
   let%lwt _ =
     Db.e
       Status.(
-        make ~account_id:a#id ~text:"World" ~in_reply_to_id:s1#id () |> save_one)
+        make ~account_id:a2#id ~text:"World" ~in_reply_to_id:s1#id ()
+        |> save_one)
   in
   Lwt.return_unit
   [@@warning "-8"]
 
-let replied_statuses_by_account ~(username : string) : Status.t list Lwt.t =
+(* Select all statuses that `username` has replied *)
+let statuses_replied_by ~(username : string) : Status.t list Lwt.t =
   let%lwt acct =
     Db.e Account.(get_one ~username ~preload:[ `statuses [ `in_reply_to [] ] ])
   in
@@ -101,10 +114,10 @@ CREATE TABLE statuses (
   FOREIGN KEY (reblog_of_id) REFERENCES statuses (id) ON DELETE CASCADE
 )|}
 
-let test_replied_statuses_by_account _ _ =
+let test_statuses_replied_by _ _ =
   setup ();%lwt
   insert_some_statuses ();%lwt
-  (replied_statuses_by_account ~username:"anqou" >|= function
+  (statuses_replied_by ~username:"user2" >|= function
    | [ s ] when s#text = "Hello" -> ()
    | _ -> assert false);%lwt
   Lwt.return_unit
@@ -116,8 +129,5 @@ let () =
   @@ Alcotest_lwt.run "sqlx"
        [
          ( "replied_statuses_by_account",
-           [
-             Alcotest_lwt.test_case "case1" `Quick
-               test_replied_statuses_by_account;
-           ] );
+           [ Alcotest_lwt.test_case "case1" `Quick test_statuses_replied_by ] );
        ]
