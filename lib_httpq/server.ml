@@ -115,12 +115,16 @@ let path = function Request { path; _ } -> path
 let meth = function Request { meth; _ } -> meth
 
 let parse_body ~body ~headers =
-  match List.assoc_opt `Content_type headers with
-  | Some s when String.starts_with ~prefix:"multipart/form-data" s ->
+  let content_type = List.assoc_opt `Content_type headers in
+  match
+    content_type
+    |> Option.map (String.split_on_char ';' *> List.hd *> String.trim)
+  with
+  | Some "multipart/form-data" ->
       let load_body () =
         let open Multipart_form in
         let content_type =
-          match Content_type.of_string (s ^ "\r\n") with
+          match Content_type.of_string (Option.get content_type ^ "\r\n") with
           | Ok s -> s
           | Error (`Msg _msg) -> raise_error_response `Bad_request
         in

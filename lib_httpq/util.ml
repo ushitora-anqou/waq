@@ -1,4 +1,5 @@
 let ( |.> ) f g a = f a |> g
+let ( *> ) f g a = f a |> g
 
 module Uri = struct
   include Uri
