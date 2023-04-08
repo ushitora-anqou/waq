@@ -5,6 +5,7 @@ let post req =
   let%lwt client_id = req |> Httpq.Server.query "client_id" in
   let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
   let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
+  let%lwt state = req |> Httpq.Server.query_opt "state" in
   let%lwt username = req |> Httpq.Server.query "username" in
   let%lwt password = req |> Httpq.Server.query "password" in
 
@@ -33,6 +34,11 @@ let post req =
   else
     let u = Uri.of_string grant#redirect_uri in
     let u = Uri.add_query_param u ("code", [ grant#token ]) in
+    let u =
+      state
+      |> Option.fold ~none:u ~some:(fun s ->
+             Uri.add_query_param u ("state", [ s ]))
+    in
     Httpq.Server.respond ~status:`Found
       ~headers:[ (`Location, Uri.to_string u) ]
       ""
@@ -42,17 +48,26 @@ let get req =
   let%lwt client_id = req |> Httpq.Server.query "client_id" in
   let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
   let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
+  let%lwt state = req |> Httpq.Server.query_opt "state" in
+
+  let models =
+    let open Jingoo.Jg_types in
+    [
+      ("response_type", Tstr response_type);
+      ("client_id", Tstr client_id);
+      ("redirect_uri", Tstr redirect_uri);
+      ("scope", Tstr scope);
+    ]
+  in
+  let models =
+    state
+    |> Option.fold ~none:models ~some:(fun state ->
+           ("state", Tstr state) :: models)
+  in
 
   Httpq.Server.respond ~status:`OK
     (String.trim
-    @@ Jingoo.Jg_template.from_string
-         ~models:
-           [
-             ("response_type", Tstr response_type);
-             ("client_id", Tstr client_id);
-             ("redirect_uri", Tstr redirect_uri);
-             ("scope", Tstr scope);
-           ]
+    @@ Jingoo.Jg_template.from_string ~models
          {|
 <html>
 <body>
@@ -61,6 +76,7 @@ let get req =
   <input type="hidden" name="client_id" value="{{ client_id }}">
   <input type="hidden" name="redirect_uri" value="{{ redirect_uri }}">
   <input type="hidden" name="scope" value="{{ scope }}">
+  {% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
   <div>
     <label for="username">Username: </label>
     <input type="text" name="username" id="username" required>
