@@ -8,11 +8,22 @@ let expect_no_status kind id =
 
 let f =
   make_waq_scenario @@ fun token ->
+  let%lwt token' = fetch_access_token ~username:"user2" in
   let%lwt ws_recv_msgs =
     websocket_stack `Waq ~token @@ fun _pushf ->
     let%lwt { id; _ } = post `Waq ~token () in
     let%lwt s = get_status `Waq id in
     assert (s.id = id);
+
+    (* Wrong delete *)
+    (try%lwt
+       delete_status `Waq ~token:token' id |> ignore_lwt;%lwt
+       assert false
+     with _ -> Lwt.return_unit);%lwt
+    (* Should remain *)
+    get_status `Waq id |> ignore_lwt;%lwt
+
+    (* Actual delete *)
     let%lwt s = delete_status `Waq ~token id in
     assert (s.id = id);
     expect_no_status `Waq id;%lwt

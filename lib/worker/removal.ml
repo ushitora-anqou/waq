@@ -1,8 +1,6 @@
 open Lwt.Infix
 
-let kick ~account_id ~status_id =
-  Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt status = Db.(e @@ Status.discard_with_reblogs status_id) in
+let aux ~account_id ~status_id ~status =
   let%lwt reblogs = Db.(e @@ Status.get_many' ~reblog_of_id:(Some status_id)) in
   let%lwt src = Db.e (Model.Account.get_one ~id:account_id) in
   let is_account_local = Model.Account.is_local src |> Lwt.return in
@@ -47,3 +45,12 @@ let kick ~account_id ~status_id =
     >>= Lwt_list.iter_p (fun url -> Delivery.kick ~src ~url ~activity);%lwt
 
     Lwt.return_unit)
+
+let kick ~account_id ~status_id =
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
+  let%lwt status = Db.(e @@ Status.discard_with_reblogs status_id) in
+  if account_id <> status#account_id then (
+    Logq.err (fun m ->
+        m "Worker.Removal: ignoring invalid pair of account_id and status_id");
+    Lwt.return_unit)
+  else aux ~account_id ~status_id ~status

@@ -140,6 +140,7 @@ let delete req =
     try Db.e (Model.Status.get_one ~id:status_id)
     with Sqlx.Error.NoRowFound -> Httpq.Server.raise_error_response `Not_found
   in
+  if status#account_id <> self#id then raise_error_response `Not_found;
 
   (* We should construct the result BEFORE the removal *)
   let%lwt status_to_be_returned =

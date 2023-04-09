@@ -11,6 +11,7 @@ let post req =
     let%lwt reblog =
       Db.e (Model.Status.get_one ~reblog_of_id:(Some status_id))
     in
+    if reblog#account_id <> self#id then raise_error_response `Not_found;
     let%lwt entity = make_status_from_model ~self_id:self#id status in
     Worker.Removal.kick ~account_id:self#id ~status_id:reblog#id;%lwt
     let entity =
