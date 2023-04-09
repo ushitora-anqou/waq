@@ -130,7 +130,7 @@ let post req =
   match%lwt Activity.verify_activity_json req with
   | exception _ -> Httpq.Server.respond ~status:`Unauthorized ""
   | body -> (
-      try
+      try%lwt
         (*Logq.debug (fun m -> m ">>>>>>>>\n%s" body);*)
         (match Yojson.Safe.from_string body |> of_yojson with
         | Accept r -> kick_inbox_accept r
