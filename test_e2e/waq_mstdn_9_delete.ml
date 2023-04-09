@@ -34,8 +34,11 @@ let f (a0 : agent) (a1 : agent) =
 
   (***************************)
 
+  (* a0: Follow a1 *)
+  follow_agent a1 a0;%lwt
+
   (* a1: Post *)
-  let%lwt { uri; _ } = post a1 () in
+  let%lwt { uri; id = post_id; _ } = post a1 () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* a0: Get the post id *)
@@ -53,6 +56,10 @@ let f (a0 : agent) (a1 : agent) =
   let%lwt _ = get_status a0 a0_post_id in
   let%lwt _ = get_status a0 a0_reblog_id in
 
+  (* a1: Check if a0 reblogged a0_post_id *)
+  let%lwt { reblogs_count; _ } = get_status a1 post_id in
+  assert (reblogs_count = 1);
+
   (* a0: Unreblog the post *)
   unreblog a0 ~id:a0_post_id |> ignore_lwt;%lwt
   Lwt_unix.sleep 1.0;%lwt
@@ -60,6 +67,10 @@ let f (a0 : agent) (a1 : agent) =
   (* a0: Check the posts *)
   let%lwt _ = get_status a0 a0_post_id in
   expect_no_status a0 a0_reblog_id;%lwt
+
+  (* a1: Check if a0 unreblogged a0_post_id *)
+  let%lwt { reblogs_count; _ } = get_status a1 post_id in
+  assert (reblogs_count = 0);
 
   Lwt.return_unit
 

@@ -72,6 +72,12 @@ let kick_inbox_undo_follow ({ id; _ } : ap_follow) =
   let%lwt follow = Db.(e @@ Follow.get_one ~uri:id) in
   Db.(e @@ Follow.delete [ follow ])
 
+let kick_inbox_undo_announce (a : ap_announce) =
+  Job.kick ~name:__FUNCTION__ @@ fun () ->
+  let%lwt account = Db.e (Model.Account.get_one ~uri:a.actor) in
+  let%lwt status = Db.(e Status.(get_one ~uri:a.id)) in
+  Worker.Removal.kick ~account_id:account#id ~status_id:status#id
+
 (* Recv Create in inbox *)
 let kick_inbox_create (req : ap_create) =
   let note =
@@ -135,6 +141,7 @@ let post req =
         | Like r -> kick_inbox_like r
         | Undo { obj = Follow v; _ } -> kick_inbox_undo_follow v
         | Undo { obj = Like v; _ } -> kick_inbox_undo_like v
+        | Undo { obj = Announce v; _ } -> kick_inbox_undo_announce v
         | Update { obj = Person r; _ } -> kick_inbox_update_person r
         | _ -> failwith "activity not implemented");%lwt
         Httpq.Server.respond ~status:`Accepted ""
