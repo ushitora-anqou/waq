@@ -138,6 +138,7 @@ type status = {
   account : account;
   favourites_count : int;
   media_attachments : media_attachment list;
+  spoiler_text : string;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -320,7 +321,8 @@ let get_status_context kind status_id =
       Lwt.return (ancestors, descendants)
   | _ -> assert false
 
-let post ~token kind ?content ?in_reply_to_id ?(media_ids = []) () =
+let post ~token kind ?spoiler_text ?content ?in_reply_to_id ?(media_ids = []) ()
+    =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let body =
     let l =
@@ -333,6 +335,10 @@ let post ~token kind ?content ?in_reply_to_id ?(media_ids = []) () =
       in_reply_to_id
       |> Option.fold ~none:l ~some:(fun id ->
              ("in_reply_to_id", `String id) :: l)
+    in
+    let l =
+      spoiler_text
+      |> Option.fold ~none:l ~some:(fun s -> ("spoiler_text", `String s) :: l)
     in
     `Assoc l |> Yojson.Safe.to_string
   in

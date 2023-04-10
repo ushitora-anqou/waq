@@ -31,6 +31,7 @@ let all_tests =
     ("01-mention-waq-mstdn", Waq_mstdn_11_mention.f_waq_mstdn);
     ("01-mention-mstdn-waq", Waq_mstdn_11_mention.f_mstdn_waq);
     ("01-mention-waq-waq", Waq_mstdn_11_mention.f_waq_waq);
+    ("02-summary-mstdn-waq", Waq_mstdn_12_summary.f_mstdn_waq);
   ]
 
 let execute_one_test (name, f) =
