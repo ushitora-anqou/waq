@@ -226,6 +226,7 @@ type status = {
   favourited : bool;
   favourites_count : int;
   media_attachments : media_attachment list;
+  spoiler_text : string;
 }
 [@@deriving make, yojson_of]
 
@@ -259,7 +260,7 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     ~reblogged:s#reblogged ~favourited:s#favourited
     ~media_attachments:(s#attachments |> List.map serialize_media_attachment)
     ~mentions:(s#mentions |> List.map serialize_mention)
-    ()
+    ~spoiler_text:s#spoiler_text ()
 
 let status_preload_spec self_id : Model.Status.preload_spec =
   [

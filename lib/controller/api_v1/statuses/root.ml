@@ -112,7 +112,8 @@ let post req =
       e
         Status.(
           save_one_with_uri
-            (make ~text:status ~uri:"" ~account_id:self#id ?in_reply_to_id ())))
+            (make ~text:status ~uri:"" ~account_id:self#id ?in_reply_to_id
+               ~spoiler_text:"" ())))
   in
   (mentioned_accts
   |> Lwt_list.iter_p @@ fun acct ->

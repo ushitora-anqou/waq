@@ -23,6 +23,7 @@ let migrations : (int * (module Sqlx.Migration.S)) list =
       (20230321_215501, (module M20230321_215501_create_media_attachments));
       (20230328_233800, (module M20230328_233800_create_mentions));
       (20230331_183000, (module M20230331_183000_create_markers));
+      (20230410_193300, (module M20230410_193300_add_spoiler_text));
     ]
 
 let verify_migration_status () =

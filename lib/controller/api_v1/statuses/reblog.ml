@@ -35,7 +35,8 @@ let post req =
             e
             @@ Status.(
                  make ~text:"" ~created_at:now ~updated_at:now ~uri:""
-                   ~account_id:self#id ~reblog_of_id:status#id ()
+                   ~account_id:self#id ~reblog_of_id:status#id ~spoiler_text:""
+                   ()
                  |> save_one_with_uri))
         in
         Worker.Distribute.kick s;%lwt

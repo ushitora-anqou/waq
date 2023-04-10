@@ -54,6 +54,7 @@ and ap_note = {
   in_reply_to : Yojson.Safe.t;
   attachment : t list;
   tag : Yojson.Safe.t list;
+  summary : string;
 }
 
 and ap_image = { url : string }
@@ -171,7 +172,7 @@ let make_create ~id ~actor ~published ~to_ ~cc ~obj : ap_create =
   { id; actor; published; to_; cc; obj }
 
 let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-    ~attachment ~tag : ap_note =
+    ~attachment ~tag ~summary : ap_note =
   {
     id;
     published;
@@ -182,6 +183,7 @@ let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
     in_reply_to;
     attachment;
     tag;
+    summary;
   }
 
 let make_ordered_collection ~id ~totalItems ~first ?last () :
@@ -367,8 +369,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
         list_opt Attachment |> Option.value ~default:[] |> List.map of_yojson
       in
       let tag = list Tag in
+      let summary = string_opt Summary |> Option.value ~default:"" in
       make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-        ~attachment ~tag
+        ~attachment ~tag ~summary
       |> note
   | "OrderedCollection" ->
       let id = string Id in
@@ -775,6 +778,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
                  ("href", `String a#uri);
                  ("name", `String ("@" ^ Model.Account.acct a));
                ]);
+    summary = s#spoiler_text;
   }
   |> Lwt.return
 
@@ -797,7 +801,8 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
       e
         Status.(
           make ~uri:note.id ~text:note.content ~created_at:published
-            ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id ()
+            ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id
+            ~spoiler_text:note.summary ()
           |> save_one))
   in
 
@@ -838,7 +843,7 @@ and status_of_announce' (ann : ap_announce) : Db.Status.t Lwt.t =
     e
       Status.(
         make ~uri:ann.id ~text:"" ~created_at:published ~updated_at:published
-          ~account_id:account#id ~reblog_of_id:reblogee#id ()
+          ~account_id:account#id ~reblog_of_id:reblogee#id ~spoiler_text:"" ()
         |> save_one))
 
 and status_of_announce (ann : ap_announce) : Db.Status.t Lwt.t =
