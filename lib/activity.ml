@@ -495,6 +495,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (InReplyTo, r.in_reply_to);
           (Attachment, `List (r.attachment |> List.map to_yojson));
           (Tag, `List r.tag);
+          (Summary, `String r.summary);
         ]
     | OrderedCollection r ->
         let l =
