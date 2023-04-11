@@ -37,10 +37,12 @@ let new_session f =
   in
   let open Unix in
   let ic = open_process_args_in path [| path |] in
-  let token = In_channel.input_line ic |> Option.value ~default:"" in
+  let token1 = In_channel.input_line ic |> Option.value ~default:"" in
+  let _token2 = In_channel.input_line ic |> Option.value ~default:"" in
+  let _token3 = In_channel.input_line ic |> Option.value ~default:"" in
   let pid = process_in_pid ic in
   Fun.protect
-    (fun () -> f token)
+    (fun () -> f token1)
     ~finally:(fun () ->
       kill pid Sys.sigint;
       close_process_in ic |> ignore)
@@ -128,6 +130,14 @@ type account = {
 type media_attachment = { id : string; type_ : string [@key "type"] }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
+type status_mention = {
+  id : string;
+  username : string;
+  url : string;
+  acct : string;
+}
+[@@deriving make, yojson]
+
 type status = {
   id : string;
   uri : string;
@@ -139,6 +149,7 @@ type status = {
   favourites_count : int;
   media_attachments : media_attachment list;
   spoiler_text : string;
+  mentions : status_mention list;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 

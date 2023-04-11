@@ -18,6 +18,8 @@ export WAQ_CONFIG_PATH="config/test.yml"
 #export WAQ_DUMP_REQ_DIR="log/test_e2e"
 dune exec bin/main.exe db:reset >/dev/null 2>/dev/null
 dune exec bin/main.exe oauth:generate_access_token user1
+dune exec bin/main.exe oauth:generate_access_token user2
+dune exec bin/main.exe oauth:generate_access_token user3
 dune exec bin/main.exe &
 waq_pid=$!
 

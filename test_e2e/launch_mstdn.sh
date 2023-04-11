@@ -18,12 +18,36 @@ export RAILS_ENV=development
 cd $MSTDN_PATH
 #rails db:migrate:reset
 rails db:setup >/dev/null
-mstdn_token=$(echo '\
-    app = Doorkeeper::Application.create!({name: "fakeapp", redirect_uri: "http://example.com", scopes: "read write follow", website: ""}); \
-    token = Doorkeeper::AccessToken.create!(application_id: app, resource_owner_id: 1, scopes: "read write follow" ); \
-    token.token' | \
-    rails c --no-sandbox | egrep '^=>' | awk -F'"' '{print $2}' | sed -r "s/\x1B\[([0-9]{1,3}(;[0-9]{1,3})*)?[mGK]//g")
-echo "$mstdn_token"
+echo '\
+$app = Doorkeeper::Application.create!({ name: "fakeapp", redirect_uri: "http://example.com", scopes: "read write follow", website: "" })
+
+def f(create_new: true, username:)
+  if create_new
+    account = Account.new(username: username)
+    password = "mastodon#{username}"
+    email = "#{username}@example.com"
+    user = User.new(email: email, password: password, agreement: true, approved: true, role_id: nil, confirmed_at: Time.now.utc, bypass_invite_request_check: true)
+
+    account.suspended_at = nil
+    user.account = account
+
+    user.save!
+    user.confirmed_at = nil
+    user.confirm!
+  end
+
+  Doorkeeper::AccessToken.create!(
+    application_id: $app,
+    resource_owner_id: Account.find_by(username: username, domain: nil).user.id,
+    scopes: "read write follow",
+  ).token
+end
+
+puts("TOKEN: #{f(create_new: false, username: "admin")}")
+puts("TOKEN: #{f(username: "mstdn1")}")
+puts("TOKEN: #{f(username: "mstdn2")}")
+puts("TOKEN: #{f(username: "mstdn3")}")
+' | rails c --no-sandbox | egrep '^TOKEN:' | sed -r 's/^TOKEN: (.+)$/\1/'
 if [ -z "$MSTDN_LOG" ]; then
   foreman start >/dev/null 2>/dev/null &
 else

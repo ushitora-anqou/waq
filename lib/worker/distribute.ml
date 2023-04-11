@@ -43,16 +43,13 @@ let kick (s : Db.Status.t) =
        ~stream:`User);%lwt
 
   (* Deliver to remote followers *)
-  if is_status_from_remote && remote_followers <> [] then
-    Logq.warn (fun m ->
-        m
-          "Found a follow from a remote user to another remote one; possibly a \
-           bug");
-  deliver_to_remote
-    ~targets:
-      (remote_followers
-      @ (remote_mentions |> List.map (fun x -> Option.get x#account)))
-    ~status:s;%lwt
+  if not is_status_from_remote then
+    deliver_to_remote
+      ~targets:
+        (remote_followers
+        @ (remote_mentions |> List.map (fun x -> Option.get x#account)))
+      ~status:s
+  else Lwt.return_unit;%lwt
 
   (* Deliver to local followers *)
   deliver_to_local
