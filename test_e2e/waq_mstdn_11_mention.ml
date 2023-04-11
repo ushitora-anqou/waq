@@ -10,7 +10,7 @@ let f (a0 : agent) (a1 : agent) (a2 : agent) =
            (acct_of_agent ~from:a0 a2))
       ()
   in
-  Lwt_unix.sleep 1.0;%lwt
+  Lwt_unix.sleep 2.0;%lwt
 
   (* a1: Check home timeline, which should be empty *)
   let%lwt [] = home_timeline a1 in

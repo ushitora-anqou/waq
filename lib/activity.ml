@@ -710,6 +710,10 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
           failwith "Couldn't find the account"
       | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
 
+let search_account_opt ?resolve by =
+  try%lwt search_account ?resolve by >>= Lwt.return_some
+  with _ -> Lwt.return_none
+
 let verify_activity_json req =
   let%lwt body = Httpq.Server.body req in
   let signature = Httpq.Server.header `Signature req in
@@ -821,8 +825,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
 
   (* Handle mentions *)
   (note.cc @ note.to_
-  |> List.filter (fun s -> Uri.(of_string s |> domain) = Config.server_name ())
-  |> Lwt_list.map_p (fun uri -> Db.(e @@ Account.get_one ~uri))
+  |> Lwt_list.filter_map_p (fun uri -> search_account_opt (`Uri uri))
   >>= Lwt_list.iter_p @@ fun acct ->
       let m =
         Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
