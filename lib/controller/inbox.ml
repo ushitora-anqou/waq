@@ -114,11 +114,18 @@ let kick_inbox_like (req : ap_like) =
   Lwt.return_unit
 
 let kick_inbox_delete (req : ap_delete) =
-  let%lwt account = Db.e (Model.Account.get_one ~uri:req.actor) in
-  let%lwt status =
-    Db.e (Model.Status.get_one ~uri:(get_tombstone req.obj |> Option.get).id)
-  in
-  Worker.Removal.kick ~account_id:account#id ~status_id:status#id
+  match%lwt Db.e (Model.Account.get_one ~uri:req.actor) with
+  | exception Sqlx.Error.NoRowFound ->
+      (* Unknown account; just ignore *)
+      Lwt.return_unit
+  | account -> (
+      (* FIXME: Support deletion of accounts *)
+      match req.obj |> of_yojson |> get_tombstone with
+      | (exception _) | None ->
+          (* Unknown object; just ignore *) Lwt.return_unit
+      | Some tomb ->
+          let%lwt status = Db.e (Model.Status.get_one ~uri:tomb.id) in
+          Worker.Removal.kick ~account_id:account#id ~status_id:status#id)
 
 let kick_inbox_update_person (r : ap_person) =
   let%lwt a = Db.e (Model.Account.get_one ~uri:r.id) in

@@ -37,7 +37,7 @@ let aux ~account_id ~status_id ~status =
           let id = status#uri ^ "#delete" in
           let actor = src#uri in
           let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-          let obj = make_tombstone ~id:status#uri |> tombstone in
+          let obj = make_tombstone ~id:status#uri |> tombstone |> to_yojson in
           make_delete ~id ~actor ~to_ ~obj |> delete |> Lwt.return
     in
     Db.(e @@ get_remote_followers ~account_id)

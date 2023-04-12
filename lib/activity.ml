@@ -95,7 +95,14 @@ and ap_announce = {
 }
 
 and ap_like = { id : string; actor : string; obj : string }
-and ap_delete = { id : string; actor : string; to_ : string list; obj : t }
+
+and ap_delete = {
+  id : string;
+  actor : string;
+  to_ : string list;
+  obj : json_any;
+}
+
 and ap_tombstone = { id : string }
 
 and ap_ordered_collection = {
@@ -323,7 +330,7 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let id = string Id in
       let actor = string Actor in
       let to_ = list To |> List.map expect_string in
-      let obj = get Object |> of_yojson in
+      let obj = get Object in
       make_delete ~id ~actor ~to_ ~obj |> delete
   | "Tombstone" ->
       let id = string Id in
@@ -467,7 +474,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
           (Type, `String "Delete");
           (Actor, `String r.actor);
           (To, `List (r.to_ |> List.map string));
-          (Object, to_yojson r.obj);
+          (Object, r.obj);
         ]
     | Follow r ->
         [
