@@ -135,8 +135,9 @@ let kick_inbox_update_person (r : ap_person) =
 (* Recv POST /users/:name/inbox *)
 let post req =
   match%lwt Activity.verify_activity_json req with
-  | exception _ -> Httpq.Server.respond ~status:`Unauthorized ""
-  | body -> (
+  | _, Error `AccountNotFound -> Httpq.Server.respond ~status:`Accepted ""
+  | _, Error (`VerifFailure _) -> Httpq.Server.respond ~status:`Unauthorized ""
+  | body, Ok () -> (
       try%lwt
         (*Logq.debug (fun m -> m ">>>>>>>>\n%s" body);*)
         (match Yojson.Safe.from_string body |> of_yojson with

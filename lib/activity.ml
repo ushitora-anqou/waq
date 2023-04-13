@@ -732,16 +732,16 @@ let verify_activity_json req =
   let { key_id; algorithm; headers = signed_headers; signature } =
     parse_signature_header signature
   in
-  let%lwt acct = search_account (`Uri key_id) in
-  let pub_key = decode_public_key acct#public_key in
-  Lwt.return
-  @@
-  match
-    verify ~pub_key ~algorithm ~signed_headers ~signature ~headers ~meth ~path
-      ~body:(Some body)
-  with
-  | Error _ -> failwith "verification failed"
-  | Ok () -> body
+  search_account_opt (`Uri key_id) >|= function
+  | None -> (body, Error `AccountNotFound)
+  | Some acct -> (
+      let pub_key = decode_public_key acct#public_key in
+      match
+        verify ~pub_key ~algorithm ~signed_headers ~signature ~headers ~meth
+          ~path ~body:(Some body)
+      with
+      | Error e -> (body, Error (`VerifFailure e))
+      | Ok () -> (body, Ok ()))
 
 let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
