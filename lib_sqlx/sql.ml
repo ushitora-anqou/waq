@@ -45,7 +45,10 @@ let expr_to_string ?const_f (e : expr) : string =
     | `InInts (_, []) -> f `False
     | `InInts (e, vals) as v ->
         let right =
-          "(" ^ (vals |> List.map string_of_int |> String.concat ", ") ^ ")"
+          "("
+          ^ (vals |> List.sort_uniq compare |> List.map string_of_int
+           |> String.concat ", ")
+          ^ ")"
         in
         paren ~p:(prec v) ~p1:(prec e) ~p2:prec_const ~left:(f e) ~mid:"IN"
           ~right
