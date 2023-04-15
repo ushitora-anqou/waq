@@ -1,0 +1,3 @@
+[submodule "ocaml-jwt"]
+	path = ocaml-jwt
+	url = https://github.com/ushitora-anqou/ocaml-jwt.git
