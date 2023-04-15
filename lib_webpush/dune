@@ -1,0 +1,3 @@
+(library
+ (name webpush)
+ (libraries jwt uri))
