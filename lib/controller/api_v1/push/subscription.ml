@@ -5,6 +5,20 @@ open Util
 let expect_assoc = function `Assoc l -> l | _ -> failwith "expect assoc"
 let expect_string = function `String s -> s | _ -> failwith "expect string"
 
+let get req =
+  let%lwt oauth_access_token = authenticate_bearer req in
+  match%lwt
+    Db.(
+      e
+        WebPushSubscription.(
+          get_one ~access_token_id:(Some oauth_access_token#id))
+      |> maybe_no_row)
+  with
+  | None -> raise_error_response `Not_found
+  | Some s ->
+      s |> Entity.serialize_web_push_subscription
+      |> Entity.yojson_of_web_push_subscription |> respond_yojson
+
 let post req =
   let%lwt oauth_access_token = authenticate_bearer req in
 

@@ -67,6 +67,7 @@ let routes =
           get "/verify_credentials" Verify_credentials.get;
         ];
         scope "/push" Push.[
+          get "/subscription" Subscription.get;
           post "/subscription" Subscription.post;
         ];
         get "/markers" Markers.get;
