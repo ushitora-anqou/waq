@@ -398,3 +398,18 @@ let serialize_marker (x : Model.Marker.t) : marker =
     ~last_read_id:(string_of_int x#last_read_id)
     ~version:1 (* FIXME: dummy *)
     ~updated_at:(Ptime.to_rfc3339 x#updated_at)
+
+(* Entity WebPushSubscription *)
+type web_push_subscription = {
+  id : string;
+  endpoint : string;
+  server_key : string;
+}
+[@@deriving make, yojson]
+
+let serialize_web_push_subscription (x : Model.WebPushSubscription.t) :
+    web_push_subscription =
+  make_web_push_subscription
+    ~id:(x#id |> Model.WebPushSubscription.ID.to_int |> string_of_int)
+    ~endpoint:x#endpoint
+    ~server_key:(Config.vapid_public_key ())

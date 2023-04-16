@@ -29,6 +29,7 @@
   unix
   uri
   uuidm
+  webpush
   xml-light
   yaml
   yaml.unix

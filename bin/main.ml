@@ -121,6 +121,12 @@ let account_fetch () =
   in
   Lwt_main.run f
 
+let webpush_generate_vapid_key () =
+  let priv_key, pub_key = Webpush.Vapid.generate_keys () in
+  Printf.printf "vapid_private_key: \"%s\"\n" priv_key;
+  Printf.printf "vapid_public_key: \"%s\"\n" pub_key;
+  ()
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.(load_file (config_path ()));
@@ -136,4 +142,5 @@ let () =
   | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
   | "user:register" -> user_register ()
   | "account:fetch" -> account_fetch ()
+  | "webpush:generate_vapid_key" -> webpush_generate_vapid_key ()
   | _ -> server ()

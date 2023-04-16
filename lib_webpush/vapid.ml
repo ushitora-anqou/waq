@@ -2,7 +2,11 @@ open Util
 
 type t = { k : string; t : string }
 
-let generate_key = Mirage_crypto_ec.P256.Dsa.generate
+let generate_keys () =
+  let open Mirage_crypto_ec.P256.Dsa in
+  let priv_key, pub_key = generate () in
+  ( priv_key |> priv_to_cstruct |> Cstruct.to_string |> b64_url_encode,
+    pub_key |> pub_to_cstruct |> Cstruct.to_string |> b64_url_encode )
 
 let build ~endpoint ~subscriber ~priv_key =
   let ( let* ) = Result.bind in

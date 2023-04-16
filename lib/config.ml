@@ -7,6 +7,8 @@ type t = {
   default_avatar_url : string; [@default ""]
   default_header_url : string; [@default ""]
   static_root : string; [@default ""]
+  vapid_private_key : string; [@default ""]
+  vapid_public_key : string; [@default ""]
 }
 [@@deriving make, yaml]
 
@@ -49,6 +51,9 @@ let media_attachment_path filename =
 let media_attachment_url filename =
   "/" ^ ([ "system"; "media_attachments"; filename ] |> String.concat "/")
   |> absolute_url
+
+let vapid_private_key () = !c.vapid_private_key
+let vapid_public_key () = !c.vapid_public_key
 
 let config_path () =
   Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"

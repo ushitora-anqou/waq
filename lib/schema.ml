@@ -226,4 +226,17 @@ and Marker = struct
       val timeline : string
       val last_read_id : int
     end
+end
+
+and WebPushSubscription = struct
+  name "web_push_subscriptions"
+
+  class type t =
+    object
+      val endpoint : string
+      val key_p256dh : string
+      val key_auth : string
+      val access_token_id : OAuthAccessToken.ID.t option
+      val user_id : User.ID.t option
+    end
 end]
