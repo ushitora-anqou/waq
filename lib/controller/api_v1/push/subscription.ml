@@ -46,3 +46,14 @@ let post req =
   >|= Entity.(
         serialize_web_push_subscription *> yojson_of_web_push_subscription)
   >>= respond_yojson
+
+let delete req =
+  let open Model.WebPushSubscription in
+  let%lwt oauth_access_token = authenticate_bearer req in
+  (try%lwt
+     let%lwt s =
+       Db.(e @@ get_one ~access_token_id:(Some oauth_access_token#id))
+     in
+     Db.(e @@ delete [ s ])
+   with Sqlx.Error.NoRowFound -> Lwt.return_unit);%lwt
+  respond_yojson (`Assoc [])

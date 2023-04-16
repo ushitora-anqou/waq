@@ -69,6 +69,7 @@ let routes =
         scope "/push" Push.[
           get "/subscription" Subscription.get;
           post "/subscription" Subscription.post;
+          delete "/subscription" Subscription.delete;
         ];
         get "/markers" Markers.get;
         post "/markers" Markers.post;
