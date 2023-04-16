@@ -18,11 +18,14 @@ let fetch ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
   let meth_s = Method.to_string meth in
   let headers =
     let headers =
-      (`Content_length, body |> String.length |> string_of_int)
-      :: (`Connection, "close")
-      :: (`Host, Uri.http_host uri)
-      :: (`Date, Ptime.(now () |> to_http_date))
-      :: headers
+      let add (k, v) headers =
+        if List.mem_assoc k headers then headers else (k, v) :: headers
+      in
+      headers
+      |> add (`Content_length, body |> String.length |> string_of_int)
+      |> add (`Connection, "close")
+      |> add (`Host, Uri.http_host uri)
+      |> add (`Date, Ptime.(now () |> to_http_date))
     in
     let headers =
       match sign with

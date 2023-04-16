@@ -7,8 +7,10 @@ type name =
   | `Access_control_request_headers
   | `Authorization
   | `Connection
+  | `Content_encoding
   | `Content_length
   | `Content_type
+  | `Crypto_key
   | `Date
   | `Digest
   | `Host
@@ -16,6 +18,7 @@ type name =
   | `Raw of string
   | `Sec_websocket_protocol
   | `Signature
+  | `TTL
   | `User_agent ]
 
 let lower_string_of_name : name -> string = function
@@ -27,8 +30,10 @@ let lower_string_of_name : name -> string = function
   | `Access_control_request_headers -> "access-control-request-headers"
   | `Authorization -> "authorization"
   | `Connection -> "connection"
+  | `Content_encoding -> "content-encoding"
   | `Content_length -> "content-length"
   | `Content_type -> "content-type"
+  | `Crypto_key -> "crypto-key"
   | `Date -> "date"
   | `Digest -> "digest"
   | `Host -> "host"
@@ -36,6 +41,7 @@ let lower_string_of_name : name -> string = function
   | `Raw s -> s
   | `Sec_websocket_protocol -> "sec-websocket-protocol"
   | `Signature -> "signature"
+  | `TTL -> "ttl"
   | `User_agent -> "user-agent"
 
 let string_of_name = lower_string_of_name
@@ -50,14 +56,17 @@ let name_of_string (k : string) : name =
   | "access-control-request-headers" -> `Access_control_request_headers
   | "authorization" -> `Authorization
   | "connection" -> `Connection
+  | "content-encoding" -> `Content_encoding
   | "content-length" -> `Content_length
   | "content-type" -> `Content_type
+  | "crypto-key" -> `Crypto_key
   | "date" -> `Date
   | "digest" -> `Digest
   | "host" -> `Host
   | "location" -> `Location
   | "sec-websocket-protocol" -> `Sec_websocket_protocol
   | "signature" -> `Signature
+  | "ttl" -> `TTL
   | "user-agent" -> `User_agent
   | s -> `Raw s
 

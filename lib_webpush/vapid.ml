@@ -1,20 +1,8 @@
+open Util
+
 type t = { k : string; t : string }
 
-let b64_url_encode str =
-  let r = Base64.encode ~pad:false ~alphabet:Base64.uri_safe_alphabet str in
-  match r with
-  | Ok s -> s
-  | Error _ ->
-      failwith
-        (Printf.sprintf "Something wrong happened while encoding\n  %s" str)
-
-let b64_url_decode str =
-  let r = Base64.decode ~pad:false ~alphabet:Base64.uri_safe_alphabet str in
-  match r with
-  | Ok s -> s
-  | Error _ ->
-      failwith
-        (Printf.sprintf "Something wrong happened while decoding\n  %s" str)
+let generate_key = Mirage_crypto_ec.P256.Dsa.generate
 
 let build ~endpoint ~subscriber ~priv_key =
   let ( let* ) = Result.bind in
@@ -53,6 +41,9 @@ let build ~endpoint ~subscriber ~priv_key =
 
   Ok { t = token; k = pub_key }
 
-let get_authorization_header ~endpoint ~subscriber ~priv_key =
+(*
+let get_authorization_header_rfc8292 ~endpoint ~subscriber ~priv_key =
+  (* See https://www.rfc-editor.org/rfc/rfc8292 *)
   build ~endpoint ~subscriber ~priv_key
   |> Result.map @@ fun { t; k } -> "vapid t=" ^ t ^ " k=" ^ k
+*)

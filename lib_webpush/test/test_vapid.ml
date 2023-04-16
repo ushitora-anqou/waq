@@ -16,4 +16,4 @@ let test_main_case1 () =
 
 let () =
   let open Alcotest in
-  run "webpush" [ ("main", [ test_case "case1" `Quick test_main_case1 ]) ]
+  run "vapid" [ ("main", [ test_case "case1" `Quick test_main_case1 ]) ]
