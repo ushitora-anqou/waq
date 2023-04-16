@@ -400,10 +400,21 @@ let serialize_marker (x : Model.Marker.t) : marker =
     ~updated_at:(Ptime.to_rfc3339 x#updated_at)
 
 (* Entity WebPushSubscription *)
+
+type web_push_subscription_alerts = {
+  follow : bool;
+  favourite : bool;
+  reblog : bool;
+  mention : bool;
+  poll : bool;
+}
+[@@deriving make, yojson]
+
 type web_push_subscription = {
   id : string;
   endpoint : string;
   server_key : string;
+  alerts : web_push_subscription_alerts;
 }
 [@@deriving make, yojson]
 
@@ -413,3 +424,6 @@ let serialize_web_push_subscription (x : Model.WebPushSubscription.t) :
     ~id:(x#id |> Model.WebPushSubscription.ID.to_int |> string_of_int)
     ~endpoint:x#endpoint
     ~server_key:(Config.vapid_public_key ())
+    ~alerts:
+      (make_web_push_subscription_alerts ~follow:true ~favourite:true
+         ~reblog:true ~mention:true ~poll:true (* FIXME *))
