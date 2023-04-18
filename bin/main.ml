@@ -127,6 +127,41 @@ let webpush_generate_vapid_key () =
   Printf.printf "vapid_public_key: \"%s\"\n" pub_key;
   ()
 
+let webpush_deliver username message =
+  Lwt_main.run
+  @@
+  let open Lwt.Infix in
+  match%lwt
+    Db.(
+      (e @@ Account.(get_one ~preload:[ `user [] ] ~username ~domain:None))
+      |> maybe_no_row)
+  with
+  | None -> failwith "username is not found"
+  | Some a -> (
+      match a#user with
+      | None -> failwith "username is not local"
+      | Some u -> (
+          Db.(e @@ WebPushSubscription.(get_many ~user_id:(Some u#id)))
+          >>= Lwt_list.iter_p @@ fun s ->
+              match
+                Webpush.construct_request ~message ~auth_key:s#key_auth
+                  ~p256dh_key:s#key_p256dh ~subscriber:"mailto:waq@anqou.net"
+                  ~endpoint:s#endpoint
+                  ~vapid_priv_key:(Config.vapid_private_key ())
+              with
+              | Error _ ->
+                  Logq.err (fun m ->
+                      m "Couldn't construct request of webpush: %s" s#endpoint);
+                  Lwt.return_unit
+              | Ok (headers, body) -> (
+                  let body = Cstruct.to_string body in
+                  Throttle_fetch.f ~headers ~meth:`POST ~body s#endpoint
+                  >|= function
+                  | Ok (`Created, _, _) -> ()
+                  | _ ->
+                      Logq.err (fun m ->
+                          m "Couldn't post webpush: %s" s#endpoint))))
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.(load_file (config_path ()));
@@ -143,4 +178,5 @@ let () =
   | "user:register" -> user_register ()
   | "account:fetch" -> account_fetch ()
   | "webpush:generate_vapid_key" -> webpush_generate_vapid_key ()
+  | "webpush:deliver" -> webpush_deliver Sys.argv.(2) Sys.argv.(3)
   | _ -> server ()
