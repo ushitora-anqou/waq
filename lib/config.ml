@@ -9,6 +9,7 @@ type t = {
   static_root : string; [@default ""]
   vapid_private_key : string; [@default ""]
   vapid_public_key : string; [@default ""]
+  webpush_subscriber : string; [@default ""]
 }
 [@@deriving make, yaml]
 
@@ -54,6 +55,7 @@ let media_attachment_url filename =
 
 let vapid_private_key () = !c.vapid_private_key
 let vapid_public_key () = !c.vapid_public_key
+let webpush_subscriber () = !c.webpush_subscriber
 
 let config_path () =
   Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"

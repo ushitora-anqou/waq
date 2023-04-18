@@ -21,14 +21,19 @@ let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
         @@ Model.Notification.(
              make ~activity_id ~activity_type ~created_at:now ~updated_at:now
                ~account_id ~from_account_id ?typ ()
-             |> save_one)
+             |> save_one ~preload:[ `target_status []; `from_account [] ])
       in
-      let%lwt payload =
-        Entity.load_notifications_from_db ~self_id:account_id [ n#id ]
-        >|= List.hd >|= Entity.yojson_of_notification >|= Yojson.Safe.to_string
-      in
-      Streaming.(
-        push
-          ~key:(make_key ~user_id:u#id ~stream:`User)
-          ~event:"notification" ~payload ());
-      Lwt.return_unit
+
+      (* Notification via WebSocket *)
+      ( Entity.load_notifications_from_db ~self_id:account_id [ n#id ]
+      >|= List.hd >|= Entity.yojson_of_notification >|= Yojson.Safe.to_string
+      >|= fun payload ->
+        Streaming.(
+          push
+            ~key:(make_key ~user_id:u#id ~stream:`User)
+            ~event:"notification" ~payload ()) );%lwt
+
+      (* Push notification *)
+      Webpush_helper.deliver ~user_id:u#id
+        (Entity.serialize_push_notification n
+        |> Entity.yojson_of_push_notification |> Yojson.Safe.to_string)

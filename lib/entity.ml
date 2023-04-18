@@ -334,6 +334,44 @@ let make_relationship_from_model (self : Db.Account.t) (acct : Db.Account.t) =
     ~endorsed:false ~note:""
   |> Lwt.return
 
+(* Entity push_notification *)
+type push_notification = {
+  access_token : string;
+  notification_id : string;
+  notification_type : string;
+  preferred_locale : string;
+  title : string;
+  body : string;
+  icon : string;
+}
+[@@deriving make, yojson]
+
+let serialize_push_notification (n : Model.Notification.t) : push_notification =
+  make_push_notification
+    ~notification_id:(n#id |> Model.Notification.ID.to_int |> string_of_int)
+    ~notification_type:(Option.get n#typ |> Model.Notification.typ_t_to_string)
+    ~access_token:"" ~preferred_locale:"en"
+    ~title:
+      (let name = n#from_account#display_name in
+       let name = if name = "" then n#from_account#username else name in
+       match n#typ with
+       | None -> ""
+       | Some `reblog -> name ^ " boosted your post"
+       | Some `favourite -> name ^ " favourited your post"
+       | Some `follow -> name ^ " is now following you"
+       | Some `mention -> "You were mentioned by " ^ name)
+    ~body:
+      (n#target_status
+      |> Option.fold ~none:n#from_account#username ~some:(fun s ->
+             let t = s#spoiler_text in
+             let t = if t = "" then s#text else t in
+             let max_length = 140 in
+             if String.length t > max_length then String.sub t 0 max_length
+             else t))
+    ~icon:
+      (n#from_account#avatar_remote_url
+      |> Option.value ~default:(Config.notfound_avatar_url ()))
+
 (* Entity notification *)
 type notification = {
   id : string;
