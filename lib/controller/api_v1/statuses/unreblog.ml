@@ -1,5 +1,6 @@
 open Helper
 open Entity
+open Lwt.Infix
 
 let post req =
   let%lwt self = authenticate_account req in
@@ -9,9 +10,15 @@ let post req =
   try%lwt
     let%lwt status = Db.e (Model.Status.get_one ~id:status_id) in
     let%lwt reblog =
-      Db.e (Model.Status.get_one ~reblog_of_id:(Some status_id))
+      Db.(
+        e
+          Model.Status.(
+            get_one ~reblog_of_id:(Some status_id) ~account_id:self#id)
+        |> maybe_no_row)
+      >|= function
+      | None -> raise_error_response `Not_found
+      | Some s -> s
     in
-    if reblog#account_id <> self#id then raise_error_response `Not_found;
     let%lwt entity = make_status_from_model ~self_id:self#id status in
     Worker.Removal.kick ~account_id:self#id ~status_id:reblog#id;%lwt
     let entity =

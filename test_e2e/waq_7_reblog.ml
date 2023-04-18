@@ -35,13 +35,13 @@ let f =
 
   (* Actual unreblogs *)
   let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
-    unreblog `Waq ~token ~id
+    unreblog `Waq ~token:token2 ~id
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 1);
   assert (not reblogged);
   let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
-    unreblog `Waq ~token:token2 ~id
+    unreblog `Waq ~token ~id
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 0);
