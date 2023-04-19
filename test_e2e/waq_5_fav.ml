@@ -60,4 +60,8 @@ let f =
   | [] -> Lwt.return_unit
   | _ -> assert false);%lwt
 
+  (match%lwt get_notifications `Waq ~token with
+  | [] -> Lwt.return_unit
+  | _ -> assert false);%lwt
+
   Lwt.return_unit

@@ -284,8 +284,9 @@ module Notification = struct
          in
          let targets =
            targets
-           |> List.map (fun (fav_id, f) ->
-                  ((Hashtbl.find tbl fav_id)#status_id, f))
+           |> List.filter_map (fun (fav_id, f) ->
+                  Hashtbl.find_opt tbl fav_id
+                  |> Option.map (fun x -> (x#status_id, f)))
          in
          Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
          >|= index_by (fun x -> x#id)

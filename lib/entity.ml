@@ -425,7 +425,12 @@ let load_notifications_from_db ?self_id
   >|= index_by (fun x -> x#id)
   >|= fun notis ->
   noti_ids
-  |> List.map (fun id -> Hashtbl.find notis id |> serialize_notification)
+  |> List.filter_map (fun id ->
+         let n = Hashtbl.find notis id in
+         match (n#typ, n#target_status) with
+         | Some (`reblog | `favourite | `mention), Some _ | Some `follow, _ ->
+             Some (serialize_notification n)
+         | _ -> None)
 
 (* Entity marker *)
 type marker = { last_read_id : string; version : int; updated_at : string }
