@@ -7,7 +7,7 @@ let f =
   let%lwt token3 = fetch_access_token ~username:"user3" in
   let%lwt { id; _ } = post `Waq ~token () in
   let%lwt _ = reblog `Waq ~token ~id in
-  let%lwt { id = reblog_id2; _ } = reblog `Waq ~token:token2 ~id in
+  let%lwt _ = reblog `Waq ~token:token2 ~id in
 
   let%lwt ntfs = get_notifications `Waq ~token in
   (match ntfs with
@@ -20,7 +20,7 @@ let f =
    };
   ] ->
       assert (account_id2 = user2_id);
-      assert (status_id2 = reblog_id2);
+      assert (status_id2 = id);
       assert (reblogs_count = 2);
       Lwt.return_unit
   | _ -> assert false);%lwt

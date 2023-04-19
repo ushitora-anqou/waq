@@ -40,7 +40,7 @@ let f =
        {
          typ = "reblog";
          account = { id = account_id; _ };
-         status = Some { reblog = Some { id = status_id; _ }; _ };
+         status = Some { id = status_id; _ };
          _;
        };
      ] ->
