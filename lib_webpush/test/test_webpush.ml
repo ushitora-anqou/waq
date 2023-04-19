@@ -9,13 +9,12 @@ let test_main_case1 () =
   in
   let auth_key = "zqbxT6JKstKSY9JKibZLSQ" in
   let message = "Test" in
-  (match
-     construct_request ~message ~auth_key ~p256dh_key ~subscriber ~endpoint
-       ~vapid_priv_key
-   with
-  | Error _ -> ()
-  | Ok (_h, s) -> print_endline (Cstruct.to_string s));
-  assert (1 <> 1)
+  match
+    construct_request ~message ~auth_key ~p256dh_key ~subscriber ~endpoint
+      ~vapid_priv_key
+  with
+  | Error _ -> assert false
+  | Ok _ -> ()
 
 let () =
   let open Alcotest in

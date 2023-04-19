@@ -18,22 +18,18 @@ let build ~endpoint ~subscriber ~priv_key =
   in
 
   (* Generate JWT token *)
-  let aud_value =
-    let u = Uri.of_string endpoint in
-    let scheme = Uri.scheme u |> Option.get in
-    let host = Uri.host u |> Option.get in
-    scheme ^ "://" ^ host
-  in
-  let exp_value =
-    let now = Unix.gettimeofday () |> int_of_float in
-    now + (12 * 60 * 60) |> string_of_int
-  in
   let token =
-    Jwt.(
-      empty_payload |> add_claim aud aud_value |> add_claim exp exp_value
-      |> add_claim sub subscriber
-      |> t_of_payload (`ES256 priv_key)
-      |> token_of_t)
+    let aud =
+      let u = Uri.of_string endpoint in
+      let scheme = Uri.scheme u |> Option.get in
+      let host = Uri.host u |> Option.get in
+      scheme ^ "://" ^ host
+    in
+    let exp =
+      let now = Unix.gettimeofday () |> int_of_float in
+      now + (12 * 60 * 60)
+    in
+    Jwt.build ~aud ~exp ~sub:subscriber ~priv_key
   in
 
   (* Derive public key *)
