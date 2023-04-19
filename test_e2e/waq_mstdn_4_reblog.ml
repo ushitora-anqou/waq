@@ -18,7 +18,7 @@ let f =
 
   (* Reblog by me (user1) *)
   let%lwt _ = reblog `Waq ~token:waq_token ~id in
-  Lwt_unix.sleep 1.0;%lwt
+  Lwt_unix.sleep 2.0;%lwt
 
   (* Get home timeline of @admin@localhost:3000 *)
   let%lwt _ =
