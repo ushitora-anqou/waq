@@ -304,12 +304,17 @@ module Notification = struct
                       Some (Status.ID.of_int n#activity_id, n#set_target_status)
                   | _ -> None)
          in
-         Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
+         Status.select
+           ~preload:[ `reblog_of (preload |> Option.value ~default:[]) ]
+           ~id:(`In (map_fst_sort_uniq targets))
+           ~deleted_at:`EqNone c
          >|= index_by (fun x -> x#id)
          >|= fun tbl ->
          targets
          |> List.iter (fun (status_id, f) ->
-                f (Some (Some (Hashtbl.find tbl status_id)))));%lwt
+                match Hashtbl.find_opt tbl status_id with
+                | None -> ()
+                | Some s -> f (Some s#reblog_of)));%lwt
 
         (* Load mentions *)
         (let targets =
