@@ -16,6 +16,12 @@ let deliver ?user_id message =
           Lwt.return_unit
       | Ok (headers, body) -> (
           let body = Cstruct.to_string body in
-          Throttle_fetch.f ~headers ~meth:`POST ~body s#endpoint >|= function
-          | Ok (status, _, _) when Httpq.Status.is_success status -> ()
-          | _ -> Logq.err (fun m -> m "Couldn't post webpush: %s" s#endpoint))
+          match%lwt Throttle_fetch.f ~headers ~meth:`POST ~body s#endpoint with
+          | Ok (status, _, _) when Httpq.Status.is_success status ->
+              Lwt.return_unit
+          | Ok (`Gone, _, _) ->
+              Logq.debug (fun m -> m "Subscription gone: %s" s#endpoint);
+              Db.(e WebPushSubscription.(delete [ s ]))
+          | _ ->
+              Logq.err (fun m -> m "Couldn't post webpush: %s" s#endpoint);
+              Lwt.return_unit)
