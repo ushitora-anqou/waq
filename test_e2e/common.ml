@@ -228,11 +228,11 @@ let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
       l |> List.assoc "username" |> expect_string,
       l |> List.assoc "acct" |> expect_string )
 
-let search ~token kind q =
+let search ?token kind q =
   let queries = [ ("resolve", [ "true" ]); ("q", [ q ]) ] in
   let u = Uri.of_string "/api/v2/search" in
   let u = Uri.add_query_params u queries in
-  let%lwt r = do_fetch ~token kind (Uri.to_string u) in
+  let%lwt r = do_fetch ?token kind (Uri.to_string u) in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   Lwt.return
     ( List.assoc "accounts" l |> expect_list |> List.map account_of_yojson,

@@ -9,24 +9,24 @@ type t = {
 }
 [@@deriving make, yojson_of]
 
-let parse_query_accounts q =
+let handle_query_accounts resolve q =
   let accts = [] in
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
   try%lwt
     match Regex.match_ re q with
     | [ [| _; Some username; None |] ] ->
-        Activity.search_account (`Webfinger (None, username.substr))
+        Activity.search_account ~resolve (`Webfinger (None, username.substr))
         >|= fun a -> a :: accts
     | [ [| _; Some username; Some domain |] ] ->
-        Activity.search_account
+        Activity.search_account ~resolve
           (`Webfinger (Some domain.substr, username.substr))
         >|= fun a -> a :: accts
     | _ -> Lwt.return accts
   with _ -> Lwt.return accts
 
-let parse_query_uri q =
+let handle_query_uri resolve q =
   let try_search_account uri =
-    match%lwt Activity.search_account (`Uri uri) with
+    match%lwt Activity.search_account ~resolve (`Uri uri) with
     | exception e ->
         Logq.debug (fun m ->
             m "try_search_account failed: %s\n%s" (Printexc.to_string e)
@@ -45,13 +45,13 @@ let parse_query_uri q =
   in
   let list_of_option x = x |> Option.fold ~none:[] ~some:List.singleton in
   let%lwt a_opt = try_search_account q in
-  let%lwt s_opt = try_fetch_status q in
+  let%lwt s_opt = if resolve then try_fetch_status q else Lwt.return_none in
   Lwt.return (list_of_option a_opt, list_of_option s_opt)
 
-let parse_query q =
+let handle_query resolve q =
   (* FIXME: Support more kinds of queries *)
-  let%lwt a1, s1 = parse_query_uri q in
-  let%lwt a2 = parse_query_accounts q in
+  let%lwt a1, s1 = handle_query_uri resolve q in
+  let%lwt a2 = handle_query_accounts resolve q in
   let%lwt accounts =
     a1 @ a2
     |> List.map (fun (a : Db.Account.t) -> a#id)
@@ -66,6 +66,6 @@ let parse_query q =
   make ~accounts ~statuses ~hashtags () |> Lwt.return
 
 let get req =
-  let%lwt _ = authenticate_account req in
+  let%lwt self = may_authenticate_account req in
   let%lwt q = req |> Httpq.Server.query "q" in
-  parse_query q >|= yojson_of_t >>= respond_yojson
+  handle_query (Option.is_some self) q >|= yojson_of_t >>= respond_yojson
