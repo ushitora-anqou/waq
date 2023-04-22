@@ -69,6 +69,7 @@ module Lwt_option = struct
     | Some v -> Lwt.map Option.some (f v)
 
   let iter f = function None -> Lwt.return_unit | Some v -> f v
+  let bind x f = match%lwt x with None -> Lwt.return_none | Some x -> f x
 end
 
 module Lwt_io = struct

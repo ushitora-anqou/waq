@@ -15,6 +15,7 @@
   fpath
   httpq
   jingoo
+  lambdasoup
   logq
   lwt
   lwt.unix

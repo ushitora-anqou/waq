@@ -1,5 +1,5 @@
 (tests
- (names test_http test_util test_controller test_regex)
+ (names test_http test_util test_controller test_regex test_ogp)
  (preprocess
   (pps lwt_ppx))
  (libraries alcotest alcotest-lwt httpq logq waq))

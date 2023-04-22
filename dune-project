@@ -36,6 +36,7 @@
   dune
   fpath
   jingoo
+  lambdasoup
   lwt
   lwt_ppx
   lwt_ssl
