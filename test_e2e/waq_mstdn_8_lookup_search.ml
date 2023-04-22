@@ -24,6 +24,11 @@ let f =
     | [ acct ], _, _ when res1 = (acct.id, acct.username, acct.acct) -> true
     | _ -> false);
 
+  (* No token should cause an error *)
+  expect_exc_lwt (fun () ->
+      lookup_via_v1_accounts_search `Waq ~username:"admin"
+        ~domain:"localhost:3000" ());%lwt
+
   (* Lookup me *)
   let%lwt res1 = lookup `Waq ~token:waq_token ~username:"user1" () in
   let%lwt res2 =

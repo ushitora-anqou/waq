@@ -210,14 +210,14 @@ let lookup_via_v1_accounts_lookup ~token kind ?domain ~username () =
   let a = r |> Yojson.Safe.from_string |> account_of_yojson in
   Lwt.return (a.id, a.username, a.acct)
 
-let lookup_via_v1_accounts_search ~token kind ?domain ~username () =
+let lookup_via_v1_accounts_search ?token kind ?domain ~username () =
   let target =
     let src = "/api/v1/accounts/search?resolve=true&q=@" in
     match domain with
     | None -> src ^ username
     | Some domain -> src ^ username ^ "@" ^ domain
   in
-  let%lwt r = do_fetch ~token kind target in
+  let%lwt r = do_fetch ?token kind target in
   let l =
     match Yojson.Safe.from_string r with
     | `List [ `Assoc l ] -> l

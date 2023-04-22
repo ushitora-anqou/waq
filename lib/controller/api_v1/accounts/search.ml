@@ -22,6 +22,7 @@ let parse_req req =
   (resolve, username, domain)
 
 let get req =
+  let%lwt _ = authenticate_bearer req in
   let%lwt _resolve, username, domain = parse_req req in
   try%lwt
     let%lwt acc = search_account (`Webfinger (domain, username)) in
