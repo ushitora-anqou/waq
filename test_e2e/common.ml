@@ -514,3 +514,10 @@ let websocket_stack kind ~token ?num_msgs f =
       f pushf;%lwt
       match num_msgs with None -> pushf None | Some _ -> Lwt.return_unit)
   >|= fun () -> !recv_msgs
+
+let expect_exc_lwt f =
+  (try%lwt
+     let%lwt _ = f () in
+     Lwt.return_false
+   with _ -> Lwt.return_true)
+  >|= fun b -> assert b

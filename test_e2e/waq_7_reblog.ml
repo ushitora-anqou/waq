@@ -26,10 +26,7 @@ let f =
   | _ -> assert false);%lwt
 
   (* Wrong unreblog *)
-  (try%lwt
-     unreblog `Waq ~token:token3 ~id |> ignore_lwt;%lwt
-     assert false
-   with _ -> Lwt.return_unit);%lwt
+  expect_exc_lwt (fun () -> unreblog `Waq ~token:token3 ~id);%lwt
   let%lwt { reblogs_count; _ } = get_status `Waq ~token id in
   assert (reblogs_count = 2);
 

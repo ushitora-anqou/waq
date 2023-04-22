@@ -16,10 +16,7 @@ let f =
     assert (s.id = id);
 
     (* Wrong delete *)
-    (try%lwt
-       delete_status `Waq ~token:token' id |> ignore_lwt;%lwt
-       assert false
-     with _ -> Lwt.return_unit);%lwt
+    expect_exc_lwt (fun () -> delete_status `Waq ~token:token' id);%lwt
     (* Should remain *)
     get_status `Waq id |> ignore_lwt;%lwt
 
