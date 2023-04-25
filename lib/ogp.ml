@@ -80,3 +80,31 @@ let parse_json_oembed ~url src =
 let fetch_oembed url =
   Throttle_fetch.f_exn url >|= find_json_oembed_href >>= Throttle_fetch.f_exn
   >|= parse_json_oembed ~url
+
+let parse_opengraph ~url src =
+  let open Soup in
+  let soup = parse src in
+
+  let opengraph_tag name =
+    let x1 = soup $? "meta[property=\"" ^ name ^ "\"]" in
+    let x2 = soup $? "meta[name=\"" ^ name ^ "\"]" in
+    match (x1, x2) with
+    | Some x, _ | None, Some x -> Some (R.attribute "content" x)
+    | _ -> None
+  in
+  let meta_tag name =
+    soup $? "meta[name=\"" ^ name ^ "\"]" |> Option.map (R.attribute "content")
+  in
+
+  let title =
+    [ opengraph_tag "og:title"; soup $? "title" |> Option.map R.leaf_text ]
+    |> List.find Option.is_some |> Option.value ~default:""
+  in
+  let description =
+    [ opengraph_tag "og:description"; meta_tag "description" ]
+    |> List.find Option.is_some |> Option.value ~default:""
+  in
+
+  make_oembed ~url ~typ:"link" ~title ~description ()
+
+let fetch_opengraph url = Throttle_fetch.f_exn url >|= parse_opengraph ~url

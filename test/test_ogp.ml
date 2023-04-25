@@ -63,6 +63,33 @@ let test_oembed_youtube () =
   (*assert (x.blurhash = None); (* FIXME *)*)
   ()
 
+let test_opengraph_theguardian () =
+  let src = read_file "../../../test/test_ogp_theguardian.html" in
+  let url =
+    "https://www.theguardian.com/money/2019/dec/07/i-lost-my-193000-inheritance-with-one-wrong-digit-on-my-sort-code"
+  in
+  let x = Ogp.parse_opengraph ~url src in
+  assert (x.url = url);
+  assert (
+    x.title
+    = "‘I lost my £193,000 inheritance – with one wrong digit on my sort code’");
+  assert (
+    x.description
+    = "When Peter Teich’s money went to another Barclays customer, the bank \
+       offered £25 as a token gesture");
+  assert (x.typ = "link");
+  assert (x.author_name = "");
+  assert (x.author_url = "");
+  assert (x.provider_name = "");
+  assert (x.provider_url = "");
+  assert (x.html = "");
+  assert (x.width = 0);
+  assert (x.height = 0);
+  assert (x.image = None);
+  assert (x.embed_url = "");
+  assert (x.blurhash = None);
+  ()
+
 let () =
   let open Alcotest in
   run "ogp"
@@ -72,4 +99,6 @@ let () =
           test_case "flickr" `Quick test_oembed_flickr;
           test_case "youtube" `Quick test_oembed_youtube;
         ] );
+      ( "opengraph",
+        [ test_case "theguardian" `Quick test_opengraph_theguardian ] );
     ]
