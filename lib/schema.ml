@@ -52,6 +52,9 @@ and Status = struct
       val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]
       val attachments : MediaAttachment.t list [@@foreign_key `status_id]
       val mentions : Mention.t list [@@foreign_key `status_id]
+
+      val preview_cards : PreviewCard.t list
+      [@@not_column] [@@preload_spec: PreviewCard.preload_spec]
     end
 end
 
@@ -238,5 +241,36 @@ and WebPushSubscription = struct
       val key_auth : string
       val access_token_id : OAuthAccessToken.ID.t option
       val user_id : User.ID.t option
+    end
+end
+
+and PreviewCard = struct
+  name "preview_cards"
+
+  class type t =
+    object
+      val url : string
+      val title : string
+      val description : string
+      val image_url : string option
+      val type_ : int [@@column "type"]
+      val html : string
+      val author_name : string
+      val author_url : string
+      val provider_name : string
+      val provider_url : string
+      val width : int
+      val height : int
+      val embed_url : string
+    end
+end
+
+and PreviewCardStatus = struct
+  name "preview_cards_statuses"
+
+  class type t =
+    object
+      val preview_card_id : PreviewCard.ID.t
+      val status_id : Status.ID.t
     end
 end]

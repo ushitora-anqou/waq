@@ -202,6 +202,33 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
          |> List.iter @@ fun (x : t) ->
             Hashtbl.mem tbl x#id |> Option.some |> x#set_favourited);
     ()
+
+  let () =
+    loader_preview_cards :=
+      fun ?preload xs c ->
+        (* Load default values *)
+        xs |> List.iter (fun x -> x#set_preview_cards (Some []));
+
+        let targets = xs |> List.map (fun x -> (x#id, x#set_preview_cards)) in
+        let%lwt tbl =
+          PreviewCardStatus.select ~status_id:(`In (targets |> List.map fst)) c
+          >|= index_by (fun x -> x#status_id)
+        in
+        let targets =
+          targets
+          |> List.map (fun (s_id, f) ->
+                 ( Hashtbl.find_all tbl s_id
+                   |> List.map (fun x -> x#preview_card_id),
+                   f ))
+        in
+        PreviewCard.select ?preload
+          ~id:(`In (targets |> List.map fst |> List.concat))
+          c
+        >|= index_by (fun x -> x#id)
+        >|= fun tbl ->
+        targets
+        |> List.iter @@ fun (card_ids, f) ->
+           f (Some (card_ids |> List.map (Hashtbl.find tbl)))
 end
 
 module User = struct
@@ -355,6 +382,14 @@ end
 
 module WebPushSubscription = struct
   include WebPushSubscription
+end
+
+module PreviewCard = struct
+  include PreviewCard
+end
+
+module PreviewCardStatus = struct
+  include PreviewCardStatus
 end
 
 let home_timeline ~id ~limit ~max_id ~since_id (c : Sqlx.Connection.t) :

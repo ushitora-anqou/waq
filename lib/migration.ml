@@ -25,6 +25,8 @@ let migrations : (int * (module Sqlx.Migration.S)) list =
       (20230331_183000, (module M20230331_183000_create_markers));
       (20230410_193300, (module M20230410_193300_add_spoiler_text));
       (20230416_182600, (module M20230416_182600_create_web_push_subscriptions));
+      (20230427_204200, (module M20230427_204200_create_preview_cards));
+      (20230427_205000, (module M20230427_205000_create_preview_cards_statuses));
     ]
 
 let verify_migration_status () =
