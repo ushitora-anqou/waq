@@ -130,6 +130,9 @@ let post req =
   (* Deliver the status to others *)
   Worker.Distribute.kick s;%lwt
 
+  (* Attach preview cards if any *)
+  Worker.Link_crawl.kick s;%lwt
+
   (* Return the result to the client *)
   let%lwt s = make_status_from_model ~self_id:self#id s in
   s |> yojson_of_status |> Yojson.Safe.to_string
