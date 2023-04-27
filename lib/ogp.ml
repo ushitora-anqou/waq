@@ -100,12 +100,16 @@ let parse_opengraph ~url src =
   in
 
   let title =
-    [ opengraph_tag "og:title"; soup $? "title" |> Option.map R.leaf_text ]
-    |> List.find Option.is_some |> Option.value ~default:""
+    [
+      opengraph_tag "og:title";
+      soup $? "title" |> Option.map R.leaf_text;
+      Some "";
+    ]
+    |> List.find Option.is_some |> Option.get
   in
   let description =
-    [ opengraph_tag "og:description"; meta_tag "description" ]
-    |> List.find Option.is_some |> Option.value ~default:""
+    [ opengraph_tag "og:description"; meta_tag "description"; Some "" ]
+    |> List.find Option.is_some |> Option.get
   in
 
   make_oembed ~url ~typ:"link" ~title ~description ()
