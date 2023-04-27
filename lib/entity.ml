@@ -194,6 +194,38 @@ let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
         ~url:ma#remote_url ~preview_url:ma#remote_url ~meta ~blurhash ()
   | _ -> failwith "Invalid type of media attachment"
 
+(* Entity PreviewCard *)
+type preview_card = {
+  url : string;
+  title : string;
+  description : string;
+  type_ : string; [@key "type"]
+  author_name : string;
+  author_url : string;
+  provider_name : string;
+  provider_url : string;
+  html : string;
+  width : int;
+  height : int;
+  image : string option;
+  embed_url : string;
+}
+[@@deriving make, yojson]
+
+let serialize_preview_card (c : Model.PreviewCard.t) =
+  let type_ =
+    match c#type_ with
+    | 0 -> "link"
+    | 1 -> "photo"
+    | 2 -> "video"
+    | 3 -> "rich"
+    | _ -> failwith "Invalid preview card type"
+  in
+  make_preview_card ~url:c#url ~title:c#title ~description:c#description ~type_
+    ~author_name:c#author_name ~author_url:c#author_url
+    ~provider_name:c#provider_name ~provider_url:c#provider_url ~html:c#html
+    ~width:c#width ~height:c#height ?image:c#image_url ~embed_url:c#embed_url ()
+
 (* Entity status *)
 type status_mention = {
   id : string;
@@ -227,6 +259,7 @@ type status = {
   favourites_count : int;
   media_attachments : media_attachment list;
   spoiler_text : string;
+  card : preview_card option;
 }
 [@@deriving make, yojson_of]
 
@@ -260,7 +293,12 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     ~reblogged:s#reblogged ~favourited:s#favourited
     ~media_attachments:(s#attachments |> List.map serialize_media_attachment)
     ~mentions:(s#mentions |> List.map serialize_mention)
-    ~spoiler_text:s#spoiler_text ()
+    ~spoiler_text:s#spoiler_text
+    ?card:
+      (match s#preview_cards with
+      | [] -> None
+      | x :: _ -> Some (serialize_preview_card x))
+    ()
 
 let status_preload_spec self_id : Model.Status.preload_spec =
   [
@@ -271,6 +309,7 @@ let status_preload_spec self_id : Model.Status.preload_spec =
     `favourited self_id;
     `attachments [];
     `mentions [ `account [] ];
+    `preview_cards [];
     `reblog_of
       [
         `stat [];
@@ -281,6 +320,7 @@ let status_preload_spec self_id : Model.Status.preload_spec =
         `favourited self_id;
         `attachments [];
         `mentions [ `account [] ];
+        `preview_cards [];
       ];
   ]
 
