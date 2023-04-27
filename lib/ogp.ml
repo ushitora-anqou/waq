@@ -81,6 +81,9 @@ let fetch_oembed url =
   Throttle_fetch.f_exn url >|= find_json_oembed_href >>= Throttle_fetch.f_exn
   >|= parse_json_oembed ~url
 
+let fetch_oembed_opt url =
+  try%lwt fetch_oembed url >|= Option.some with _ -> Lwt.return_none
+
 let parse_opengraph ~url src =
   let open Soup in
   let soup = parse src in
@@ -108,3 +111,11 @@ let parse_opengraph ~url src =
   make_oembed ~url ~typ:"link" ~title ~description ()
 
 let fetch_opengraph url = Throttle_fetch.f_exn url >|= parse_opengraph ~url
+
+let fetch_opengraph_opt url =
+  try%lwt fetch_opengraph url >|= Option.some
+  with e ->
+    Logq.err (fun m ->
+        m "Couldn't fetch opengraph: %s\n%s" (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
+    Lwt.return_none
