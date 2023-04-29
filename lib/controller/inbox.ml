@@ -87,6 +87,7 @@ let kick_inbox_create (req : ap_create) =
   in
   Job.kick ~name:__FUNCTION__ @@ fun () ->
   let%lwt s = status_of_note note in
+  Worker.Link_crawl.kick s;%lwt
   Worker.Distribute.kick s
 
 (* Recv Announce in inbox *)
