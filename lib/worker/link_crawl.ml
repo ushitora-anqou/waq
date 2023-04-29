@@ -1,7 +1,7 @@
 open Util
 open Lwt.Infix
 
-let uri_re = Regex.e {|https?://[\x21-\x7e]*|}
+let uri_re = Regex.e {|https?://[\x21\x24-\x3b\x3d\x3f-\x5f\x61-\x7a\x7c\x7e]*|}
 (* FIXME: Use regular expressions defined in https://github.com/twitter/twitter-text/blob/30e2430d90cff3b46393ea54caf511441983c260/rb/lib/twitter-text/regex.rb *)
 
 let kick (status : Model.Status.t) =
