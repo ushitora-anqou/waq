@@ -10,6 +10,7 @@ let kick (status : Model.Status.t) =
   let%lwt cards_already_inserted, cards_not_inserted =
     Regex.match_ uri_re status#text
     |> List.map (fun a -> (Option.get a.(0)).Regex.substr)
+    |> List.sort_uniq compare
     |> Lwt_list.filter_map_p (fun url ->
            match%lwt Db.(e PreviewCard.(get_one ~url) |> maybe_no_row) with
            | Some x -> Lwt.return_some x
