@@ -51,6 +51,12 @@ let kick (status : Model.Status.t) =
            Model.PreviewCardStatus.make ~preview_card_id:card#id
              ~status_id:status#id ())
   in
-  let%lwt _ = Db.(e PreviewCardStatus.(insert rels)) in
-
-  Lwt.return_unit
+  if%lwt
+    Db.(
+      transaction (fun c ->
+          let open PreviewCardStatus in
+          let%lwt cards = get_many ~status_id:status#id c in
+          if cards <> [] then delete cards c else Lwt.return_unit;%lwt
+          PreviewCardStatus.insert rels c |> ignore_lwt))
+  then Lwt.return_unit
+  else failwith "Transaction failed"
