@@ -4,13 +4,58 @@ open Lwt.Infix
 let uri_re = Regex.e {|https?://[\x21\x24-\x3b\x3d\x3f-\x5f\x61-\x7a\x7c\x7e]*|}
 (* FIXME: Use regular expressions defined in https://github.com/twitter/twitter-text/blob/30e2430d90cff3b46393ea54caf511441983c260/rb/lib/twitter-text/regex.rb *)
 
-let kick (status : Model.Status.t) =
+let extract_urls (status : Model.Status.t) =
+  let urls =
+    if Model.Account.is_local status#account then
+      Regex.match_ uri_re status#text
+      |> List.map (fun a -> (Option.get a.(0)).Regex.substr)
+    else
+      let open Soup in
+      let soup = parse status#text in
+      soup $$ "a" |> to_list
+      |> List.filter_map (fun anchor ->
+             let href = R.attribute "href" anchor in
+             let rel =
+               anchor |> attribute "rel"
+               |> Option.fold ~none:false
+                    ~some:
+                      (String.split_on_char ' '
+                      *> List.find_opt (( = ) "tag")
+                      *> Option.is_some)
+             in
+             let cls =
+               anchor |> attribute "class"
+               |> Option.fold ~none:false
+                    ~some:
+                      (String.split_on_char ' '
+                      *> List.find_opt (fun x -> x = "u-url" || x = "x-card")
+                      *> Option.is_some)
+             in
+             let mention =
+               status#mentions
+               |> List.exists (fun m ->
+                      m#account
+                      |> Option.fold ~none:false ~some:(fun a ->
+                             href = (a#url |> Option.value ~default:a#uri)))
+             in
+             if rel || cls || mention then None else Some href)
+  in
+  urls |> List.sort_uniq compare
+
+let kick (status_id : Model.Status.ID.t) =
   Job.kick ~name:__FUNCTION__ @@ fun () ->
+  let%lwt status =
+    Db.(
+      e
+        Status.(
+          get_one
+            ~preload:[ `account []; `mentions [ `account [] ] ]
+            ~id:status_id))
+  in
+
   (* Find (or insert if necessary) PreviewCard *)
   let%lwt cards_already_inserted, cards_not_inserted =
-    Regex.match_ uri_re status#text
-    |> List.map (fun a -> (Option.get a.(0)).Regex.substr)
-    |> List.sort_uniq compare
+    extract_urls status
     |> Lwt_list.filter_map_p (fun url ->
            match%lwt Db.(e PreviewCard.(get_one ~url) |> maybe_no_row) with
            | Some x -> Lwt.return_some x
@@ -55,7 +100,7 @@ let kick (status : Model.Status.t) =
     Db.(
       transaction (fun c ->
           let open PreviewCardStatus in
-          let%lwt cards = get_many ~status_id:status#id c in
+          let%lwt cards = get_many ~status_id c in
           if cards <> [] then delete cards c else Lwt.return_unit;%lwt
           PreviewCardStatus.insert rels c |> ignore_lwt))
   then Lwt.return_unit
