@@ -5,7 +5,7 @@ let get_preview_card_from_a1 (a0 : agent) (a1 : agent) content =
   follow_agent a1 a0;%lwt
 
   (* a0: Post link *)
-  let%lwt { uri; _ } = post a1 ~content () in
+  let%lwt { uri; _ } = post a0 ~content () in
   Lwt_unix.sleep 1.0;%lwt
 
   (* a1: Check the post. The post should have been fetched in advance because a1 follows a0. *)
