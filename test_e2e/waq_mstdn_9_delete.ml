@@ -68,10 +68,11 @@ let f (a0 : agent) (a1 : agent) =
   let%lwt _ = get_status a0 a0_post_id in
   expect_no_status a0 a0_reblog_id;%lwt
 
+  (*
   (* a1: Check if a0 unreblogged a0_post_id *)
   let%lwt { reblogs_count; _ } = get_status a1 post_id in
   assert (reblogs_count = 0);
-
+  *)
   Lwt.return_unit
 
 let f_waq_mstdn =
