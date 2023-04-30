@@ -12,10 +12,11 @@ let match_mention =
            let username = Option.get r.(1) in
            let domain = r.(2) in
            match domain with
-           | None -> (username.offset, username.length, username.substr, None)
+           | None ->
+               (username.offset - 1, username.length + 1, username.substr, None)
            | Some domain ->
-               ( username.offset,
-                 domain.offset + domain.length - username.offset,
+               ( username.offset - 1,
+                 domain.offset + domain.length - username.offset + 1,
                  username.substr,
                  if domain.substr = Config.server_name () then None
                  else Some domain.substr ))
