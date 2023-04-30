@@ -21,6 +21,13 @@ let f_case1 (a0 : agent) (a1 : agent) =
   assert (c.url = url);
   Lwt.return_unit
 
+let f_case2 (a0 : agent) (a1 : agent) =
+  let content = "@" ^ acct_of_agent ~from:a0 a1 in
+  let%lwt s = get_preview_card_from_a1 a0 a1 content in
+  assert (List.length s.mentions = 1);
+  assert (Option.is_none s.card);
+  Lwt.return_unit
+
 let f_mstdn_waq =
   make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   let a0 =
@@ -32,6 +39,7 @@ let f_mstdn_waq =
       ~domain:waq_server_domain
   in
   f_case1 a0 a1;%lwt
+  f_case2 a0 a1;%lwt
   Lwt.return_unit
 
 let f_waq_waq =
@@ -45,4 +53,5 @@ let f_waq_waq =
       ~domain:waq_server_domain
   in
   f_case1 a0 a1;%lwt
+  f_case2 a0 a1;%lwt
   Lwt.return_unit
