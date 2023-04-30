@@ -111,8 +111,9 @@ let parse_opengraph ~url src =
     [ opengraph_tag "og:description"; meta_tag "description"; Some "" ]
     |> List.find Option.is_some |> Option.get
   in
+  let image = opengraph_tag "og:image" in
 
-  make_oembed ~url ~typ:"link" ~title ~description ()
+  make_oembed ~url ~typ:"link" ~title ~description ?image ()
 
 let fetch_opengraph url = Throttle_fetch.f_exn url >|= parse_opengraph ~url
 
