@@ -1,7 +1,7 @@
 open Waq
 
 let test_match_mention () =
-  let m = Controller.Api_v1.Statuses.Root.match_mention in
+  let m = Text_helper.match_mention in
   assert (m "test @foo" = [ (5, 4, "foo", None) ]);
   assert (m "test @foo@example.com" = [ (5, 16, "foo", Some "example.com") ]);
   assert (m "test@foo" = []);
@@ -33,8 +33,8 @@ let test_match_mention () =
   ()
 
 let test_replace_mention () =
-  let r = Controller.Api_v1.Statuses.Root.replace_mention in
-  let m = Controller.Api_v1.Statuses.Root.match_mention in
+  let r = Text_helper.replace_mention in
+  let m = Text_helper.match_mention in
   assert (r [] "foo" = "foo");
   assert (r [ (0, 1, "bar") ] "foo" = "baroo");
   assert (r [ (0, 1, "bar"); (1, 3, "baz") ] "foooo" = "barbazo");
@@ -48,7 +48,7 @@ let test_replace_mention () =
 
 let () =
   let open Alcotest in
-  run "controller"
+  run "text_helper"
     [
       ( "mention",
         [

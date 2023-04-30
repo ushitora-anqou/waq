@@ -278,9 +278,10 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
     | None -> s#stat |> Option.value ~default
     | Some _ -> (Option.get s#reblog_of)#stat |> Option.value ~default
   in
+  let content = Text_helper.format_status_text s in
   make_status ~id:(s#id |> id_to_string)
     ~created_at:(Ptime.to_rfc3339 s#created_at)
-    ~visibility ~uri:s#uri ~content:s#text
+    ~visibility ~uri:s#uri ~content
     ~account:(serialize_account s#account)
     ~replies_count:stat#replies_count
     ?in_reply_to_id:(s#in_reply_to_id |> Option.map id_to_string)
