@@ -28,7 +28,7 @@ let extract_urls (status : Model.Status.t) =
                |> Option.fold ~none:false
                     ~some:
                       (String.split_on_char ' '
-                      *> List.find_opt (fun x -> x = "u-url" || x = "x-card")
+                      *> List.find_opt (fun x -> x = "u-url" || x = "h-card")
                       *> Option.is_some)
              in
              let mention =
