@@ -130,6 +130,9 @@ type account = {
 type media_attachment = { id : string; type_ : string [@key "type"] }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
+type preview_card = { url : string }
+[@@deriving yojson] [@@yojson.allow_extra_fields]
+
 type status_mention = {
   id : string;
   username : string;
@@ -150,6 +153,7 @@ type status = {
   media_attachments : media_attachment list;
   spoiler_text : string;
   mentions : status_mention list;
+  card : preview_card option;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 

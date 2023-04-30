@@ -36,6 +36,8 @@ let all_tests =
     ("02-summary-mstdn-waq", Waq_mstdn_12_summary.f_mstdn_waq);
     ("02-summary-waq-mstdn", Waq_mstdn_12_summary.f_waq_mstdn);
     ("02-summary-waq-waq", Waq_mstdn_12_summary.f_waq_waq);
+    ("03-preview-card-waq-waq", Waq_mstdn_14_preview_card.f_waq_waq);
+    ("03-preview-card-mstdn-waq", Waq_mstdn_14_preview_card.f_mstdn_waq);
   ]
 
 let execute_one_test (name, f) =
