@@ -4,6 +4,7 @@ open Httpq.Server
 let cors =
   Cors.
     [
+      make "/nodeinfo/2.0" ~methods:[ `GET ] ();
       make "/.well-known/*" ~methods:[ `GET ] ();
       make "/users/:username" ~methods:[ `GET ] ();
       make "/api/*" ~methods:[ `POST; `PUT; `DELETE; `GET; `PATCH; `OPTIONS ] ();
@@ -17,6 +18,7 @@ let routes =
       get "/" Root.get;
       get "/system/*" Static.get;
       post "/inbox" Inbox.post;
+      get "/nodeinfo/2.0" Nodeinfo.get_2_0;
       scope "/.well-known" Well_known.[
         get "/host-meta" Host_meta.get;
         get "/webfinger" Webfinger.get;
