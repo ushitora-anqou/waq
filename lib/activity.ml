@@ -743,18 +743,11 @@ let verify_activity_json req =
       | Error e -> (body, Error (`VerifFailure e))
       | Ok () -> (body, Ok ()))
 
-let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
-  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
-  let%lwt in_reply_to_s =
-    match s#in_reply_to_id with
-    | None -> Lwt.return_none
-    | Some id -> Db.(e Status.(get_one ~id)) >|= Option.some
-  in
+let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
+  let in_reply_to_s = s#in_reply_to in
   let published = s#created_at |> Ptime.to_rfc3339 in
   let to_ = [ "https://www.w3.org/ns/activitystreams#Public" ] in
-  let%lwt mentions =
-    Db.(e Mention.(get_many ~status_id:(Some s#id) ~preload:[ `account [] ]))
-  in
+  let mentions = s#mentions in
   let cc =
     mentions
     |> List.filter_map (fun m -> m#account)
@@ -764,9 +757,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
   let in_reply_to =
     in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s#uri)
   in
-  let%lwt media_attachments =
-    Db.(e MediaAttachment.(get_many ~status_id:(Some s#id)))
-  in
+  let media_attachments = s#attachments in
   let attachment =
     media_attachments
     |> List.map (fun ma -> make_document ~url:ma#remote_url () |> document)
@@ -777,7 +768,7 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
     to_;
     cc;
     attributed_to = self#uri;
-    content = s#text;
+    content = Text_helper.format_status_text s;
     in_reply_to;
     attachment;
     tag =
@@ -792,7 +783,23 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
                ]);
     summary = s#spoiler_text;
   }
-  |> Lwt.return
+
+let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
+  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
+  let%lwt s =
+    Db.(
+      e
+        Status.(
+          get_one ~id:s#id
+            ~preload:
+              [
+                `attachments [];
+                `in_reply_to [];
+                `mentions [ `account [] ];
+                `account [];
+              ]))
+  in
+  serialize_status s self |> Lwt.return
 
 let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
   let published, _, _ = Ptime.of_rfc3339 note.published |> Result.get_ok in
