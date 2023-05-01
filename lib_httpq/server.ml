@@ -20,7 +20,7 @@ type request =
       meth : Method.t;
       uri : Uri.t;
       path : string;
-      query : (string, string) Hashtbl.t;
+      query : (string * string) list;
       param : (string * string) list;
       body : (string option * request_body option) Lwt.t Lazy.t;
       headers : Headers.t;
@@ -62,7 +62,7 @@ let string_of_yojson_atom = function
 
 let query_many name : request -> string list Lwt.t = function
   | Request { body; query; _ } -> (
-      match Hashtbl.find_all query (name ^ "[]") with
+      match query |> List.assoc_many (name ^ "[]") with
       | _ :: _ as res -> Lwt.return res
       | [] -> (
           Lazy.force body >|= function
@@ -93,7 +93,7 @@ let query ?default name req =
                 List.assoc name l |> string_of_yojson_atom |> Lwt.return
             | JSON _ -> failwith "json"
             | Form body -> (
-                match Hashtbl.find_opt query name with
+                match query |> List.assoc_opt name with
                 | Some x -> Lwt.return x
                 | None -> body |> List.assoc name |> List.hd |> Lwt.return)
             | MultipartFormdata _ -> formdata name req >|= fun f -> f.content)
@@ -188,10 +188,7 @@ let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
   let headers = Bare_server.Request.headers req |> Headers.of_list in
   let path = Uri.path uri in
   let query =
-    let h = Hashtbl.create 0 in
-    Uri.query uri
-    |> List.iter (fun (k, xs) -> Hashtbl.add h k (xs |> String.concat ","));
-    h
+    Uri.query uri |> List.map (fun (k, xs) -> (k, xs |> String.concat ","))
   in
   let lazy_parsed_body =
     lazy

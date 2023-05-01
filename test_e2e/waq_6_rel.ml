@@ -20,6 +20,7 @@ let f =
     let%lwt token' = fetch_access_token ~username:"user2" in
     let%lwt user1_id, _, _ = lookup `Waq ~token:token' ~username:"user1" () in
     let%lwt user2_id, _, _ = lookup `Waq ~token ~username:"user2" () in
+    let%lwt user3_id, _, _ = lookup `Waq ~token ~username:"user3" () in
 
     (* user1: Try to follow myself, which should be forbidden *)
     (try%lwt
@@ -34,11 +35,12 @@ let f =
     expect_following user1_id [ user2_id ];%lwt
 
     (* user1: check relationship *)
-    (match%lwt get_relationships `Waq ~token [ user2_id ] with
-    | [ rel ] ->
-        assert (rel.id = user2_id);
-        assert rel.following;
-        assert (not rel.followed_by);
+    (match%lwt get_relationships `Waq ~token [ user2_id; user3_id ] with
+    | [ rel2; rel3 ] ->
+        assert (rel2.id = user2_id);
+        assert (rel3.id = user3_id);
+        assert rel2.following;
+        assert (not rel2.followed_by);
         Lwt.return_unit
     | _ -> assert false);%lwt
 

@@ -65,3 +65,10 @@ module Ptime = struct
     Printf.sprintf "%s, %02d %s %d %02d:%02d:%02d GMT" day_name day_of_month
       month year hour minute second
 end
+
+module List = struct
+  include List
+
+  let assoc_many k1 l =
+    l |> List.filter_map (fun (k, v) -> if k = k1 then Some v else None)
+end
