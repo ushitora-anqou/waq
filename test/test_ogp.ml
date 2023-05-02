@@ -90,6 +90,14 @@ let test_opengraph_theguardian () =
   assert (x.blurhash = None);
   ()
 
+let test_opengraph_eow_alc () =
+  let url = "https://eow.alc.co.jp/" in
+  let src = read_file "../../../test/test_ogp_eow_alc.html" in
+  let x = Ogp.parse_opengraph ~url src in
+  assert (x.url = url);
+  assert (x.image = Some "https://eow.alc.co.jp/content/img/PromoImage.png");
+  ()
+
 let () =
   let open Alcotest in
   run "ogp"
@@ -100,5 +108,8 @@ let () =
           test_case "youtube" `Quick test_oembed_youtube;
         ] );
       ( "opengraph",
-        [ test_case "theguardian" `Quick test_opengraph_theguardian ] );
+        [
+          test_case "theguardian" `Quick test_opengraph_theguardian;
+          test_case "eow.alc" `Quick test_opengraph_eow_alc;
+        ] );
     ]
