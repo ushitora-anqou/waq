@@ -6,7 +6,7 @@ let get_2_0 _req =
     [
       ("version", `String "2.0");
       ( "software",
-        `Assoc [ ("name", `String "waq"); ("version", `String "0.0.1") ] );
+        `Assoc [ ("name", `String "waq"); ("version", `String "0.1.0") ] );
       ("protocols", `List [ `String "activitypub" ]);
       ("services", `Assoc [ ("outbound", `List []); ("inbound", `List []) ]);
       ( "usage",
