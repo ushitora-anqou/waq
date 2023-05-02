@@ -12,7 +12,7 @@ let f (a0 : agent) (a1 : agent) =
 
   (* a1: Check the post. The post should have been fetched in advance because a1 follows a0. *)
   let%lwt _, [ s ], _ = search a1 uri in
-  assert (List.length Soup.(parse s.content $$ "a" |> to_list) = 1);
+  assert (List.length Soup.(parse (Option.get s.content) $$ "a" |> to_list) = 1);
 
   Lwt.return_unit
   [@@warning "-8"]

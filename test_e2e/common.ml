@@ -155,7 +155,7 @@ type status = {
   spoiler_text : string;
   mentions : status_mention list;
   card : preview_card option;
-  content : string;
+  content : string option; [@yojson.option]
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
