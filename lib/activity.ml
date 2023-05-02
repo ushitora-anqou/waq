@@ -654,13 +654,14 @@ let model_account_of_person ?original (r : ap_person) : Model.Account.t =
         ~public_key:r.public_key_pem ~display_name:r.name ~uri:r.id ~url:r.url
         ~inbox_url:r.inbox ~outbox_url:r.outbox ~followers_url:r.followers
         ~shared_inbox_url:r.shared_inbox ?avatar_remote_url ~header_remote_url
-        ()
+        ~note:r.summary ()
   | Some (a : Model.Account.t) ->
       let a = Oo.copy a in
       a#set_username r.preferred_username;
       a#set_domain domain;
       a#set_public_key r.public_key_pem;
       a#set_display_name r.name;
+      a#set_note r.summary;
       a#set_uri r.id;
       a#set_url (Some r.url);
       a#set_inbox_url r.inbox;
@@ -960,10 +961,9 @@ let person_of_account (a : Db.Account.t) : ap_person =
   make_person ~id:a#uri ~following:(a#uri ^/ "following")
     ~followers:a#followers_url ~inbox:a#inbox_url
     ~shared_inbox:a#shared_inbox_url ~outbox:a#outbox_url
-    ~preferred_username:a#username ~name:a#display_name
-    ~summary:"FIXME: summary is here" ~url:a#uri ~tag:[]
-    ~public_key_id:(a#uri ^ "#main-key") ~public_key_owner:a#uri
-    ~public_key_pem:a#public_key
+    ~preferred_username:a#username ~name:a#display_name ~summary:a#note
+    ~url:a#uri ~tag:[] ~public_key_id:(a#uri ^ "#main-key")
+    ~public_key_owner:a#uri ~public_key_pem:a#public_key
     ~icon:(a#avatar_remote_url |> Option.map (fun url -> make_image ~url))
     ~image:
       (match a#header_remote_url with

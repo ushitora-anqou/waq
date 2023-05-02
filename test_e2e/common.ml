@@ -120,6 +120,7 @@ type account = {
   username : string;
   acct : string;
   display_name : string;
+  note : string;
   last_status_at : string option;
   statuses_count : int;
   followers_count : int;
@@ -173,7 +174,7 @@ type notification = {
 type marker = { last_read_id : string; version : int; updated_at : string }
 [@@deriving make, yojson]
 
-let update_credentials ~token kind ?display_name () =
+let update_credentials ~token kind ?display_name ?note () =
   let target = "/api/v1/accounts/update_credentials" in
   let headers =
     [
@@ -186,6 +187,18 @@ let update_credentials ~token kind ?display_name () =
   in
   let body =
     [ {|-----------------------------91791948726096252761377705945--|}; {||} ]
+  in
+  let body =
+    match note with
+    | None -> body
+    | Some note ->
+        [
+          {|-----------------------------91791948726096252761377705945|};
+          {|Content-Disposition: form-data; name="note"|};
+          {||};
+          note;
+        ]
+        @ body
   in
   let body =
     match display_name with

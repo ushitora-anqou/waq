@@ -69,8 +69,8 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
     (* FIXME *)
     if not credential then None
     else
-      make_credential_account_source ~privacy:"public" ~sensitive:false ~note:""
-        ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
+      make_credential_account_source ~privacy:"public" ~sensitive:false
+        ~note:a#note ~fields:[] ~language:"ja" ~follow_requests_count:0 ()
       |> Option.some
   in
   let avatar =
@@ -90,8 +90,8 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
   make_account
     ~id:(a#id |> Model.Account.ID.to_int |> string_of_int)
     ~username:a#username ~acct:(acct a#username a#domain) ~url:a#uri
-    ~display_name:a#display_name ~note:"" ~avatar ~avatar_static:avatar ~header
-    ~header_static:header ~locked:false ~fields:[] ~emojis:[] ~bot:false
+    ~display_name:a#display_name ~note:a#note ~avatar ~avatar_static:avatar
+    ~header ~header_static:header ~locked:false ~fields:[] ~emojis:[] ~bot:false
     ~group:false ~discoverable:true
     ~created_at:(Ptime.to_rfc3339 a#created_at)
     ?last_status_at:(stat#last_status_at |> Option.map Ptime.to_rfc3339)

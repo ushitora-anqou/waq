@@ -9,6 +9,7 @@ module rec Account = struct
       val private_key : string option
       val public_key : string
       val display_name : string
+      val note : string
       val uri : string
       val url : string option
       val inbox_url : string
