@@ -22,6 +22,7 @@ let routes =
       scope "/.well-known" Well_known.[
         get "/host-meta" Host_meta.get;
         get "/webfinger" Webfinger.get;
+        get "/nodeinfo" Nodeinfo.get;
       ];
       scope "/users/:name" Users.[
         get "" Root.get;
