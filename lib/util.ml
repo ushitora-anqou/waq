@@ -87,22 +87,3 @@ type json_any = Yojson.Safe.t
 
 let yojson_of_json_any : json_any -> Yojson.Safe.t = Fun.id
 let json_any_of_yojson : Yojson.Safe.t -> json_any = Fun.id
-
-module ImageMagick = struct
-  let convert_exe = "/usr/bin/convert"
-
-  let convert ~(input_type : [ `PNG | `JPEG ])
-      ~(input_data : string Lwt_stream.t) ~(output_file_name : string) =
-    Lwt_io.with_temp_file
-      ~suffix:(match input_type with `PNG -> ".png" | `JPEG -> ".jpeg")
-    @@ fun (temp_file_name, oc) ->
-    Lwt_io.write_stream oc input_data;%lwt
-    Lwt_io.flush oc;%lwt
-    let com =
-      ( convert_exe,
-        [| convert_exe; temp_file_name; "-strip"; output_file_name |] )
-    in
-    Lwt_process.exec com >|= function
-    | WEXITED 0 -> ()
-    | _ -> failwith "ImageMagick.convert: failed to convert"
-end
