@@ -126,6 +126,7 @@ type account = {
   followers_count : int;
   following_count : int;
   avatar : string;
+  header : string;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -175,7 +176,7 @@ type notification = {
 type marker = { last_read_id : string; version : int; updated_at : string }
 [@@deriving make, yojson]
 
-let update_credentials ~token kind ?display_name ?note ?avatar () =
+let update_credentials ~token kind ?display_name ?note ?avatar ?header () =
   let target = "/api/v1/accounts/update_credentials" in
   let headers =
     [
@@ -223,6 +224,19 @@ let update_credentials ~token kind ?display_name ?note ?avatar () =
           {|Content-Type: image/png|};
           {||};
           avatar;
+        ]
+        @ body
+  in
+  let body =
+    match header with
+    | None -> body
+    | Some header ->
+        [
+          {|-----------------------------91791948726096252761377705945|};
+          {|Content-Disposition: form-data; name="header"; filename="header.png"|};
+          {|Content-Type: image/png|};
+          {||};
+          header;
         ]
         @ body
   in

@@ -61,6 +61,14 @@ let account_avatar_url filename =
   "/" ^ ([ "system"; "accounts"; "avatars"; filename ] |> String.concat "/")
   |> absolute_url
 
+let account_header_dir () =
+  [ "system"; "accounts"; "headers" ]
+  |> List.fold_left Filename.concat (static_root ())
+
+let account_header_url filename =
+  "/" ^ ([ "system"; "accounts"; "headers"; filename ] |> String.concat "/")
+  |> absolute_url
+
 let vapid_private_key () = !c.vapid_private_key
 let vapid_public_key () = !c.vapid_public_key
 let webpush_subscriber () = !c.webpush_subscriber

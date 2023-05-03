@@ -24,9 +24,7 @@ let home_timeline src =
 let delete_status src = delete_status src.kind ~token:src.token
 let get_status src = get_status src.kind ~token:src.token
 let get_notifications src = get_notifications src.kind ~token:src.token
-
-let update_credentials src ?display_name ?note ?avatar () =
-  update_credentials src.kind ~token:src.token ?display_name ?note ?avatar ()
+let update_credentials src = update_credentials src.kind ~token:src.token
 
 let websocket src ?target handler f =
   websocket src.kind ~token:src.token ?target handler f
