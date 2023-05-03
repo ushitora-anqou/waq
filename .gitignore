@@ -36,4 +36,4 @@ _opam/
 /log
 /ctl
 /docker/data
-/static/system/media_attachments
+/static/system

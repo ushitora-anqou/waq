@@ -17,6 +17,8 @@ let routes =
     [
       get "/" Root.get;
       get "/system/*" Static.get;
+      get "/avatars/*" Static.get;
+      get "/headers/*" Static.get;
       post "/inbox" Inbox.post;
       get "/nodeinfo/2.0" Nodeinfo.get_2_0;
       scope "/.well-known" Well_known.[
