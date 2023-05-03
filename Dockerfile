@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /root/
 COPY --from=0 /home/opam/waq/_build/default/bin/main.exe ./waq
+COPY --from=0 /home/opam/waq/static /static
 
 CMD ["/root/waq"]
 
