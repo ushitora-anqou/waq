@@ -125,6 +125,7 @@ type account = {
   statuses_count : int;
   followers_count : int;
   following_count : int;
+  avatar : string;
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
@@ -174,7 +175,7 @@ type notification = {
 type marker = { last_read_id : string; version : int; updated_at : string }
 [@@deriving make, yojson]
 
-let update_credentials ~token kind ?display_name ?note () =
+let update_credentials ~token kind ?display_name ?note ?avatar () =
   let target = "/api/v1/accounts/update_credentials" in
   let headers =
     [
@@ -209,6 +210,19 @@ let update_credentials ~token kind ?display_name ?note () =
           {|Content-Disposition: form-data; name="display_name"|};
           {||};
           display_name;
+        ]
+        @ body
+  in
+  let body =
+    match avatar with
+    | None -> body
+    | Some avatar ->
+        [
+          {|-----------------------------91791948726096252761377705945|};
+          {|Content-Disposition: form-data; name="avatar"; filename="avatar.png"|};
+          {|Content-Type: image/png|};
+          {||};
+          avatar;
         ]
         @ body
   in
@@ -539,3 +553,13 @@ let expect_exc_lwt f =
      Lwt.return_false
    with _ -> Lwt.return_true)
   >|= fun b -> assert b
+
+let test_image =
+  {|
+iVBORw0KGgoAAAANSUhEUgAAADIAAAAyAQAAAAA2RLUcAAAABGdBTUEAALGPC/xhBQAAACBjSFJN
+AAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAAmJLR0QAAd2KE6QAAAAHdElN
+RQfnAxYCJTrYPC4yAAAADklEQVQY02NgGAWDCQAAAZAAAcWb20kAAAAldEVYdGRhdGU6Y3JlYXRl
+ADIwMjMtMDMtMjJUMDI6Mzc6NTgrMDA6MDClQ3CPAAAAJXRFWHRkYXRlOm1vZGlmeQAyMDIzLTAz
+LTIyVDAyOjM3OjU4KzAwOjAw1B7IMwAAAABJRU5ErkJggg==|}
+  |> String.trim |> String.split_on_char '\n' |> String.concat ""
+  |> Base64.decode_exn

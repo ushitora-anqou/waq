@@ -7,8 +7,8 @@ let post req =
 
   (* Retrieve inputs *)
   let%lwt file_name, _file_path =
-    Image.save_formdata ~name:"file" ~req
-      ~outdir:(Config.media_attachment_dir ())
+    Httpq.Server.formdata_exn "file" req
+    >>= Image.save_formdata ~outdir:(Config.media_attachment_dir ())
   in
 
   (* Determine output paths *)

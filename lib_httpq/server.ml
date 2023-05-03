@@ -72,14 +72,20 @@ let query_many name : request -> string list Lwt.t = function
               | _ -> [])
           | _ -> failwith "query many"))
 
-let formdata name r =
-  try%lwt
-    match r with
-    | Request { body; _ } -> (
-        Lazy.force body >|= function
-        | _, Some (MultipartFormdata { loaded; _ }) -> List.assoc name loaded
-        | _ -> failwith "formdata: not MultipartFormdata")
-  with _ -> raise_error_response `Bad_request
+let formdata name = function
+  | Request { body; _ } -> (
+      match%lwt Lazy.force body with
+      | _, Some (MultipartFormdata { loaded; _ }) -> (
+          match List.assoc_opt name loaded with
+          | Some s -> Lwt.return_ok s
+          | None -> Lwt.return_error ("The name " ^ name ^ " was not found"))
+      | _ -> Lwt.return_error "formdata: not MultipartFormdata"
+      | exception _ -> Lwt.return_error "Couldn't read body")
+
+let formdata_exn name r =
+  match%lwt formdata name r with
+  | Ok s -> Lwt.return s
+  | Error _ -> raise_error_response `Bad_request
 
 let query ?default name req =
   match req with
@@ -96,7 +102,8 @@ let query ?default name req =
                 match query |> List.assoc_opt name with
                 | Some x -> Lwt.return x
                 | None -> body |> List.assoc name |> List.hd |> Lwt.return)
-            | MultipartFormdata _ -> formdata name req >|= fun f -> f.content)
+            | MultipartFormdata _ ->
+                formdata_exn name req >|= fun f -> f.content)
       with
       | _ when default <> None -> Option.get default |> Lwt.return
       | _ -> raise_error_response `Bad_request)

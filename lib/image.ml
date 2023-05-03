@@ -29,8 +29,8 @@ let generate_unique_filename img_type =
   Uuidm.(v `V4 |> to_string)
   ^ match img_type with `PNG -> ".png" | `JPEG -> ".jpeg"
 
-let save_formdata ~name ~req ~outdir =
-  let%lwt fdata = Httpq.Server.formdata name req in
+let save_formdata ~outdir (formdata : Httpq.Server.formdata_t) =
+  let fdata = formdata in
   let input_type =
     match
       Multipart_form.Content_type.to_string fdata.content_type
@@ -43,5 +43,5 @@ let save_formdata ~name ~req ~outdir =
   let file_path = Filename.concat outdir file_name in
   Magick.convert ~input_type
     ~input_data:(Lwt_stream.of_list [ fdata.content ])
-    ~output_file_name:file_path;%lwt
-  Lwt.return (file_name, file_path)
+    ~output_file_name:file_path
+  >|= fun () -> (file_name, file_path)

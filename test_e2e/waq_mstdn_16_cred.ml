@@ -7,12 +7,19 @@ let f (a0 : agent) (a1 : agent) =
   follow_agent a0 a1;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
-  (* a1: Update credentials *)
+  (* a1: Update display name *)
   let modified_display_name = "modified display name" in
+  let%lwt a = update_credentials a1 ~display_name:modified_display_name () in
+  assert (a.display_name = modified_display_name);
+
+  (* a1: Update credentials *)
+  let%lwt old_avatar_url =
+    search a0 (acct_of_agent ~from:a0 a1) >|= fun ([ a ], _, _) -> a.avatar
+  in
   let modified_note = "modified note" in
+  let modified_avatar = test_image in
   let%lwt a =
-    update_credentials a1 ~display_name:modified_display_name
-      ~note:modified_note ()
+    update_credentials a1 ~note:modified_note ~avatar:modified_avatar ()
   in
   assert (a.display_name = modified_display_name);
   assert (strip_html_tags a.note = modified_note);
@@ -22,6 +29,7 @@ let f (a0 : agent) (a1 : agent) =
   let%lwt [ a ], _, _ = search a0 (acct_of_agent ~from:a0 a1) in
   assert (a.display_name = modified_display_name);
   assert (strip_html_tags a.note = modified_note);
+  assert (a.avatar <> old_avatar_url);
 
   Lwt.return_unit
   [@@warning "-8"]
