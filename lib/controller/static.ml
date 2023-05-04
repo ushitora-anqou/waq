@@ -17,7 +17,11 @@ let get_body path =
 
 let get req =
   let root = Config.static_root () |> Unix.realpath in
-  let path = Filename.concat root (Httpq.Server.path req) |> Unix.realpath in
+  let path =
+    try Filename.concat root (Httpq.Server.path req) |> Unix.realpath
+    with Unix.Unix_error (Unix.ENOENT, "realpath", _) ->
+      raise_error_response `Not_found
+  in
   if not (String.starts_with ~prefix:root path) then
     raise_error_response `Not_found
   else
