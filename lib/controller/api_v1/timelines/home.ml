@@ -38,13 +38,20 @@ let get req =
   in
 
   (* Construct HTTP link header *)
-  let link_header =
-    construct_link_header ~url_prefix:"/api/v1/timelines/home" ~limit
-      ~max_id:List.(result |> rev |> hd).id ~min_id:List.(result |> hd).id
+  let headers =
+    match result with
+    | [] -> None
+    | _ ->
+        Some
+          [
+            construct_link_header ~url_prefix:"/api/v1/timelines/home" ~limit
+              ~max_id:List.(result |> rev |> hd).id
+              ~min_id:List.(result |> hd).id;
+          ]
   in
 
   (* Return the result with the header *)
   result
   |> List.map Entity.yojson_of_status
   |> (fun l -> `List l)
-  |> respond_yojson ~headers:[ link_header ]
+  |> respond_yojson ?headers
