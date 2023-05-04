@@ -418,8 +418,8 @@ let account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies
     [
       "deleted_at IS NULL";
       "account_id = :id";
-      ":since_id = 0 OR id >= :since_id";
-      ":max_id = 0 OR id <= :max_id";
+      ":since_id = 0 OR id > :since_id";
+      ":max_id = 0 OR id < :max_id";
     ]
   in
   let where =

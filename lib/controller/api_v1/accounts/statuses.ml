@@ -38,9 +38,28 @@ let get req =
   let%lwt { self_id; id; limit; max_id; since_id; exclude_replies } =
     parse_req req
   in
-  Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
-  >|= List.map (fun (s : Db.Status.t) -> s#id)
-  >>= Entity.load_statuses_from_db ?self_id
-  >|= List.map Entity.yojson_of_status
-  >|= (fun l -> `List l)
-  >>= respond_yojson
+  let%lwt result =
+    Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
+    >|= List.map (fun (s : Db.Status.t) -> s#id)
+    >>= Entity.load_statuses_from_db ?self_id
+  in
+  let headers =
+    match result with
+    | [] -> None
+    | _ ->
+        let url_prefix =
+          "/api/v1/accounts/"
+          ^ (id |> Model.Account.ID.to_int |> string_of_int)
+          ^ "/statuses"
+        in
+        Some
+          [
+            construct_link_header ~url_prefix ~limit
+              ~max_id:List.(result |> rev |> hd).id
+              ~min_id:List.(result |> hd).id;
+          ]
+  in
+  result
+  |> List.map Entity.yojson_of_status
+  |> (fun l -> `List l)
+  |> respond_yojson ?headers

@@ -98,3 +98,15 @@ let omit_html_tags =
 let expect_assoc = function
   | `Assoc l -> l
   | _ -> raise_error_response `Bad_request
+
+let construct_link_header ~url_prefix ~limit ~max_id ~min_id =
+  let next =
+    Printf.sprintf "%s?limit=%d&max_id=%s" url_prefix limit max_id
+    |> Config.absolute_url
+  in
+  let prev =
+    Printf.sprintf "%s?limit=%d&min_id=%s" url_prefix limit min_id
+    |> Config.absolute_url
+  in
+  let v = Printf.sprintf {|<%s>; rel="next", <%s>; rel="prev"|} next prev in
+  (`Link, v)
