@@ -316,10 +316,12 @@ module Cors = struct
     target_pat : Path_pattern.t;
     methods : Method.t list;
     origin : string;
+    expose : Header.name list;
   }
 
-  let make target ?(origin = "*") ~methods () =
-    { target; target_pat = Path_pattern.of_string target; methods; origin }
+  let make target ?(origin = "*") ~methods ?(expose = []) () =
+    let target_pat = Path_pattern.of_string target in
+    { target; target_pat; methods; origin; expose }
 
   let use (src : t list) (inner_handler : handler) (req : request) :
       response Lwt.t =
@@ -352,7 +354,7 @@ module Cors = struct
     req
     |> Router.use routes @@ function
        (* Fallback handler: apply inner_handler, and
-          if path matches, append "access-control-allow-origin" header *)
+          if path matches, append CORS headers *)
        | Request { path; _ } as req -> (
            let path_match =
              src
@@ -362,12 +364,17 @@ module Cors = struct
            inner_handler req >|= fun resp ->
            match (resp, path_match) with
            | _, None | BareResponse _, _ -> resp
-           | Response res, Some { origin; _ } ->
+           | Response res, Some { origin; expose; _ } ->
                Response
                  {
                    res with
                    headers =
-                     (`Access_control_allow_origin, origin) :: res.headers;
+                     (`Access_control_allow_origin, origin)
+                     :: ( `Access_control_expose_headers,
+                          expose
+                          |> List.map Header.string_of_name
+                          |> String.concat ", " )
+                     :: res.headers;
                  })
 end
 

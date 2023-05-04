@@ -4,6 +4,7 @@ type name =
   | `Access_control_allow_headers
   | `Access_control_allow_methods
   | `Access_control_allow_origin
+  | `Access_control_expose_headers
   | `Access_control_request_headers
   | `Authorization
   | `Connection
@@ -27,6 +28,7 @@ let lower_string_of_name : name -> string = function
   | `Access_control_allow_headers -> "access-control-allow-headers"
   | `Access_control_allow_methods -> "access-control-allow-methods"
   | `Access_control_allow_origin -> "access-control-allow-origin"
+  | `Access_control_expose_headers -> "access-control-expose-headers"
   | `Access_control_request_headers -> "access-control-request-headers"
   | `Authorization -> "authorization"
   | `Connection -> "connection"
@@ -53,6 +55,7 @@ let name_of_string (k : string) : name =
   | "access-control-allow-headers" -> `Access_control_allow_headers
   | "access-control-allow-methods" -> `Access_control_allow_methods
   | "access-control-allow-origin" -> `Access_control_allow_origin
+  | "access-control-expose-headers" -> `Access_control_expose_headers
   | "access-control-request-headers" -> `Access_control_request_headers
   | "authorization" -> `Authorization
   | "connection" -> `Connection
