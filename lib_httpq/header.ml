@@ -15,6 +15,7 @@ type name =
   | `Date
   | `Digest
   | `Host
+  | `Link
   | `Location
   | `Raw of string
   | `Sec_websocket_protocol
@@ -39,6 +40,7 @@ let lower_string_of_name : name -> string = function
   | `Date -> "date"
   | `Digest -> "digest"
   | `Host -> "host"
+  | `Link -> "link"
   | `Location -> "location"
   | `Raw s -> s
   | `Sec_websocket_protocol -> "sec-websocket-protocol"
@@ -66,6 +68,7 @@ let name_of_string (k : string) : name =
   | "date" -> `Date
   | "digest" -> `Digest
   | "host" -> `Host
+  | "link" -> `Link
   | "location" -> `Location
   | "sec-websocket-protocol" -> `Sec_websocket_protocol
   | "signature" -> `Signature

@@ -51,9 +51,9 @@ let bool_of_string s =
   | None -> raise_error_response `Bad_request
   | Some b -> b
 
-let respond_yojson y =
+let respond_yojson ?(headers = []) y =
   Yojson.Safe.to_string y
-  |> Httpq.Server.respond ~headers:[ content_type_app_json ]
+  |> Httpq.Server.respond ~headers:(content_type_app_json :: headers)
 
 let respond_activity_yojson y =
   Yojson.Safe.to_string y

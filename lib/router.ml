@@ -7,7 +7,9 @@ let cors =
       make "/nodeinfo/2.0" ~methods:[ `GET ] ();
       make "/.well-known/*" ~methods:[ `GET ] ();
       make "/users/:username" ~methods:[ `GET ] ();
-      make "/api/*" ~methods:[ `POST; `PUT; `DELETE; `GET; `PATCH; `OPTIONS ] ();
+      make "/api/*"
+        ~methods:[ `POST; `PUT; `DELETE; `GET; `PATCH; `OPTIONS ]
+        ~expose:[ `Link ] ();
       make "/oauth/token" ~methods:[ `POST ] ();
     ]
 
