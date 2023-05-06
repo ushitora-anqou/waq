@@ -4,20 +4,37 @@ open Lwt.Infix
 module Magick = struct
   let convert_exe = "/usr/bin/convert"
 
-  let convert ~(input_type : [ `PNG | `JPEG ])
-      ~(input_data : string Lwt_stream.t) ~(output_file_name : string) =
-    Lwt_io.with_temp_file
-      ~suffix:(match input_type with `PNG -> ".png" | `JPEG -> ".jpeg")
-    @@ fun (temp_file_name, oc) ->
-    Lwt_io.write_stream oc input_data;%lwt
-    Lwt_io.flush oc;%lwt
+  let convert' ~(input_file_name : string) ~(output_file_name : string)
+      ~(options : string array) =
     let com =
       ( convert_exe,
-        [| convert_exe; temp_file_name; "-strip"; output_file_name |] )
+        Array.concat
+          [
+            [| convert_exe; input_file_name |]; options; [| output_file_name |];
+          ] )
     in
     Lwt_process.exec com >|= function
     | WEXITED 0 -> ()
     | _ -> failwith "ImageMagick.convert: failed to convert"
+
+  type input =
+    | InFile of string
+    | InStream of ([ `PNG | `JPEG ] * string Lwt_stream.t)
+
+  type output = OutFile of string
+
+  let convert (i : input) (o : output) ~(options : string array) =
+    let output_file_name = match o with OutFile s -> s in
+    match i with
+    | InFile input_file_name ->
+        convert' ~input_file_name ~output_file_name ~options
+    | InStream (input_type, input_data) ->
+        Lwt_io.with_temp_file
+          ~suffix:(match input_type with `PNG -> ".png" | `JPEG -> ".jpeg")
+          (fun (temp_file_name, oc) ->
+            Lwt_io.write_stream oc input_data;%lwt
+            Lwt_io.flush oc;%lwt
+            convert' ~input_file_name:temp_file_name ~output_file_name ~options)
 end
 
 let parse_content_type = function
@@ -41,7 +58,7 @@ let save_formdata ~outdir (formdata : Httpq.Server.formdata_t) =
   in
   let file_name = generate_unique_filename input_type in
   let file_path = Filename.concat outdir file_name in
-  Magick.convert ~input_type
-    ~input_data:(Lwt_stream.of_list [ fdata.content ])
-    ~output_file_name:file_path
+  Magick.convert ~options:[| "-strip" |]
+    (InStream (input_type, Lwt_stream.of_list [ fdata.content ]))
+    (OutFile file_path)
   >|= fun () -> (file_name, file_path)
