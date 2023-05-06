@@ -80,6 +80,7 @@ and MediaAttachment = struct
       val account_id : Account.ID.t option
       val remote_url : string
       val type_ : int [@@column "type"]
+      val file_file_name : string option
     end
 end
 

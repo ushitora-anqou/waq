@@ -87,3 +87,21 @@ type json_any = Yojson.Safe.t
 
 let yojson_of_json_any : json_any -> Yojson.Safe.t = Fun.id
 let json_any_of_yojson : Yojson.Safe.t -> json_any = Fun.id
+
+module Lwt_unix = struct
+  include Lwt_unix
+
+  let rec mkpath path mode =
+    match path with
+    | "." | "/" -> Lwt.return_unit
+    | _ -> (
+        mkpath (Filename.dirname path) mode;%lwt
+        match%lwt stat path >|= fun x -> x.st_kind with
+        | S_DIR -> Lwt.return_unit
+        | _ -> failwith "File already exists"
+        | exception Unix.Unix_error (ENOENT, "stat", _) -> mkdir path mode)
+end
+
+let int_to_3digits i =
+  let s = Printf.sprintf "%012d" i in
+  String.[ sub s 0 3; sub s 3 3; sub s 6 3; sub s 9 3 ]

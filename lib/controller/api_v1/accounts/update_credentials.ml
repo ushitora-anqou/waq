@@ -18,7 +18,7 @@ let patch req =
   (* Avatar *)
   Httpq.Server.formdata "avatar" req
   |> Lwt_result.iter (fun formdata ->
-         let%lwt file_name, _file_path =
+         let%lwt _, file_name, _ =
            Image.save_formdata ~outdir:(Config.account_avatar_dir ()) formdata
          in
          let file_url = Config.account_avatar_url file_name in
@@ -28,7 +28,7 @@ let patch req =
   (* Header *)
   Httpq.Server.formdata "header" req
   |> Lwt_result.iter (fun formdata ->
-         let%lwt file_name, _file_path =
+         let%lwt _, file_name, _ =
            Image.save_formdata ~outdir:(Config.account_header_dir ()) formdata
          in
          let file_url = Config.account_header_url file_name in

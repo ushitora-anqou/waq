@@ -189,9 +189,23 @@ let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
   | 0 ->
       let blurhash = "LlMF%n00%#MwS|WCWEM{R*bbWBbH" (* FIXME *) in
       let meta = MAImage in
+      let base_url = int_to_3digits (Model.MediaAttachment.ID.to_int ma#id) in
+      let url, preview_url =
+        ma#file_file_name
+        |> Option.fold ~none:("", "") ~some:(fun n ->
+               ( base_url @ [ "original"; n ]
+                 |> List.fold_left ( ^/ ) "" |> Config.media_attachment_url,
+                 base_url @ [ "small"; n ]
+                 |> List.fold_left ( ^/ ) "" |> Config.media_attachment_url ))
+      in
+      let remote_url =
+        match ma#file_file_name with
+        | None -> Some ma#remote_url
+        | Some _ -> None
+      in
       make_media_attachment
         ~id:(ma#id |> Model.MediaAttachment.ID.to_int |> string_of_int)
-        ~url:ma#remote_url ~preview_url:ma#remote_url ~meta ~blurhash ()
+        ~url ~preview_url ?remote_url ~meta ~blurhash ()
   | _ -> failwith "Invalid type of media attachment"
 
 (* Entity PreviewCard *)

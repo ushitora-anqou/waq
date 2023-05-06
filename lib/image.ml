@@ -61,4 +61,10 @@ let save_formdata ~outdir (formdata : Httpq.Server.formdata_t) =
   Magick.convert ~options:[| "-strip" |]
     (InStream (input_type, Lwt_stream.of_list [ fdata.content ]))
     (OutFile file_path)
+  >|= fun () -> (input_type, file_name, file_path)
+
+let save_thumbnail ~outdir ~file_name ~original_file_path =
+  let file_path = Filename.concat outdir file_name in
+  Magick.convert ~options:[| "-resize"; "230400@" |] (InFile original_file_path)
+    (OutFile file_path)
   >|= fun () -> (file_name, file_path)
