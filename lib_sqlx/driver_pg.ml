@@ -226,6 +226,9 @@ let transaction (c : connection) (f : unit -> unit Lwt.t) : bool Lwt.t =
     f ();%lwt
     execute_direct c "COMMIT";%lwt
     Lwt.return_true
-  with _ ->
+  with e ->
+    Logq.err (fun m ->
+        m "Exception raised in transaction: %s\n%s" (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
     execute_direct c "ROLLBACK";%lwt
     Lwt.return_false
