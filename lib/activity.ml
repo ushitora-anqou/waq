@@ -761,17 +761,14 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
   let media_attachments = s#attachments in
   let attachment =
     media_attachments
-    |> List.map (fun ma ->
-           let url =
-             ma#file_file_name
-             |> Option.fold ~none:ma#remote_url ~some:(fun n ->
-                    let base_url =
-                      int_to_3digits (Model.MediaAttachment.ID.to_int ma#id)
-                    in
-                    base_url @ [ "original"; n ]
-                    |> List.fold_left ( ^/ ) "" |> Config.media_attachment_url)
-           in
-           make_document ~url () |> document)
+    |> List.map @@ fun ma ->
+       let id = Model.MediaAttachment.ID.to_int ma#id in
+       let url =
+         ma#file_file_name
+         |> Option.fold ~none:ma#remote_url ~some:(fun n ->
+                K.original_media_attachments_url (id, n))
+       in
+       make_document ~url () |> document
   in
   {
     id = s#uri;

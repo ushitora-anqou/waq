@@ -189,14 +189,16 @@ let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
   | 0 ->
       let blurhash = ma#blurhash |> Option.value ~default:"" in
       let meta = MAImage in
-      let base_url = int_to_3digits (Model.MediaAttachment.ID.to_int ma#id) in
-      let url, preview_url =
+      let id = Model.MediaAttachment.ID.to_int ma#id in
+      let url =
         ma#file_file_name
-        |> Option.fold ~none:("", "") ~some:(fun n ->
-               ( base_url @ [ "original"; n ]
-                 |> List.fold_left ( ^/ ) "" |> Config.media_attachment_url,
-                 base_url @ [ "small"; n ]
-                 |> List.fold_left ( ^/ ) "" |> Config.media_attachment_url ))
+        |> Option.fold ~none:"" ~some:(fun n ->
+               K.original_media_attachments_url (id, n))
+      in
+      let preview_url =
+        ma#file_file_name
+        |> Option.fold ~none:"" ~some:(fun n ->
+               K.small_media_attachments_url (id, n))
       in
       let remote_url =
         match ma#file_file_name with

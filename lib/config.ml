@@ -45,14 +45,6 @@ let default_header_url () = absolute_url !c.default_header_url
 let notfound_avatar_url () = absolute_url !c.notfound_avatar_url
 let notfound_header_url () = absolute_url !c.notfound_header_url
 
-let media_attachment_dir () =
-  [ "system"; "media_attachments"; "files" ]
-  |> List.fold_left Filename.concat (static_root ())
-
-let media_attachment_url filename =
-  [ ""; "system"; "media_attachments"; "files"; filename ]
-  |> String.concat "/" |> absolute_url
-
 let account_avatar_dir () =
   [ "system"; "accounts"; "avatars" ]
   |> List.fold_left Filename.concat (static_root ())

@@ -15,12 +15,9 @@ let post req =
     in
 
     (* Outdir is like static/system/media_attachments/files/110/319/951/869/694/611/ *)
-    let outdir =
-      int_to_3digits (Model.MediaAttachment.ID.to_int attachment#id)
-      |> List.fold_left Filename.concat (Config.media_attachment_dir ())
-    in
-    let original_outdir = Filename.concat outdir "original" in
-    let small_outdir = Filename.concat outdir "small" in
+    let id = Model.MediaAttachment.ID.to_int attachment#id in
+    let original_outdir = K.original_media_attachments_dir id in
+    let small_outdir = K.small_media_attachments_dir id in
     Lwt_unix.mkpath original_outdir 0o755;%lwt
     Lwt_unix.mkpath small_outdir 0o755;%lwt
 
