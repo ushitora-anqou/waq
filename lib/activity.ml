@@ -844,7 +844,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
            e
              MediaAttachment.(
                make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
-                 ~status_id:status#id ()
+                 ~status_id:status#id ?blurhash:d.blurhash ()
                |> save_one))
          |> ignore_lwt);%lwt
 
