@@ -11,6 +11,8 @@
    ppx_sqlx))
  (libraries
   base64
+  blurhash
+  camlimages.all_formats
   cstruct
   fpath
   httpq

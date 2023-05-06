@@ -28,12 +28,16 @@ let post req =
     let%lwt _file_type, file_name, original_file_path =
       Image.save_formdata ~outdir:original_outdir formdata
     in
-    let%lwt _small_file_name, _small_file_path =
+    let%lwt _small_file_name, small_file_path =
       Image.save_thumbnail ~outdir:small_outdir ~file_name ~original_file_path
+    in
+    let blurhash =
+      blurhash_file ~x_components:3 ~y_components:3 small_file_path
     in
 
     (* Update the attachment *)
     attachment#set_file_file_name (Some file_name);
+    attachment#set_blurhash (Some blurhash);
     ( Model.MediaAttachment.save_one attachment c >|= fun a ->
       result_attachment := Some a );%lwt
 

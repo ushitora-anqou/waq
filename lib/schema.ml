@@ -81,6 +81,7 @@ and MediaAttachment = struct
       val remote_url : string
       val type_ : int [@@column "type"]
       val file_file_name : string option
+      val blurhash : string option
     end
 end
 
