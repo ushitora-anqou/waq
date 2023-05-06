@@ -30,7 +30,7 @@
     (= 0.25.1)
     :with-dev-setup))
   base64
-  camlimages.all_formats
+  camlimages
   cohttp
   cohttp-lwt-unix
   cstruct
