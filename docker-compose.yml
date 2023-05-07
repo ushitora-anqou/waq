@@ -1,0 +1,43 @@
+version: "3.9"
+services:
+  waq:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/root/config
+      - ./system:/static/system
+    environment:
+      WAQ_CONFIG_PATH: /root/config/dev_docker.yml
+      OCAMLRUNPARAM: b
+      WAQ_SERVER_NAME: ${WAQ_SERVER_NAME}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: '10'
+  postgres:
+    image: "postgres:15.2-alpine"
+    environment:
+      POSTGRES_DB: waq_dev
+      POSTGRES_PASSWORD: PASSWORD
+    volumes:
+      - ./_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  tunnel:
+    container_name: cloudflared-tunnel
+    image: cloudflare/cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+  elk:
+    image: anqou/elk:0.9.5-dev
+#   volumes:
+#     - ./_elk-data:/elk/data
+    ports:
+      - 5314:5314

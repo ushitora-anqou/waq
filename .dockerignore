@@ -2,3 +2,4 @@ _build/
 docker/
 .opam
 static/system
+_data
