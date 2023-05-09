@@ -21,11 +21,13 @@ let load_file fpath =
 
 let listen_host () = Uri.of_string ("//" ^ !c.listen) |> Uri.host |> Option.get
 let listen_port () = Uri.of_string ("//" ^ !c.listen) |> Uri.port |> Option.get
-let server_name () = !c.server_name
+
+let server_name () =
+  Sys.getenv_opt "WAQ_SERVER_NAME" |> Option.value ~default:!c.server_name
 
 let is_my_domain s =
   (* FIXME: Consider port *)
-  s = !c.server_name
+  s = server_name ()
 
 let db_url () = !c.db_url
 let static_root () = !c.static_root
