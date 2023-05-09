@@ -10,40 +10,25 @@ Waq is yet another ActivityPub server implementation written in OCaml.
 
 Although Waq can be deployed and used well for your daily microblogging, it currently lacks many of the features you would expect from a standard SNS, such as post privacy, custom emojis, profile editing, and so on. At the moment, I would not recommend using Waq as your primary SNS.
 
-## Deploy with Docker
+## Build & Run w/ Docker Compose and Cloudflare Tunnel
 
-The easiest way to deploy Waq is to use `docker compose`.
-
-```
-$ git clone https://github.com/ushitora-anqou/waq
-$ cd waq/docker
-$ vim config/prod.yml # Change `server_name`
-$ docker compose pull
-$ docker compose run waq /root/waq db:migrate
-$ docker compose run waq /root/waq user:register
-$ docker compose up -d
-```
-
-When you update Waq:
+You can use Docker Compose to build and run Waq in your local environment.
+Before you run Waq, you need to create a Cloudflare tunnel and get a token (`TUNNEL_TOKEN`) for your tunnel via Cloudflare's Web UI.
 
 ```
-$ cd waq/docker
-$ docker compose pull
-$ docker compose run waq /root/waq db:migrate
-$ docker compose down && docker compose up -d
-```
-
-## Build and test
-
-```
-$ git clone https://github.com/ushitora-anqou/waq
+$ git clone https://github.com/ushitora-anqou/waq.git
 $ cd waq
-$ opam switch create . 4.14.1 --no-install
-$ opam install . --deps-only
-$ dune build && dune runtest
+$ docker compose pull
+$ docker compose build
+$ docker compose run waq /root/waq db:migrate && docker compose down
+$ TUNNEL_TOKEN='...' docker compose up
+$ docker compose exec waq /root/waq user:register
+# Create your account interactively here
 ```
 
-FIXME: Write about E2E test
+And access http://localhost:5314/ and sign in with your tunnel's hostname, username, and password.
+
+FIXME: write about build w/o Docker and unit and e2e tests.
 
 ## Technology stack
 
