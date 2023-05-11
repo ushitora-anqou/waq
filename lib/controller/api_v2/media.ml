@@ -29,7 +29,7 @@ let post req =
       Image.save_thumbnail ~outdir:small_outdir ~file_name ~original_file_path
     in
     let blurhash =
-      blurhash_file ~x_components:3 ~y_components:3 small_file_path
+      Image.(load_image_as_rgb24 ~path:small_file_path |> blurhash)
     in
 
     (* Update the attachment *)

@@ -68,3 +68,16 @@ let save_thumbnail ~outdir ~file_name ~original_file_path =
   Magick.convert ~options:[| "-resize"; "230400@" |] (InFile original_file_path)
     (OutFile file_path)
   >|= fun () -> (file_name, file_path)
+
+let load_image_as_rgb24 ~path =
+  match OImages.(load path [] |> tag) with
+  | Rgb24 img -> img
+  | Rgba32 img -> img#to_rgb24
+  | Index8 img -> img#to_rgb24
+  | Index16 img -> img#to_rgb24
+  | Cmyk32 _ -> failwith "Not supported image type: Cmyk32"
+
+let blurhash (src : OImages.rgb24_class) =
+  Blurhash.blur_hash_for_pixels ~x_components:3 ~y_components:3 ~width:src#width
+    ~height:src#height ~rgb:(Bytes.to_string src#dump)
+    ~bytes_per_row:(src#width * 3)

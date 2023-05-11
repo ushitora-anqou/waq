@@ -105,16 +105,3 @@ end
 let int_to_3digits i =
   let s = Printf.sprintf "%012d" i in
   String.[ sub s 0 3; sub s 3 3; sub s 6 3; sub s 9 3 ]
-
-let blurhash_file ~x_components ~y_components path =
-  let src =
-    match OImages.(load path [] |> tag) with
-    | Rgb24 img -> img
-    | Rgba32 img -> img#to_rgb24
-    | Index8 img -> img#to_rgb24
-    | Index16 img -> img#to_rgb24
-    | Cmyk32 _ -> failwith "Not supported image type: Cmyk32"
-  in
-  Blurhash.blur_hash_for_pixels ~x_components ~y_components ~width:src#width
-    ~height:src#height ~rgb:(Bytes.to_string src#dump)
-    ~bytes_per_row:(src#width * 3)

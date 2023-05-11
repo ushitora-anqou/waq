@@ -119,7 +119,26 @@ let parse_opengraph ~url src =
 
   make_oembed ~url ~typ:"link" ~title ~description ?image ()
 
-let fetch_opengraph url = Throttle_fetch.f_exn url >|= parse_opengraph ~url
+let fetch_image_info url =
+  let%lwt bin = Throttle_fetch.f_exn url in
+  Lwt_io.with_temp_file (fun (path, oc) ->
+      Lwt_io.write oc bin;%lwt
+      Lwt_io.flush oc;%lwt
+      Lwt_io.close oc;%lwt
+      let src = Image.load_image_as_rgb24 ~path in
+      let width = src#width in
+      let height = src#height in
+      let blurhash = Image.blurhash src in
+      Lwt.return (width, height, blurhash))
+
+let fetch_opengraph url =
+  let%lwt src = Throttle_fetch.f_exn url >|= parse_opengraph ~url in
+  match src.image with
+  | None -> Lwt.return src
+  | Some image_url ->
+      let%lwt width, height, blurhash = fetch_image_info image_url in
+      let blurhash = Some blurhash in
+      Lwt.return { src with width; height; blurhash }
 
 let fetch_opengraph_opt url =
   try%lwt fetch_opengraph url >|= Option.some
