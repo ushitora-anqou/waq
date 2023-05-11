@@ -78,7 +78,8 @@ let kick (status_id : Model.Status.ID.t) =
                      ~html:x.html ~author_name:x.author_name
                      ~author_url:x.author_url ~provider_name:x.provider_name
                      ~provider_url:x.provider_url ~width:x.width
-                     ~height:x.height ~embed_url:x.embed_url ()
+                     ~height:x.height ~embed_url:x.embed_url
+                     ?blurhash:x.blurhash ()
                    |> Lwt.return_some))
     >|= List.partition (fun c -> Option.is_some c#id_opt)
   in

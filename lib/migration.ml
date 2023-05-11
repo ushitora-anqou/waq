@@ -30,6 +30,7 @@ let migrations : (int * (module Sqlx.Migration.S)) list =
       (20230502_220400, (module M20230502_220400_add_note));
       (20230506_145100, (module M20230506_145100_add_file_file_name));
       (20230506_172100, (module M20230506_172100_add_blurhash));
+      (20230511_225300, (module M20230511_225300_add_blurhash));
     ]
 
 let verify_migration_status () =

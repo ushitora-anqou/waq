@@ -265,6 +265,7 @@ and PreviewCard = struct
       val width : int
       val height : int
       val embed_url : string
+      val blurhash : string option
     end
 end
 
