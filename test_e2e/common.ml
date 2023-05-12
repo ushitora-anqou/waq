@@ -87,7 +87,7 @@ let make_waq_scenario ?(timeout = 30.0) handler () : unit =
          (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout");
        ]
 
-let waq_server_name = Sys.getenv "WAQ_SERVER_NAME"
+let waq_server_name = Sys.getenv "E2ETEST_WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
 let waq url = waq_server_name ^ url
 
