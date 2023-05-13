@@ -5,7 +5,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 RUN apt-get update && apt-get install -y \
-    pkg-config libpq-dev libgmp-dev libssl-dev libpcre3-dev \
+    pkg-config libpq-dev libgmp-dev libssl-dev libpcre3-dev libcurl4-gnutls-dev \
+    libpng-dev libjpeg62-turbo-dev \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
@@ -18,7 +19,8 @@ RUN eval $(opam env) && dune build
 FROM debian:11-slim
 
 RUN apt-get update && apt-get install -y \
-    libpq5 libgmp10 netbase ca-certificates imagemagick \
+    libpq5 libgmp10 netbase ca-certificates imagemagick libcurl3-gnutls \
+    libjpeg62-turbo libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
