@@ -19,6 +19,7 @@ depends: [
   "camlimages"
   "cohttp"
   "cohttp-lwt-unix"
+  "ocurl"
   "cstruct"
   "dune" {>= "3.7"}
   "fpath"
