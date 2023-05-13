@@ -83,3 +83,4 @@ let curl_exn' c url =
 
 let curl = call *< curl'
 let curl_exn = call *< curl_exn'
+let http_get = curl_exn (make_curl_config ~followlocation:true ())

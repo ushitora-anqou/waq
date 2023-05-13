@@ -83,3 +83,14 @@ let blurhash (src : OImages.rgb24_class) =
     ~bytes_per_row:(src#width * 3)
 
 let dummy_blurhash = "LEHLk~WB2yk8pyo0adR*.7kCMdnj"
+
+let inspect bin =
+  Lwt_io.with_temp_file (fun (path, oc) ->
+      Lwt_io.write oc bin;%lwt
+      Lwt_io.flush oc;%lwt
+      Lwt_io.close oc;%lwt
+      let src = load_image_as_rgb24 ~path in
+      let width = src#width in
+      let height = src#height in
+      let blurhash = blurhash src in
+      Lwt.return (width, height, blurhash))

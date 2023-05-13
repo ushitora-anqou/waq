@@ -187,7 +187,9 @@ let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
     =
   match ma#type_ with
   | 0 ->
-      let blurhash = ma#blurhash |> Option.value ~default:"" in
+      let blurhash =
+        ma#blurhash |> Option.value ~default:Image.dummy_blurhash
+      in
       let meta = MAImage in
       let id = Model.MediaAttachment.ID.to_int ma#id in
       let url =

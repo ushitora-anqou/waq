@@ -837,11 +837,19 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
   note.attachment
   |> List.filter_map get_document
   |> Lwt_list.iter_p (fun (d : ap_document) ->
+         let%lwt blurhash =
+           match (d.blurhash, d.url) with
+           | Some h, _ -> Lwt.return h
+           | None, "" -> Lwt.return Image.dummy_blurhash
+           | None, url ->
+               Throttle_fetch.http_get url >>= Image.inspect
+               >|= fun (_, _, h) -> h
+         in
          Db.(
            e
              MediaAttachment.(
                make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
-                 ~status_id:status#id ?blurhash:d.blurhash ()
+                 ~status_id:status#id ~blurhash ()
                |> save_one))
          |> ignore_lwt);%lwt
 
