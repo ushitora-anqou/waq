@@ -1,6 +1,9 @@
 open Lwt.Infix
 open Util
 
+let http_get =
+  Throttle_fetch.(curl_exn (make_curl_config ~followlocation:true ()))
+
 type oembed = {
   url : string;
   title : string;
@@ -78,8 +81,7 @@ let parse_json_oembed ~url src =
   | _ -> failwith "Invalid type"
 
 let fetch_oembed url =
-  Throttle_fetch.f_exn url >|= find_json_oembed_href >>= Throttle_fetch.f_exn
-  >|= parse_json_oembed ~url
+  http_get url >|= find_json_oembed_href >>= http_get >|= parse_json_oembed ~url
 
 let fetch_oembed_opt url =
   try%lwt fetch_oembed url >|= Option.some with _ -> Lwt.return_none
@@ -120,7 +122,7 @@ let parse_opengraph ~url src =
   make_oembed ~url ~typ:"link" ~title ~description ?image ()
 
 let fetch_image_info url =
-  let%lwt bin = Throttle_fetch.f_exn url in
+  let%lwt bin = http_get url in
   Lwt_io.with_temp_file (fun (path, oc) ->
       Lwt_io.write oc bin;%lwt
       Lwt_io.flush oc;%lwt
@@ -132,7 +134,7 @@ let fetch_image_info url =
       Lwt.return (width, height, blurhash))
 
 let fetch_opengraph url =
-  let%lwt src = Throttle_fetch.f_exn url >|= parse_opengraph ~url in
+  let%lwt src = http_get url >|= parse_opengraph ~url in
   match src.image with
   | None -> Lwt.return src
   | Some image_url ->
