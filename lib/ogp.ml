@@ -97,7 +97,7 @@ let parse_opengraph ~url src =
     | _ -> None
   in
   let meta_tag name =
-    soup $? "meta[name=\"" ^ name ^ "\"]" |> Option.map (R.attribute "content")
+    Option.bind (soup $? "meta[name=\"" ^ name ^ "\"]") (attribute "content")
   in
 
   let title =
