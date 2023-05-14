@@ -244,8 +244,7 @@ let serialize_preview_card (c : Model.PreviewCard.t) =
     ~author_name:c#author_name ~author_url:c#author_url
     ~provider_name:c#provider_name ~provider_url:c#provider_url ~html:c#html
     ~width:c#width ~height:c#height ?image:c#image_url ~embed_url:c#embed_url
-    ~blurhash:(c#blurhash |> Option.value ~default:Image.dummy_blurhash)
-    ()
+    ?blurhash:c#blurhash ()
 
 (* Entity status *)
 type status_mention = {

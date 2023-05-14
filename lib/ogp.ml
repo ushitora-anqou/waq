@@ -126,10 +126,12 @@ let fetch_opengraph url =
   let%lwt src = Throttle_fetch.http_get url >|= parse_opengraph ~url in
   match src.image with
   | None -> Lwt.return src
-  | Some image_url ->
-      let%lwt width, height, blurhash = fetch_image_info image_url in
-      let blurhash = Some blurhash in
-      Lwt.return { src with width; height; blurhash }
+  | Some image_url -> (
+      try%lwt
+        let%lwt width, height, blurhash = fetch_image_info image_url in
+        let blurhash = Some blurhash in
+        Lwt.return { src with width; height; blurhash }
+      with _ -> Lwt.return { src with image = None })
 
 let fetch_opengraph_opt url =
   try%lwt fetch_opengraph url >|= Option.some
