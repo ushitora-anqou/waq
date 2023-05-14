@@ -31,6 +31,7 @@ let f_exn ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) =
 type curl_config = {
   followlocation : bool; [@default false]
   maxredirs : int; [@default 1]
+  useragent : string; [@default "Waq; Curl_lwt; bot"]
 }
 [@@deriving make]
 
@@ -38,7 +39,7 @@ let curl' (c : curl_config) url =
   let open Curl in
   let h = init () in
   set_url h url;
-  set_useragent h "Curl_lwt";
+  set_useragent h c.useragent;
   set_nosignal h true;
   set_connecttimeout h 5;
   set_timeout h 10;
