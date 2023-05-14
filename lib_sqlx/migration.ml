@@ -1,8 +1,9 @@
 open Util
 
+type operation = Connection.t -> unit Lwt.t
+
 module type S = sig
-  val up : Connection.t -> unit Lwt.t
-  val down : Connection.t -> unit Lwt.t
+  val change : (operation * operation) list -> (operation * operation) list
 end
 
 type config = {
@@ -50,7 +51,7 @@ let migrate ~migrations ~config (c : Connection.t) =
         |> Lwt_list.iter_s @@ fun (id, (module M : S)) ->
            Logq.info (fun m -> m "Migrate %d" id);
            c#transaction (fun c ->
-               M.up c;%lwt
+               M.change [] |> List.rev_map fst |> Lwt_list.iter_s (fun f -> f c);%lwt
                c#execute sql ~p:[ `Int id ])
            >|= fun r -> if not r then failwith "Migration failed"
     | _ -> failwith "Migration error: current status is invalid"
@@ -75,6 +76,63 @@ let rollback ~n ~migrations ~config (c : Connection.t) =
        "DELETE FROM " ^ config.schema_migrations ^ " WHERE version = $1"
      in
      c#transaction (fun c ->
-         M.down c;%lwt
+         M.change [] |> List.map snd |> Lwt_list.iter_s (fun f -> f c);%lwt
          c#execute sql ~p:[ `Int last_v ])
      >|= fun r -> if not r then failwith "Rollback failed"
+
+module Helper = struct
+  module Internal = struct
+    let create_table ~table_name ~schema (c : Connection.t) =
+      Printf.sprintf {|CREATE TABLE %s ( %s )|} table_name
+        (schema |> String.concat ", ")
+      |> c#execute
+
+    let drop_table ~table_name (c : Connection.t) =
+      {|DROP TABLE |} ^ table_name |> c#execute
+
+    let add_column ~table_name ~name ~spec (c : Connection.t) =
+      Printf.sprintf {|ALTER TABLE %s ADD COLUMN %s %s|} table_name name spec
+      |> c#execute
+
+    let drop_column ~table_name ~name (c : Connection.t) =
+      Printf.sprintf {|ALTER TABLE %s DROP COLUMN %s|} table_name name
+      |> c#execute
+
+    let create_index ~name ~table_name ~schema (c : Connection.t) =
+      Printf.sprintf {|CREATE INDEX %s ON %s ( %s )|} name table_name
+        (schema |> String.concat ", ")
+      |> c#execute
+
+    let create_unique_index ~name ~table_name ~schema (c : Connection.t) =
+      Printf.sprintf {|CREATE UNIQUE INDEX %s ON %s ( %s )|} name table_name
+        (schema |> String.concat ", ")
+      |> c#execute
+
+    let drop_index ~name (c : Connection.t) =
+      Printf.sprintf {|DROP INDEX %s|} name |> c#execute
+  end
+
+  let create_table_not_model ~table_name ~schema acc =
+    Internal.(create_table ~table_name ~schema, drop_table ~table_name) :: acc
+
+  let create_table ~table_name ~schema acc =
+    let schema =
+      "id SERIAL PRIMARY KEY"
+      :: "created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL"
+      :: "updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL" :: schema
+    in
+    create_table_not_model ~table_name ~schema acc
+
+  let add_column ~table_name ~name ~spec acc =
+    Internal.(add_column ~table_name ~name ~spec, drop_column ~table_name ~name)
+    :: acc
+
+  let create_index ~name ~table_name ~schema acc =
+    Internal.(create_index ~name ~table_name ~schema, drop_index ~name) :: acc
+
+  let create_unique_index ~name ~table_name ~schema acc =
+    Internal.(create_unique_index ~name ~table_name ~schema, drop_index ~name)
+    :: acc
+
+  let ( *> ) f g x = g (f x)
+end

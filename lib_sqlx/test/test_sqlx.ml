@@ -604,6 +604,9 @@ module M1 : Migration.S = struct
     c#execute {|CREATE TABLE t1 ( col1 INTEGER )|}
 
   let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t1|}
+
+  let change =
+    Migration.Helper.(create_table ~table_name:"t1" ~schema:[ "col1 INTEGER" ])
 end
 
 module M2 : Migration.S = struct
@@ -611,6 +614,17 @@ module M2 : Migration.S = struct
     c#execute {|CREATE TABLE t2 ( col1 INTEGER )|}
 
   let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t2|}
+
+  let change =
+    Migration.Helper.(create_table ~table_name:"t2" ~schema:[ "col1 INTEGER" ])
+end
+
+module M3 : Migration.S = struct
+  let change =
+    let open Migration.Helper in
+    create_table_not_model ~table_name:"t1" ~schema:[ "id INTEGER PRIMARY KEY" ]
+    *> create_table_not_model ~table_name:"t2"
+         ~schema:[ "ref INTEGER"; "FOREIGN KEY ( ref ) REFERENCES t1 ( id )" ]
 end
 
 let expect_exc_lwt f =
@@ -652,6 +666,11 @@ let test_migration _ _ =
   Db.debug_drop_all_tables_in_db ();%lwt
   Db.e (migrate ~config ~migrations:[ (1, (module M1 : S)) ]);%lwt
   expect_exc_lwt (Db.e (migrate ~config ~migrations:[ (2, (module M2 : S)) ]));%lwt
+
+  Db.debug_drop_all_tables_in_db ();%lwt
+  let migrations = [ (1, (module M3 : S)) ] in
+  Db.e (migrate ~config ~migrations);%lwt
+  Db.e (rollback ~n:1 ~config ~migrations);%lwt
 
   Lwt.return_unit
   [@@warning "-8"]

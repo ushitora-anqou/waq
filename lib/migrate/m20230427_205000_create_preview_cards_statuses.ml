@@ -12,3 +12,10 @@ CREATE TABLE preview_cards_statuses (
 
 let down (c : Sqlx.Connection.t) =
   c#execute {|DROP TABLE preview_cards_statuses|}
+
+open Sqlx.Migration.Helper
+
+let change =
+  create_table ~table_name:"preview_cards_statuses"
+    ~schema:
+      [ {|preview_card_id BIGINT NOT NULL|}; {|status_id BIGINT NOT NULL|} ]
