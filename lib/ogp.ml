@@ -57,7 +57,7 @@ let parse_json_oembed ~url src =
 
   let make =
     make_oembed ~url ~typ ~title ~author_name ~author_url ~provider_name
-      ~provider_url
+      ~provider_url ~blurhash:Image.dummy_blurhash
   in
   match typ with
   | "video" ->
