@@ -600,21 +600,11 @@ let test_account_derived_ops _ _ =
   [@@warning "-8"]
 
 module M1 : Migration.S = struct
-  let up (c : Sqlx.Connection.t) : unit Lwt.t =
-    c#execute {|CREATE TABLE t1 ( col1 INTEGER )|}
-
-  let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t1|}
-
   let change =
     Migration.Helper.(create_table ~table_name:"t1" ~schema:[ "col1 INTEGER" ])
 end
 
 module M2 : Migration.S = struct
-  let up (c : Sqlx.Connection.t) : unit Lwt.t =
-    c#execute {|CREATE TABLE t2 ( col1 INTEGER )|}
-
-  let down (c : Sqlx.Connection.t) : unit Lwt.t = c#execute {|DROP TABLE t2|}
-
   let change =
     Migration.Helper.(create_table ~table_name:"t2" ~schema:[ "col1 INTEGER" ])
 end
