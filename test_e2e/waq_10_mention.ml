@@ -21,4 +21,8 @@ let f =
       Lwt.return_unit
   | _ -> assert false);%lwt
 
+  (* Handle invalid mentions correctly *)
+  let%lwt _ = post `Waq ~token ~content:"@not_found_user test" () in
+  home_timeline `Waq ~token |> ignore_lwt;%lwt
+
   Lwt.return_unit
