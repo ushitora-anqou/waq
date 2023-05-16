@@ -67,15 +67,16 @@ let format_status_text (status : Model.Status.t) =
         |> index_by (fun a -> (a#username, a#domain))
       in
       match_mention status#text
-      |> List.map @@ fun (off, len, username, domain) ->
+      |> List.filter_map @@ fun (off, len, username, domain) ->
          let open Jingoo.Jg_types in
-         let a = Hashtbl.find tbl (username, domain) in
-         let models = [ ("username", Tstr username); ("uri", Tstr a#uri) ] in
-         let text =
-           Jingoo.Jg_template.from_string ~models
-             {|<span class="h-card"><a href="{{ uri }}" class="u-url mention">@<span>{{ username }}</span></a></span>|}
-         in
-         make_subst ~off ~len ~subtext:text
+         Hashtbl.find_opt tbl (username, domain)
+         |> Option.map @@ fun a ->
+            let models = [ ("username", Tstr username); ("uri", Tstr a#uri) ] in
+            let text =
+              Jingoo.Jg_template.from_string ~models
+                {|<span class="h-card"><a href="{{ uri }}" class="u-url mention">@<span>{{ username }}</span></a></span>|}
+            in
+            make_subst ~off ~len ~subtext:text
     in
 
     substitute (subst_links @ subst_mentions) status#text
