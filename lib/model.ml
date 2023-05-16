@@ -47,6 +47,9 @@ module Account = struct
     accts |> List.map preferred_inbox_url |> List.sort_uniq compare
 
   let acct (a : t) = acct a#username a#domain
+
+  let is_bot (a : t) =
+    a#actor_type |> Option.fold ~none:false ~some:(( <> ) `Person)
 end
 
 module StatusStat = struct

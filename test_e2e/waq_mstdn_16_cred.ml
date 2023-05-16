@@ -13,6 +13,7 @@ let f (a0 : agent) (a1 : agent) =
   assert (a.display_name = modified_display_name);
 
   (* a1: Update credentials *)
+  assert (not a.bot);
   let%lwt old_avatar_url, old_header_url =
     search a0 (acct_of_agent ~from:a0 a1) >|= fun ([ a ], _, _) ->
     (a.avatar, a.header)
@@ -20,12 +21,14 @@ let f (a0 : agent) (a1 : agent) =
   let modified_note = "modified note" in
   let modified_avatar = test_image in
   let modified_header = test_image in
+  let modified_bot = true in
   let%lwt a =
     update_credentials a1 ~note:modified_note ~avatar:modified_avatar
-      ~header:modified_header ()
+      ~header:modified_header ~bot:modified_bot ()
   in
   assert (a.display_name = modified_display_name);
   assert (strip_html_tags a.note = modified_note);
+  assert a.bot;
   Lwt_unix.sleep 1.0;%lwt
 
   (* a0: Check a1's info *)
@@ -34,6 +37,7 @@ let f (a0 : agent) (a1 : agent) =
   assert (strip_html_tags a.note = modified_note);
   assert (a.avatar <> old_avatar_url);
   assert (a.header <> old_header_url);
+  assert a.bot;
 
   Lwt.return_unit
   [@@warning "-8"]
