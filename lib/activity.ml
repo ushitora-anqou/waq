@@ -387,7 +387,8 @@ let rec of_yojson (src : Yojson.Safe.t) =
       let last = string_opt Last in
       make_ordered_collection ~id ~totalItems ~first ?last ()
       |> ordered_collection
-  | "Person" ->
+  | "Person" | "Service" ->
+      (* FIXME: Service should be handled separately from Person *)
       let id = string Id in
       let following = string Following in
       let followers = string Followers in
