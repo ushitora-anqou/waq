@@ -76,6 +76,7 @@ and ap_person = {
   public_key_pem : string;
   icon : ap_image option;
   image : ap_image option;
+  is_service : bool;
 }
 
 and ap_undo = {
@@ -199,7 +200,7 @@ let make_ordered_collection ~id ~totalItems ~first ?last () :
 
 let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
     ~preferred_username ~name ~summary ~url ~tag ~public_key_id
-    ~public_key_owner ~public_key_pem ~icon ~image =
+    ~public_key_owner ~public_key_pem ~icon ~image ~is_service =
   {
     id;
     following;
@@ -217,6 +218,7 @@ let make_person ~id ~following ~followers ~inbox ~shared_inbox ~outbox
     public_key_pem;
     icon;
     image;
+    is_service;
   }
 
 type property =
@@ -388,7 +390,6 @@ let rec of_yojson (src : Yojson.Safe.t) =
       make_ordered_collection ~id ~totalItems ~first ?last ()
       |> ordered_collection
   | "Person" | "Service" ->
-      (* FIXME: Service should be handled separately from Person *)
       let id = string Id in
       let following = string Following in
       let followers = string Followers in
@@ -425,9 +426,10 @@ let rec of_yojson (src : Yojson.Safe.t) =
       in
       let icon = image_opt Icon in
       let image = image_opt Image in
+      let is_service = typ = "Service" in
       make_person ~id ~following ~followers ~inbox ~outbox ~shared_inbox
         ~preferred_username ~name ~summary ~url ~tag ~public_key_id
-        ~public_key_owner ~public_key_pem ~icon ~image
+        ~public_key_owner ~public_key_pem ~icon ~image ~is_service
       |> person
   | "Update" ->
       let id = string Id in
@@ -522,7 +524,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
         let l =
           [
             (Id, `String r.id);
-            (Type, `String "Person");
+            (Type, `String (if r.is_service then "Service" else "Person"));
             (Following, `String r.following);
             (Followers, `String r.followers);
             (Inbox, `String r.inbox);
@@ -671,6 +673,7 @@ let model_account_of_person ?original (r : ap_person) : Model.Account.t =
       a#set_shared_inbox_url r.shared_inbox;
       a#set_avatar_remote_url avatar_remote_url;
       a#set_header_remote_url header_remote_url;
+      a#set_actor_type (Some (if r.is_service then `Service else `Person));
       a
 
 let fetch_person by =
@@ -985,3 +988,4 @@ let person_of_account (a : Db.Account.t) : ap_person =
       (match a#header_remote_url with
       | "" -> None
       | url -> Some (make_image ~url))
+    ~is_service:(a#actor_type = Some `Service)

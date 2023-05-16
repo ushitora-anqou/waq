@@ -2,6 +2,17 @@
 module rec Account = struct
   name "accounts"
 
+  type actor_type_t = [ `Person | `Service ]
+
+  let actor_type_t_to_string : actor_type_t -> string = function
+    | `Person -> "Person"
+    | `Service -> "Service"
+
+  let actor_type_t_of_string : string -> actor_type_t = function
+    | "Person" -> `Person
+    | "Service" -> `Service
+    | _ -> failwith "actor_type_t_of_string: invalid input"
+
   class type t =
     object
       val username : string
@@ -18,6 +29,7 @@ module rec Account = struct
       val followers_url : string
       val avatar_remote_url : string option
       val header_remote_url : string
+      val actor_type : actor_type_t option
       val stat : AccountStat.t option [@@foreign_key `account_id]
       val user : User.t option [@@foreign_key `account_id]
     end
