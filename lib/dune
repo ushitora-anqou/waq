@@ -1,3 +1,11 @@
+(rule
+ (targets migrations.ml)
+ (deps
+  (:src migrations.cppo.ml)
+  migrations.inc)
+ (action
+  (run %{bin:cppo} %{src} -o %{targets})))
+
 (library
  (name waq)
  (preprocess

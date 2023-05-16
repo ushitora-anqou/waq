@@ -33,6 +33,7 @@
   camlimages
   cohttp
   cohttp-lwt-unix
+  cppo
   ocurl
   cstruct
   dune

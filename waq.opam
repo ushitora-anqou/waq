@@ -19,6 +19,7 @@ depends: [
   "camlimages"
   "cohttp"
   "cohttp-lwt-unix"
+  "cppo"
   "ocurl"
   "cstruct"
   "dune" {>= "3.7"}
