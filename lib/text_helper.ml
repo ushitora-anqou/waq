@@ -71,10 +71,15 @@ let format_status_text (status : Model.Status.t) =
          let open Jingoo.Jg_types in
          Hashtbl.find_opt tbl (username, domain)
          |> Option.map @@ fun a ->
-            let models = [ ("username", Tstr username); ("uri", Tstr a#uri) ] in
+            let models =
+              [
+                ("username", Tstr username);
+                ("url", Tstr (a#url |> Option.value ~default:a#uri));
+              ]
+            in
             let text =
               Jingoo.Jg_template.from_string ~models
-                {|<span class="h-card"><a href="{{ uri }}" class="u-url mention">@<span>{{ username }}</span></a></span>|}
+                {|<span class="h-card"><a href="{{ url }}" class="u-url mention">@<span>{{ username }}</span></a></span>|}
             in
             make_subst ~off ~len ~subtext:text
     in
