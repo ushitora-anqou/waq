@@ -42,6 +42,54 @@ let db_reset () =
   in
   Lwt_main.run f
 
+let db_generate_migration name =
+  let (y, m, d), ((hh, mm, ss), _) = Ptime.(now () |> to_date_time) in
+  let timestamp = Printf.sprintf "%04d%02d%02d_%02d%02d%02d" y m d hh mm ss in
+  let item_in_list =
+    Printf.sprintf "(%s, (module M%s_%s));\n" timestamp timestamp name
+  in
+  let file_name = Printf.sprintf "m%s_%s.ml" timestamp name in
+  let file_path = Filename.(concat "lib" (concat "migrate" file_name)) in
+  let list_file_path = Filename.(concat "lib" "migrations.inc") in
+
+  (* Check if pwd is correct. FIXME: Relax this restriction. *)
+  (match Unix.((stat list_file_path).st_kind) with
+  | S_REG -> ()
+  | _ -> failwith "Invalid pwd; lib/migrations.inc does not exist.");
+
+  (* Write the item into the list *)
+  let oc =
+    open_out_gen [ Open_wronly; Open_append; Open_binary ] 0o000 list_file_path
+  in
+  Fun.protect
+    (fun () -> Out_channel.output_string oc item_in_list)
+    ~finally:(fun () -> close_out oc);
+
+  (* Create (boilerplate) migration file *)
+  let oc = open_out file_path in
+  Fun.protect
+    (fun () ->
+      {raw|
+open Sqlx.Migration.Helper
+
+let change =
+  assert false
+  (*
+create_table ~table_name:"preview_cards_statuses"
+  ~schema:
+    [ {|preview_card_id BIGINT NOT NULL|}; {|status_id BIGINT NOT NULL|} ]
+
+add_column ~table_name:"preview_cards" ~name:"blurhash" ~spec:"TEXT"
+  *)
+|raw}
+      |> String.trim
+      |> Out_channel.output_string oc)
+    ~finally:(fun () -> close_out oc);
+
+  Logq.info (fun m -> m "Migration %s_%s created" timestamp name);
+
+  ()
+
 let oauth_generate_access_token username =
   let f =
     (* Generate a new OAuth application named "Web" *)
@@ -152,6 +200,7 @@ let () =
   | "db:reset" -> db_reset ()
   | "db:migrate" -> db_migrate ()
   | "db:rollback" -> db_rollback ()
+  | "db:generate_migration" -> db_generate_migration Sys.argv.(2)
   | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
   | "user:register" -> user_register ()
   | "account:fetch" -> account_fetch ()
