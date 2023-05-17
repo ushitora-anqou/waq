@@ -117,8 +117,9 @@ let parse_opengraph ~url src =
     |> Option.map
          Uri.(of_string *> resolve "https" (of_string url) *> to_string)
   in
+  let provider_name = opengraph_tag "og:site_name" in
 
-  make_oembed ~url ~typ:"link" ~title ~description ?image ()
+  make_oembed ~url ~typ:"link" ~title ~description ?image ?provider_name ()
 
 let fetch_image_info url = Throttle_fetch.http_get url >>= Image.inspect
 
