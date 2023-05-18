@@ -894,8 +894,8 @@ and fetch_status ~uri =
   | s -> Lwt.return s
   | exception Sqlx.Error.NoRowFound -> (
       match%lwt fetch_activity ~uri >|= of_yojson with
-      | Note note -> status_of_note' note
-      | Announce ann -> status_of_announce' ann
+      | Note note -> status_of_note note
+      | Announce ann -> status_of_announce ann
       | _ -> failwith "fetch_status failed: fetched activity is invalid")
 
 let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
