@@ -85,3 +85,5 @@ let format_status_text (status : Model.Status.t) =
     in
 
     substitute (subst_links @ subst_mentions) status#text
+
+let eliminate_html_tags = Soup.(parse *> texts *> String.concat "")

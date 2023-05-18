@@ -426,7 +426,9 @@ let serialize_push_notification (n : Model.Notification.t) : push_notification =
       (n#target_status
       |> Option.fold ~none:n#from_account#username ~some:(fun s ->
              let t = s#spoiler_text in
-             let t = if t = "" then s#text else t in
+             let t =
+               if t = "" then Text_helper.eliminate_html_tags s#text else t
+             in
              let max_length = 140 in
              if String.length t > max_length then String.sub t 0 max_length
              else t))
