@@ -14,7 +14,13 @@ let f (a0 : agent) (a1 : agent) =
     upload_media a1 ~filename:"test1.png" ~data:test_image
       ~content_type:"image/png"
   in
-  let%lwt { uri; _ } = post a1 ~media_ids:[ media_id; media_id2 ] () in
+  let%lwt { uri; media_attachments; _ } =
+    post a1 ~media_ids:[ media_id; media_id2 ] ()
+  in
+  assert (
+    media_attachments
+    |> List.map (fun (a : media_attachment) -> a.id)
+    = [ media_id; media_id2 ]);
   Lwt_unix.sleep 1.0;%lwt
 
   (* a0: Get the post *)

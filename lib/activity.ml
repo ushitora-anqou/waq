@@ -762,7 +762,7 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
   let in_reply_to =
     in_reply_to_s |> Option.fold ~none:`Null ~some:(fun s -> `String s#uri)
   in
-  let media_attachments = s#attachments in
+  let media_attachments = Model.Status.sorted_attachments s in
   let attachment =
     media_attachments
     |> List.map @@ fun ma ->
@@ -840,7 +840,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
   (* Handle attachments *)
   note.attachment
   |> List.filter_map get_document
-  |> Lwt_list.iter_p (fun (d : ap_document) ->
+  |> Lwt_list.iter_s (fun (d : ap_document) ->
          let%lwt blurhash =
            match (d.blurhash, d.url) with
            | Some h, _ -> Lwt.return h

@@ -152,6 +152,9 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
        |> Lwt_list.iter_s @@ fun f -> f s c);%lwt
     Lwt.return status
 
+  let sorted_attachments (s : t) : MediaAttachment.t list =
+    s#attachments |> List.sort (fun a b -> compare a#id b#id)
+
   let () =
     (* Set callbacks for State *)
     after_create_commit (fun s c ->

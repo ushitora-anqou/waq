@@ -131,7 +131,11 @@ type account = {
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
-type media_attachment = { id : string; type_ : string [@key "type"] }
+type media_attachment = {
+  id : string;
+  type_ : string; [@key "type"]
+  url : string;
+}
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 type preview_card = { url : string }
