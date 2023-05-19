@@ -69,7 +69,7 @@ let post req =
     Db.(
       e
         Status.(
-          save_one_with_uri
+          save_one_with_uri_and_url
             (make ~text:status ~uri:"" ~account_id:self#id ?in_reply_to_id
                ~spoiler_text ())))
   in

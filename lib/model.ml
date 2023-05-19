@@ -90,11 +90,12 @@ module Status = struct
   let get_one = get_one ~deleted_at:None
   let get_many = get_many ~deleted_at:None
 
-  let save_one_with_uri s c =
+  let save_one_with_uri_and_url s c =
     let%lwt s = save_one s c ~preload:[ `account [] ] in
     let self = s#account in
     let uri = self#uri ^/ "statuses" ^/ string_of_int (ID.to_int s#id) in
     let s = s#with_uri uri in
+    let s = s#with_url (Some uri) in
     update [ s ] c >|= Sqlx.Ppx_runtime.expect_single_row
 
   let get_reblogs_count id c : int Lwt.t =

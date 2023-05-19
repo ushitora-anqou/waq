@@ -266,6 +266,7 @@ type status = {
   created_at : string;
   visibility : string;
   uri : string;
+  url : string option;
   content : string;
   replies_count : int;
   in_reply_to_id : string option;
@@ -301,7 +302,7 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
   let content = Text_helper.format_status_text s in
   make_status ~id:(s#id |> id_to_string)
     ~created_at:(Ptime.to_rfc3339 s#created_at)
-    ~visibility ~uri:s#uri ~content
+    ~visibility ~uri:s#uri ?url:s#url ~content
     ~account:(serialize_account s#account)
     ~replies_count:stat#replies_count
     ?in_reply_to_id:(s#in_reply_to_id |> Option.map id_to_string)

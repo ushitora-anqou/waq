@@ -54,6 +54,7 @@ and Status = struct
   class type t =
     object
       val uri : string
+      val url : string option
       val text : string
       val deleted_at : Ptime.t option
       val in_reply_to_id : ID.t option

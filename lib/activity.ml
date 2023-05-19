@@ -55,6 +55,7 @@ and ap_note = {
   attachment : t list;
   tag : Yojson.Safe.t list;
   summary : string;
+  url : string option;
 }
 
 and ap_image = { url : string }
@@ -180,7 +181,7 @@ let make_create ~id ~actor ~published ~to_ ~cc ~obj : ap_create =
   { id; actor; published; to_; cc; obj }
 
 let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-    ~attachment ~tag ~summary : ap_note =
+    ~attachment ~tag ~summary ?url () : ap_note =
   {
     id;
     published;
@@ -192,6 +193,7 @@ let make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
     attachment;
     tag;
     summary;
+    url;
   }
 
 let make_ordered_collection ~id ~totalItems ~first ?last () :
@@ -379,8 +381,9 @@ let rec of_yojson (src : Yojson.Safe.t) =
       in
       let tag = list Tag in
       let summary = string_opt Summary |> Option.value ~default:"" in
+      let url = string_opt Url in
       make_note ~id ~published ~attributed_to ~to_ ~cc ~content ~in_reply_to
-        ~attachment ~tag ~summary
+        ~attachment ~tag ~summary ?url ()
       |> note
   | "OrderedCollection" ->
       let id = string Id in
@@ -794,6 +797,7 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
                  ("name", `String ("@" ^ Model.Account.acct a));
                ]);
     summary = s#spoiler_text;
+    url = s#url;
   }
 
 let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
@@ -833,7 +837,7 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
         Status.(
           make ~uri:note.id ~text:note.content ~created_at:published
             ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id
-            ~spoiler_text:note.summary ()
+            ~spoiler_text:note.summary ?url:note.url ()
           |> save_one))
   in
 

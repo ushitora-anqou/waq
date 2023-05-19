@@ -37,7 +37,7 @@ let post req =
                  make ~text:"" ~created_at:now ~updated_at:now ~uri:""
                    ~account_id:self#id ~reblog_of_id:status#id ~spoiler_text:""
                    ()
-                 |> save_one_with_uri))
+                 |> save_one_with_uri_and_url))
         in
         Worker.Distribute.kick s;%lwt
         (if s#account_id = status#account_id then Lwt.return_unit

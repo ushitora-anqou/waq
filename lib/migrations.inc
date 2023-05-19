@@ -25,3 +25,4 @@
 (20230506_172100, (module M20230506_172100_add_blurhash));
 (20230511_225300, (module M20230511_225300_add_blurhash));
 (20230516_125248, (module M20230516_125248_add_actor_type));
+(20230519_142558, (module M20230519_142558_add_url_to_statuses));
