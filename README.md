@@ -21,7 +21,9 @@ $ cd waq
 $ docker compose pull
 $ docker compose build
 $ docker compose run waq /root/waq db:migrate && docker compose down
-$ TUNNEL_TOKEN='...' docker compose up
+$ TUNNEL_TOKEN='...' WAQ_SERVER_NAME='...' docker compose up
+
+# On another terminal window
 $ docker compose exec waq /root/waq user:register
 # Create your account interactively here
 ```
