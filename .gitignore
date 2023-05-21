@@ -37,3 +37,5 @@ _opam/
 /ctl
 /docker/data
 /static/system
+/docker/log
+/docker/config/prod.yml
