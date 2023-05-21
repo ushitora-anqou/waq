@@ -1,6 +1,6 @@
-# docker-compose run waq /root/waq db:migrate
-# docker-compose run waq /root/waq user:register
-version: "3.9"
+volumes:
+  grafana-storage:
+
 services:
   waq:
     image: "anqou/waq:master"
@@ -9,22 +9,85 @@ services:
     volumes:
       - ./config:/root/config
       - ./system:/static/system
+      - ./log:/app_log
     environment:
       WAQ_CONFIG_PATH: /root/config/prod.yml
       OCAMLRUNPARAM: b
     depends_on:
       - postgres
+      - loki
     restart: unless-stopped
     logging:
       driver: json-file
       options:
         max-size: 100m
         max-file: '10'
+
   postgres:
     image: "postgres:15.2-alpine"
     environment:
       POSTGRES_DB: waq_prod
       POSTGRES_PASSWORD: PASSWORD
     volumes:
-      - ./data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.8.2
+    restart: unless-stopped
+    command: "-config.file=/etc/loki/config.yaml"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /data/loki-data && \
+        mkdir -p /data/loki-ruler && \
+        minio server /data
+    environment:
+      - MINIO_ROOT_USER=loki
+      - MINIO_ROOT_PASSWORD=supersecret
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
+      - MINIO_UPDATE=off
+    volumes:
+      - ./data/minio:/data
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        cat <<EOF > /etc/grafana/provisioning/datasources/ds.yaml
+        apiVersion: 1
+        datasources:
+          - name: Loki
+            type: loki
+            url: http://loki:3100
+            jsonData:
+              httpHeaderName1: "X-Scope-OrgID"
+            secureJsonData:
+              httpHeaderValue1: "tenant1"
+        EOF
+        /run.sh
+    ports:
+      - "3000:3000"
+
+  promtail:
+    image: grafana/promtail:2.8.2
+    restart: unless-stopped
+    volumes:
+      - ./promtail-local-config.yaml:/etc/promtail/config.yaml:ro
+      - ./log:/app_log
+    command: -config.file=/etc/promtail/config.yaml
