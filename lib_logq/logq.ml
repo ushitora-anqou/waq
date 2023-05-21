@@ -17,6 +17,13 @@ type reporter = {
 }
 [@@deriving make]
 
+let make_stderr_reporter ~l = make_reporter ~l ~fmt:Format.err_formatter ()
+
+let make_file_reporter ~l ~file_name =
+  let oc = open_out_gen [ Open_append; Open_creat ] 0o664 file_name in
+  let fmt = Format.formatter_of_out_channel oc in
+  make_reporter ~l ~fmt
+
 let reporters : reporter list ref = ref []
 let add_reporter (r : reporter) : unit = reporters := r :: !reporters
 

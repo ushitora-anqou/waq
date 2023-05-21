@@ -189,8 +189,13 @@ let webpush_deliver username message =
          | Some u -> Webpush_helper.deliver ~user_id:u#id message)
 
 let () =
-  Logq.(add_reporter (make_reporter ~l:Debug ()));
   Config.(load_file (config_path ()));
+
+  (let file_name = Config.log_file_path () in
+   if file_name = "" then Logq.(add_reporter (make_stderr_reporter ~l:Debug))
+   else Logq.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
+
+  Logq.info (fun m -> m "========== Waq booted ==========");
   Crypto.initialize ();
   Db.initialize ();
   let subcommand =
