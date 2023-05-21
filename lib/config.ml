@@ -18,7 +18,9 @@ let c = ref (make ())
 let load_string s = c := s |> Yaml.of_string_exn |> of_yaml |> Result.get_ok
 
 let load_file fpath =
-  c := Yaml_unix.of_file_exn Fpath.(v fpath) |> of_yaml |> Result.get_ok
+  match Yaml_unix.of_file_exn Fpath.(v fpath) |> of_yaml with
+  | Ok y -> c := y
+  | Error (`Msg e) -> failwith (Printf.sprintf "Couldn't parse config: %s" e)
 
 let listen_host () = Uri.of_string ("//" ^ !c.listen) |> Uri.host |> Option.get
 let listen_port () = Uri.of_string ("//" ^ !c.listen) |> Uri.port |> Option.get
