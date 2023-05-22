@@ -44,12 +44,17 @@ let handle_query_uri resolve q =
     | s -> Lwt.return_some s
   in
   let list_of_option x = x |> Option.fold ~none:[] ~some:List.singleton in
-  let%lwt a_opt = try_search_account q in
-  let%lwt s_opt = if resolve then try_fetch_status q else Lwt.return_none in
-  Lwt.return (list_of_option a_opt, list_of_option s_opt)
+  if
+    String.(starts_with ~prefix:"http://" q || starts_with ~prefix:"https://" q)
+  then
+    let%lwt a_opt = try_search_account q in
+    let%lwt s_opt = if resolve then try_fetch_status q else Lwt.return_none in
+    Lwt.return (list_of_option a_opt, list_of_option s_opt)
+  else Lwt.return ([], [])
 
 let handle_query resolve q =
   (* FIXME: Support more kinds of queries *)
+  let q = String.trim q in
   let%lwt a1, s1 = handle_query_uri resolve q in
   let%lwt a2 = handle_query_accounts resolve q in
   let%lwt accounts =
