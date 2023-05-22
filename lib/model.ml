@@ -50,6 +50,14 @@ module Account = struct
 
   let is_bot (a : t) =
     a#actor_type |> Option.fold ~none:false ~some:(( <> ) `Person)
+
+  let select_by_username_prefix username (c : Sqlx.Connection.t) =
+    let escaped_username =
+      username |> String.split_on_char '%' |> String.concat "\\%"
+    in
+    c#query {|SELECT * FROM accounts WHERE username LIKE $1|}
+      ~p:[ `String (escaped_username ^ "%") ]
+    >|= List.map pack
 end
 
 module StatusStat = struct

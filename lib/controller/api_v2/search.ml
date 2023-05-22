@@ -10,19 +10,21 @@ type t = {
 [@@deriving make, yojson_of]
 
 let handle_query_accounts resolve q =
-  let accts = [] in
   let re = Regex.e {|^@?([^@]+)(?:@([^@]+))?$|} in
   try%lwt
     match Regex.match_ re q with
-    | [ [| _; Some username; None |] ] ->
-        Activity.search_account ~resolve (`Webfinger (None, username.substr))
-        >|= fun a -> a :: accts
+    | [ [| _; Some { substr = username; _ }; None |] ] -> (
+        match%lwt Db.(e Account.(select_by_username_prefix username)) with
+        | [] ->
+            Activity.search_account ~resolve (`Webfinger (None, username))
+            >|= fun a -> [ a ]
+        | xs -> Lwt.return xs)
     | [ [| _; Some username; Some domain |] ] ->
         Activity.search_account ~resolve
           (`Webfinger (Some domain.substr, username.substr))
-        >|= fun a -> a :: accts
-    | _ -> Lwt.return accts
-  with _ -> Lwt.return accts
+        >|= fun a -> [ a ]
+    | _ -> Lwt.return []
+  with _ -> Lwt.return []
 
 let handle_query_uri resolve q =
   let try_search_account uri =
