@@ -1,9 +1,7 @@
 open Util
 open Lwt.Infix
 
-let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
-    ~(dst : Db.Account.t) ~(src : Db.Account.t) ~(typ : Db.Notification.typ_t) =
-  Job.kick ~name:__FUNCTION__ @@ fun () ->
+let service activity_id activity_type dst src typ () =
   let account_id = dst#id in
   let from_account_id = src#id in
   let typ = Some typ in
@@ -37,3 +35,13 @@ let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
       Webpush_helper.deliver ~user_id:u#id
         (Entity.serialize_push_notification n
         |> Entity.yojson_of_push_notification |> Yojson.Safe.to_string)
+
+let kick ~(activity_id : int) ~(activity_type : Db.Notification.activity_type_t)
+    ~(dst : Db.Account.t) ~(src : Db.Account.t) ~(typ : Db.Notification.typ_t) =
+  if not (Model.Account.is_local dst) then (
+    Logq.err (fun m ->
+        m "Local_notify.kick: dst is not a local account: %s"
+          (Model.Notification.activity_type_t_to_string activity_type));
+    Lwt.return_unit)
+  else
+    Job.kick ~name:__FUNCTION__ (service activity_id activity_type dst src typ)
