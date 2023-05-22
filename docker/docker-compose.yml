@@ -5,7 +5,7 @@ services:
   waq:
     image: "anqou/waq:master"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./config:/root/config
       - ./system:/static/system
@@ -82,7 +82,7 @@ services:
         EOF
         /run.sh
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   promtail:
     image: grafana/promtail:2.8.2
