@@ -126,9 +126,12 @@ let kick_inbox_delete (req : ap_delete) =
       match req.obj |> of_yojson |> get_tombstone with
       | (exception _) | None ->
           (* Unknown object; just ignore *) Lwt.return_unit
-      | Some tomb ->
-          let%lwt status = Db.e (Model.Status.get_one ~uri:tomb.id) in
-          Worker.Removal.kick ~account_id:account#id ~status_id:status#id)
+      | Some tomb -> (
+          match%lwt Db.(e Status.(get_many ~uri:tomb.id)) with
+          | [] -> Lwt.return_unit
+          | [ status ] ->
+              Worker.Removal.kick ~account_id:account#id ~status_id:status#id
+          | _ :: _ -> failwith "Internal error: not unique status uri"))
 
 let kick_inbox_update_person (r : ap_person) =
   let%lwt a = Db.e (Model.Account.get_one ~uri:r.id) in
