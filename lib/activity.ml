@@ -630,14 +630,17 @@ let post_activity_json ~body ~sign ~url =
 
 (* Get activity+json from the Internet *)
 let fetch_activity ~uri =
-  Throttle_fetch.f_exn
-    ~headers:
-      [
-        (`Accept, "application/activity+json");
-        (`Content_type, "text/html" (* dummy *));
-      ]
-    uri
-  >|= Yojson.Safe.from_string
+  match uri with
+  | "https://www.w3.org/ns/activitystreams" -> failwith "Not valid activity URI"
+  | _ ->
+      Throttle_fetch.f_exn
+        ~headers:
+          [
+            (`Accept, "application/activity+json");
+            (`Content_type, "text/html" (* dummy *));
+          ]
+        uri
+      >|= Yojson.Safe.from_string
 
 (* Send GET /.well-known/webfinger *)
 let get_webfinger ~scheme ~domain ~username =
