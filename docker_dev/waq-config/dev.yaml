@@ -1,6 +1,6 @@
 listen: "localhost:8000"
 server_name: ""
-db_url: "postgresql://postgres:PASSWORD@postgres:5432/waq_dev"
+db_url: "postgresql://postgres:PASSWORD@waq-postgres:5432/waq_dev"
 static_root: "/static"
 default_avatar_url: "/avatars/original/missing.png"
 default_header_url: "/headers/original/missing.png"

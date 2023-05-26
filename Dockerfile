@@ -27,6 +27,6 @@ WORKDIR /root/
 COPY --from=0 /home/opam/waq/_build/default/bin/main.exe ./waq
 COPY --from=0 /home/opam/waq/static /static
 
-CMD ["/root/waq"]
+CMD ["bash", "-c", "/root/waq db:migrate && /root/waq"]
 
 # docker build . -t waq && docker run -it -v $PWD/config:/root/config waq [/bin/bash]

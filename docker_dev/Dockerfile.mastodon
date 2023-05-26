@@ -1,0 +1,37 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+USER root
+RUN apt-get update
+RUN apt-get install -y \
+    curl wget gnupg apt-transport-https lsb-release ca-certificates
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
+RUN wget -O /usr/share/keyrings/postgresql.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+RUN echo "deb [signed-by=/usr/share/keyrings/postgresql.asc] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/postgresql.list
+RUN apt-get update
+RUN apt-get install -y \
+    imagemagick ffmpeg libpq-dev libxml2-dev libxslt1-dev file git-core \
+    g++ libprotobuf-dev protobuf-compiler pkg-config nodejs gcc autoconf \
+    bison build-essential libssl-dev libyaml-dev libreadline6-dev \
+    zlib1g-dev libncurses5-dev libffi-dev libgdbm-dev \
+    libidn11-dev libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN corepack enable && yarn set version classic
+WORKDIR /root
+RUN curl -L https://github.com/rbenv/ruby-build/archive/refs/tags/v20230512.tar.gz > ruby-build.tar.gz
+RUN tar xf ruby-build.tar.gz
+RUN PREFIX=/usr/local ./ruby-build-*/install.sh
+RUN ruby-build 3.0.6 /usr/local
+RUN gem install bundler --no-document
+#RUN psql -c 'CREATE USER mastodon CREATEDB;'
+RUN git clone https://github.com/mastodon/mastodon.git mastodon_live
+WORKDIR /root/mastodon_live
+RUN git checkout v4.0.2
+RUN bundle config development 'true'
+RUN bundle config without 'deployment test'
+RUN bundle install -j$(getconf _NPROCESSORS_ONLN)
+RUN yarn install --pure-lockfile
+RUN gem install foreman --no-document
+
+CMD ["bash"]

@@ -1,0 +1,68 @@
+services:
+  mastodon-postgres:
+    image: "postgres:15.2-alpine"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mastodon_development
+      POSTGRES_PASSWORD: PASSWORD
+
+  mastodon-redis:
+    image: "redis:7.0"
+    restart: unless-stopped
+
+  mastodon:
+    build:
+      context: docker_dev
+      dockerfile: Dockerfile.mastodon
+    command: /launch mastodon
+    depends_on:
+      - mastodon-postgres
+      - mastodon-redis
+    restart: unless-stopped
+    volumes:
+      - ./docker_dev/launch.sh:/launch:ro
+      - ./_data/mastodon:/data/mastodon
+
+  waq-postgres:
+    image: "postgres:15.2-alpine"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: waq_dev
+      POSTGRES_PASSWORD: PASSWORD
+
+  waq:
+    build:
+      context: .
+    command: /launch waq
+    depends_on:
+      - waq-postgres
+    restart: unless-stopped
+    volumes:
+      - ./docker_dev/launch.sh:/launch:ro
+      - ./docker_dev/waq-config:/root/config:ro
+      - ./_data/waq:/data/waq
+    environment:
+      WAQ_CONFIG_PATH: /root/config/dev.yaml
+      OCAMLRUNPARAM: b
+
+  elk:
+    build:
+      context: docker_dev
+      dockerfile: Dockerfile.elk
+    command: /launch elk
+    restart: unless-stopped
+    volumes:
+      - ./docker_dev/launch.sh:/launch:ro
+      - ./_data/elk:/data/elk
+    profiles:
+      - demo
+
+  bastion:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+        RUN apt-get update && apt-get install -y curl
+        CMD [ "bash" ]
+    profiles:
+      - debug

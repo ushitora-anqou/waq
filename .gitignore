@@ -35,7 +35,8 @@ _opam/
 /Makefile
 /log
 /ctl
-/docker/data
 /static/system
-/docker/log
-/docker/config/prod.yml
+/docker_prod/data
+/docker_prod/log
+/docker_prod/config/prod.yml
+/_data
