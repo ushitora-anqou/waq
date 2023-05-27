@@ -65,7 +65,7 @@ let get req =
            ("state", Tstr state) :: models)
   in
 
-  Httpq.Server.respond ~status:`OK
+  respond_html
     (String.trim
     @@ Jingoo.Jg_template.from_string ~models
          {|

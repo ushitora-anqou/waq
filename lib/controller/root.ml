@@ -1,3 +1,5 @@
+open Helper
+
 let get _req =
   let open Jingoo.Jg_types in
   let models = [ ("server_name", Tstr (Config.server_name ())) ] in
@@ -16,5 +18,4 @@ let get _req =
 </html>
   |}
   |> Jingoo.Jg_template.from_string ~models
-  |> String.trim
-  |> Httpq.Server.respond ~status:`OK
+  |> String.trim |> respond_html

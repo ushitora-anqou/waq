@@ -75,8 +75,7 @@ let respond_html (a : Db.Account.t) () =
 </html>
       |}
   |> Jingoo.Jg_template.from_string ~models
-  |> String.trim
-  |> Httpq.Server.respond ~status:`OK
+  |> String.trim |> respond_html
 
 (* Recv GET /users/:name *)
 let get req =
