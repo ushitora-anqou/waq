@@ -40,3 +40,4 @@ _opam/
 /docker_prod/log
 /docker_prod/config/prod.yml
 /_data
+.env*

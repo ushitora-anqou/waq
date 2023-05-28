@@ -1,39 +1,48 @@
-type t = {
-  listen : string; [@default ""]
-  server_name : string; [@default ""]
-  db_url : string; [@default ""]
-  notfound_avatar_url : string; [@default ""]
-  notfound_header_url : string; [@default ""]
-  default_avatar_url : string; [@default ""]
-  default_header_url : string; [@default ""]
-  static_root : string; [@default ""]
-  vapid_private_key : string; [@default ""]
-  vapid_public_key : string; [@default ""]
-  webpush_subscriber : string; [@default ""]
-  log_file_path : string; [@default ""]
-}
-[@@deriving make, yaml]
+module Internal = struct
+  let getenv ~default name = Sys.getenv_opt name |> Option.value ~default
 
-let c = ref (make ())
-let load_string s = c := s |> Yaml.of_string_exn |> of_yaml |> Result.get_ok
+  let getenv_exn name =
+    match Sys.getenv_opt name with
+    | None -> failwith ("Failed to get the environment variable: " ^ name)
+    | Some s -> s
 
-let load_file fpath =
-  match Yaml_unix.of_file_exn Fpath.(v fpath) |> of_yaml with
-  | Ok y -> c := y
-  | Error (`Msg e) -> failwith (Printf.sprintf "Couldn't parse config: %s" e)
+  let listen () = getenv ~default:"127.0.0.1:8000" "LISTEN"
+  let server_name () = getenv_exn "SERVER_NAME"
+  let db_url () = getenv_exn "DB_URL"
 
-let listen_host () = Uri.of_string ("//" ^ !c.listen) |> Uri.host |> Option.get
-let listen_port () = Uri.of_string ("//" ^ !c.listen) |> Uri.port |> Option.get
+  let not_found_avatar_url () =
+    getenv ~default:"/avatars/original/missing.png" "NOT_FOUND_AVATAR_URL"
 
-let server_name () =
-  Sys.getenv_opt "WAQ_SERVER_NAME" |> Option.value ~default:!c.server_name
+  let not_found_header_url () =
+    getenv ~default:"/headers/original/missing.png" "NOT_FOUND_HEADER_URL"
+
+  let default_avatar_url () =
+    getenv ~default:"/avatars/original/missing.png" "DEFAULT_AVATAR_URL"
+
+  let default_header_url () =
+    getenv ~default:"/headers/original/missing.png" "DEFAULT_HEADER_URL"
+
+  let static_root () = getenv ~default:"static" "STATIC_ROOT"
+  let vapid_private_key () = getenv_exn "VAPID_PRIVATE_KEY"
+  let vapid_public_key () = getenv_exn "VAPID_PUBLIC_KEY"
+  let webpush_subscriber () = getenv ~default:"" "WEBPUSH_SUBSCRIBER"
+  let log_file_path () = getenv ~default:"" "LOG_FILE_PATH"
+end
+
+let listen_host () =
+  Uri.of_string ("//" ^ Internal.listen ()) |> Uri.host |> Option.get
+
+let listen_port () =
+  Uri.of_string ("//" ^ Internal.listen ()) |> Uri.port |> Option.get
+
+let server_name () = Internal.server_name ()
 
 let is_my_domain s =
   (* FIXME: Consider port *)
   s = server_name ()
 
-let db_url () = !c.db_url
-let static_root () = !c.static_root
+let db_url () = Internal.db_url ()
+let static_root () = Internal.static_root ()
 
 let url (l : string list) =
   "https:/" ^ (server_name () :: l |> List.fold_left Util.( ^/ ) "")
@@ -45,10 +54,10 @@ let absolute_url (src : string) =
   let u = with_host u (Some (server_name ())) in
   to_string u
 
-let default_avatar_url () = absolute_url !c.default_avatar_url
-let default_header_url () = absolute_url !c.default_header_url
-let notfound_avatar_url () = absolute_url !c.notfound_avatar_url
-let notfound_header_url () = absolute_url !c.notfound_header_url
+let default_avatar_url () = absolute_url (Internal.default_avatar_url ())
+let default_header_url () = absolute_url (Internal.default_header_url ())
+let notfound_avatar_url () = absolute_url (Internal.not_found_avatar_url ())
+let notfound_header_url () = absolute_url (Internal.not_found_header_url ())
 
 let account_avatar_dir () =
   [ "system"; "accounts"; "avatars" ]
@@ -66,13 +75,10 @@ let account_header_url filename =
   "/" ^ ([ "system"; "accounts"; "headers"; filename ] |> String.concat "/")
   |> absolute_url
 
-let vapid_private_key () = !c.vapid_private_key
-let vapid_public_key () = !c.vapid_public_key
-let webpush_subscriber () = !c.webpush_subscriber
-let log_file_path () = !c.log_file_path
-
-let config_path () =
-  Sys.getenv_opt "WAQ_CONFIG_PATH" |> Option.value ~default:"config/dev.yml"
+let vapid_private_key () = Internal.vapid_private_key ()
+let vapid_public_key () = Internal.vapid_public_key ()
+let webpush_subscriber () = Internal.webpush_subscriber ()
+let log_file_path () = Internal.log_file_path ()
 
 let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
@@ -85,3 +91,20 @@ let debug_generate_test_users () =
   |> Option.value ~default:false
 
 let debug_dump_req_dir () = Sys.getenv_opt "WAQ_DUMP_REQ_DIR"
+
+let to_list () =
+  Internal.
+    [
+      ("listen", listen ());
+      ("server_name", server_name ());
+      ("db_url", db_url ());
+      ("not_found_avatar_url", not_found_avatar_url ());
+      ("not_found_header_url", not_found_header_url ());
+      ("default_avatar_url", default_avatar_url ());
+      ("default_header_url", default_header_url ());
+      ("static_root", static_root ());
+      ("vapid_private_key", vapid_private_key ());
+      ("vapid_public_key", vapid_public_key ());
+      ("webpush_subscriber", webpush_subscriber ());
+      ("log_file_path", log_file_path ());
+    ]

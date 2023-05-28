@@ -12,10 +12,16 @@ killtree() {
     kill -${_sig} ${_pid}
 }
 
+load_dotenv(){
+  # Thanks to https://stackoverflow.com/a/30969768/179329
+  set -o allexport
+  source "$1"
+  set +o allexport
+}
+
 export WAQ_DEBUG_JOB_KICK_BLOCK=true
 export WAQ_GENERATE_TEST_USERS=true
-export WAQ_CONFIG_PATH="config/test.yml"
-#export WAQ_DUMP_REQ_DIR="log/test_e2e"
+load_dotenv ".env.test"
 dune exec bin/main.exe db:reset >/dev/null 2>/dev/null
 dune exec bin/main.exe oauth:generate_access_token user1
 dune exec bin/main.exe oauth:generate_access_token user2
