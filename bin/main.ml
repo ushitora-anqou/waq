@@ -121,24 +121,42 @@ let hidden_input f =
   tcsetattr stdin TCSAFLUSH attr;
   res
 
-let user_register () =
+let user_register ?username ?display_name ?email ?password () =
   let f =
-    print_string "Username: ";
-    let username = read_line () |> String.trim in
-    print_string "Display name: ";
-    let display_name = read_line () |> String.trim in
-    print_string "Email: ";
-    let email = read_line () |> String.trim in
+    let username =
+      match username with
+      | Some s -> s
+      | None ->
+          print_string "Username: ";
+          read_line () |> String.trim
+    in
+    let display_name =
+      match display_name with
+      | Some s -> s
+      | None ->
+          print_string "Display name: ";
+          read_line () |> String.trim
+    in
+    let email =
+      match email with
+      | Some s -> s
+      | None ->
+          print_string "Email: ";
+          read_line () |> String.trim
+    in
     let password =
-      hidden_input @@ fun () ->
-      print_string "Password: ";
-      let password = read_line () |> String.trim in
-      print_newline ();
-      print_string "Retype your password: ";
-      let password' = read_line () |> String.trim in
-      print_newline ();
-      if password <> password' then failwith "Password was not equal";
-      password
+      match password with
+      | Some s -> s
+      | None ->
+          hidden_input @@ fun () ->
+          print_string "Password: ";
+          let password = read_line () |> String.trim in
+          print_newline ();
+          print_string "Retype your password: ";
+          let password' = read_line () |> String.trim in
+          print_newline ();
+          if password <> password' then failwith "Password was not equal";
+          password
     in
     let%lwt _, u = Db.register_user ~username ~display_name ~email ~password in
     Printf.printf "Correctly registered. User # = %d"
@@ -220,7 +238,24 @@ let () =
             const oauth_generate_access_token
             $ Arg.(
                 required & pos 0 (some string) None & info ~docv:"USERNAME" []));
-        v (info "user:register") Term.(const user_register $ const ());
+        v (info "user:register")
+          Term.(
+            const (fun username display_name email password ->
+                user_register ?username ?display_name ?email ?password ())
+            $ Arg.(
+                value
+                & opt (some string) None
+                & info ~docv:"USERNAME" [ "username" ])
+            $ Arg.(
+                value
+                & opt (some string) None
+                & info ~docv:"DISPLAY-NAME" [ "display-name" ])
+            $ Arg.(
+                value & opt (some string) None & info ~docv:"EMAIL" [ "email" ])
+            $ Arg.(
+                value
+                & opt (some string) None
+                & info ~docv:"PASSWORD" [ "password" ]));
         v (info "account:fetch") Term.(const account_fetch $ const ());
         v
           (info "webpush:generate_vapid_key")
