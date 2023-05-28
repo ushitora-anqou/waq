@@ -10,27 +10,22 @@ Waq is yet another ActivityPub server implementation written in OCaml.
 
 Although Waq can be deployed and used well for your daily microblogging, it currently lacks many of the features you would expect from a standard SNS, such as post privacy, custom emojis, profile editing, and so on. At the moment, I would not recommend using Waq as your primary SNS.
 
-## Build & Run w/ Docker Compose and Cloudflare Tunnel
+## Quick Start
 
-You can use Docker Compose to build and run Waq in your local environment.
-Before you run Waq, you need to create a Cloudflare tunnel and get a token (`TUNNEL_TOKEN`) for your tunnel via Cloudflare's Web UI.
+You can use Docker Compose to quickly launch Waq for a demo.
+Note that this setup is mainly prepared for testing, development and evaluation.
 
 ```
 $ git clone https://github.com/ushitora-anqou/waq.git
 $ cd waq
-$ docker compose pull
-$ docker compose build
-$ docker compose run waq /root/waq db:migrate && docker compose down
-$ TUNNEL_TOKEN='...' WAQ_SERVER_NAME='...' docker compose up
-
-# On another terminal window
-$ docker compose exec waq /root/waq user:register
-# Create your account interactively here
+$ docker compose --profile demo up
 ```
 
-And access http://localhost:5314/ and sign in with your tunnel's hostname, username, and password.
-
-FIXME: write about build w/o Docker and unit and e2e tests.
+Docker Compose starts Waq, Elk, and Mastodon with a public IP address for each,
+thanks to [Tunnelmole](https://tunnelmole.com/).
+Run `cat _data/elk/server_name` and `cat _data/waq/server_name`
+to get URLs of Elk and Waq, respectively. Access Elk and sign in to Waq with username `admin` and password `waqpassword`. Mastodon is also launched at `cat _data/mastodon/server_name`,
+and you can see federation between Waq and Mastodon.
 
 ## Technology stack
 
