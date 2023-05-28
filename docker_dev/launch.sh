@@ -61,7 +61,9 @@ EOS
         ;;
 
     waq )
+        export WAQ_SERVER_NAME=$SERVER_NAME
         /root/waq db:migrate
-        WAQ_SERVER_NAME=$SERVER_NAME /root/waq
+        /root/waq user:register --username admin --display-name Admin --email "admin@$SERVER_NAME" --password waqpassword
+        /root/waq
         ;;
 esac
