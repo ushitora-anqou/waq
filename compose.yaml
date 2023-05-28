@@ -33,6 +33,8 @@ services:
   waq:
     build:
       context: .
+      args:
+        INSTALL_TMOLE: 1
     command: /launch waq
     depends_on:
       - waq-postgres

@@ -19,10 +19,8 @@ case "$ARG_PROG" in
 esac
 
 # Launch tunnelmole
-command -v curl || apt update && apt install -y curl # FIXME: any cool workaround?
 SERVER_NAME_FILE_NAME=/data/$ARG_PROG/server_name
 truncate -s 0 $SERVER_NAME_FILE_NAME
-curl -s https://tunnelmole.com/sh/install-linux.sh | bash 
 tmole $LOCAL_PORT | \
     grep --line-buffered "^https" | \
     sed -u -r 's/^https:\/\/([^ ]+) .*$/\1/' | \

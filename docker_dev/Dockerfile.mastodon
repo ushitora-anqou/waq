@@ -33,5 +33,6 @@ RUN bundle config without 'deployment test'
 RUN bundle install -j$(getconf _NPROCESSORS_ONLN)
 RUN yarn install --pure-lockfile
 RUN gem install foreman --no-document
+RUN curl -s https://tunnelmole.com/sh/install-linux.sh | bash
 
 CMD ["bash"]
