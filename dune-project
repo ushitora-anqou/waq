@@ -34,7 +34,6 @@
   cohttp
   cohttp-lwt-unix
   cppo
-  ocurl
   cstruct
   dune
   fpath
@@ -48,6 +47,7 @@
   multipart_form
   multipart_form-lwt
   ocaml
+  ocurl
   pcre
   postgresql
   ppx_deriving_yaml
