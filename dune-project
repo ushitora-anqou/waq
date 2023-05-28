@@ -31,6 +31,7 @@
     :with-dev-setup))
   base64
   camlimages
+  cmdliner
   cohttp
   cohttp-lwt-unix
   cppo

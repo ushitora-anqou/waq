@@ -17,6 +17,7 @@ depends: [
   "ocamlformat" {= "0.25.1" & with-dev-setup}
   "base64"
   "camlimages"
+  "cmdliner"
   "cohttp"
   "cohttp-lwt-unix"
   "cppo"

@@ -3,4 +3,4 @@
  (name main)
  (preprocess
   (pps lwt_ppx))
- (libraries logq lwt lwt.unix waq))
+ (libraries cmdliner logq lwt lwt.unix waq))

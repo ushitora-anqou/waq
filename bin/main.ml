@@ -198,17 +198,40 @@ let () =
   Logq.info (fun m -> m "========== Waq booted ==========");
   Crypto.initialize ();
   Db.initialize ();
-  let subcommand =
-    if Array.length Sys.argv < 2 then "server" else Sys.argv.(1)
-  in
-  match subcommand with
-  | "db:reset" -> db_reset ()
-  | "db:migrate" -> db_migrate ()
-  | "db:rollback" -> db_rollback ()
-  | "db:generate_migration" -> db_generate_migration Sys.argv.(2)
-  | "oauth:generate_access_token" -> oauth_generate_access_token Sys.argv.(2)
-  | "user:register" -> user_register ()
-  | "account:fetch" -> account_fetch ()
-  | "webpush:generate_vapid_key" -> webpush_generate_vapid_key ()
-  | "webpush:deliver" -> webpush_deliver Sys.argv.(2) Sys.argv.(3)
-  | _ -> server ()
+
+  (* Parse command-line arguments and call a proper handler *)
+  let open Cmdliner in
+  Cmd.(
+    group
+      ~default:Term.(const server $ const ())
+      (info "waq")
+      [
+        v (info "db:reset") Term.(const db_reset $ const ());
+        v (info "db:migrate") Term.(const db_migrate $ const ());
+        v (info "db:rollback") Term.(const db_rollback $ const ());
+        v
+          (info "db:generate_migration")
+          Term.(
+            const db_generate_migration
+            $ Arg.(required & pos 0 (some string) None & info ~docv:"NAME" []));
+        v
+          (info "oauth:generate_access_token")
+          Term.(
+            const oauth_generate_access_token
+            $ Arg.(
+                required & pos 0 (some string) None & info ~docv:"USERNAME" []));
+        v (info "user:register") Term.(const user_register $ const ());
+        v (info "account:fetch") Term.(const account_fetch $ const ());
+        v
+          (info "webpush:generate_vapid_key")
+          Term.(const webpush_generate_vapid_key $ const ());
+        v (info "webpush:deliver")
+          Term.(
+            const webpush_deliver
+            $ Arg.(
+                required & pos 0 (some string) None & info ~docv:"USERNAME" [])
+            $ Arg.(
+                required & pos 1 (some string) None & info ~docv:"MESSAGE" []));
+        v (info "server") Term.(const server $ const ());
+      ])
+  |> Cmd.eval |> exit
