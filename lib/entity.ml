@@ -45,7 +45,7 @@ type account = {
   statuses_count : int;
   followers_count : int;
   following_count : int;
-  source : credential_account_source option; [@yojson.optional]
+  source : credential_account_source option; [@yojson.option]
 }
 [@@deriving make, yojson]
 
