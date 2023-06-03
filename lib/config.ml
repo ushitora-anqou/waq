@@ -92,6 +92,13 @@ let debug_generate_test_users () =
 
 let debug_dump_req_dir () = Sys.getenv_opt "WAQ_DUMP_REQ_DIR"
 
+let debug_no_throttle_fetch () =
+  match
+    Sys.getenv_opt "WAQ_NO_THROTTLE_FETCH" |> Option.map String.lowercase_ascii
+  with
+  | Some ("true" | "1") -> true
+  | _ -> false
+
 let to_list () =
   Internal.
     [
