@@ -44,7 +44,6 @@ services:
       - ./docker_dev/waq-config:/root/config:ro
       - ./_data/waq:/data/waq
     environment:
-      WAQ_CONFIG_PATH: /root/config/dev.yaml
       OCAMLRUNPARAM: b
 
   elk:
