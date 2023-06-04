@@ -10,11 +10,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
-RUN opam update && opam install alcotest-lwt
-COPY --chown=opam . waq/
 WORKDIR /home/opam/waq
+RUN opam update && opam install alcotest-lwt
+COPY --chown=opam waq.opam .
 RUN opam install . --deps-only
-RUN eval $(opam env) && dune build
+COPY --chown=opam . .
+RUN eval $(opam env) && opam install . --deps-only && dune build
 
 FROM debian:11-slim
 
