@@ -75,4 +75,5 @@ let handle_query resolve q =
 let get req =
   let%lwt self = may_authenticate_account req in
   let%lwt q = req |> Httpq.Server.query "q" in
+  Logq.debug (fun m -> m "[/api/v2/search] %b %s" (Option.is_some self) q);
   handle_query (Option.is_some self) q >|= yojson_of_t >>= respond_yojson
