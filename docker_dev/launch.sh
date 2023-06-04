@@ -64,6 +64,7 @@ EOS
         export VAPID_PRIVATE_KEY="5OS5_NrCP_jtMBQvYPuQyse8s3C-11YohjEeDAQR4oE"
         export VAPID_PUBLIC_KEY="BEsq0u2vxWcxoVye79FQX5HU4RYwgHYJXPX_YVb6A-tBqfm2JvaiFUVNofe6SGTsvWnKIEX9dOaxLVrktQ01bXc"
         export LOG_FILE_PATH=""
+        export STATIC_ROOT="/static"
         /root/waq db:migrate
         /root/waq user:register --username admin --display-name Admin --email "admin@$SERVER_NAME" --password waqpassword
         /root/waq
