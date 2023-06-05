@@ -44,11 +44,20 @@ let kick (s : Db.Status.t) =
 
   (* Deliver to remote followers *)
   if not is_status_from_remote then
-    deliver_to_remote
-      ~targets:
-        (remote_followers
-        @ (remote_mentions |> List.map (fun x -> Option.get x#account)))
-      ~status:s
+    let targets = remote_followers in
+    let targets =
+      targets @ (remote_mentions |> List.map (fun x -> Option.get x#account))
+    in
+    let%lwt targets =
+      match s#reblog_of_id with
+      | None -> Lwt.return targets
+      | Some id ->
+          (* Deliver Announce activity to the original author *)
+          Db.(e Status.(get_one ~id ~preload:[ `account [] ])) >|= fun s ->
+          if Model.Account.is_remote s#account then s#account :: targets
+          else targets
+    in
+    deliver_to_remote ~targets ~status:s
   else Lwt.return_unit;%lwt
 
   (* Deliver to local followers *)
