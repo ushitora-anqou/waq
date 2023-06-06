@@ -745,6 +745,7 @@ let verify_activity_json req =
   in
   search_account_opt (`Uri key_id) >|= function
   | None -> (body, Error `AccountNotFound)
+  | Some acct when Model.Account.is_local acct -> (body, Error `AccountIsLocal)
   | Some acct -> (
       let pub_key = decode_public_key acct#public_key in
       match

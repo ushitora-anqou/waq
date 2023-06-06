@@ -141,7 +141,8 @@ let kick_inbox_update_person (r : ap_person) =
 (* Recv POST /users/:name/inbox *)
 let post req =
   match%lwt Activity.verify_activity_json req with
-  | _, Error `AccountNotFound -> Httpq.Server.respond ~status:`Accepted ""
+  | _, Error (`AccountNotFound | `AccountIsLocal) ->
+      Httpq.Server.respond ~status:`Accepted ""
   | _, Error (`VerifFailure _) -> Httpq.Server.respond ~status:`Unauthorized ""
   | body, Ok () -> (
       try%lwt
