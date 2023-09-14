@@ -6,6 +6,8 @@ Waq is yet another ActivityPub server implementation written in OCaml.
 - Waq provides REST and Websocket streaming APIs that are compatible with Mastodon. You can use your favourite Mastodon client such as [Elk](https://elk.zone).
 - Waq acts as an ActivityPub server and can interact with other servers like Mastodon and Pleroma to share posts and favourites.
 
+A blog post about Waq is [here](https://hackmd.io/@anqou/H1qRfp_Fn). Its original Japanese version is [there](https://hackmd.io/@anqou/rka_GANYh).
+
 ## Note for those trying to deploy Waq
 
 Although Waq can be deployed and used well for your daily microblogging, it currently lacks many of the features you would expect from a standard SNS, such as post privacy, custom emojis, profile editing, and so on. At the moment, I would not recommend using Waq as your primary SNS.
