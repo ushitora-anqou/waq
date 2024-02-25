@@ -30,7 +30,8 @@
     (= 0.25.1)
     :with-dev-setup))
   base64
-  camlimages
+  (camlimages
+   (= 5.0.4-1))
   cmdliner
   cohttp
   cohttp-lwt-unix
@@ -52,7 +53,8 @@
   pcre
   postgresql
   ppx_deriving_yaml
-  ppx_yojson_conv
+  (ppx_yojson_conv
+   (= v0.15.1))
   ptime
   re
   result
