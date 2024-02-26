@@ -25,12 +25,15 @@ RUN apt-get update && apt-get install -y \
     libjpeg62-turbo libpng16-16 curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /root/
+RUN groupadd -r waq && useradd -r -g waq waq
+USER waq:waq
+
+WORKDIR /waq/
 COPY --from=0 /home/opam/waq/_build/default/bin/main.exe ./waq
 COPY --from=0 /home/opam/waq/static /static
 
 RUN if [ -n "$INSTALL_TMOLE" ]; then curl -s https://tunnelmole.com/sh/install-linux.sh | bash; fi
 
-CMD ["bash", "-c", "/root/waq db:migrate && /root/waq"]
+CMD ["bash", "-c", "/waq/waq db:migrate && /waq/waq"]
 
-# docker build . -t waq && docker run -it -v $PWD/config:/root/config waq [/bin/bash]
+# docker build . -t waq && docker run -it -v $PWD/config:/waq/config waq [/bin/bash]
