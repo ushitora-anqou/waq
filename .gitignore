@@ -41,3 +41,6 @@ _opam/
 /docker_prod/config/prod.yml
 /_data
 .env*
+e2e/_test*
+e2e/_bin
+e2e/.kubeconfig

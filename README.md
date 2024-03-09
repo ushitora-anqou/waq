@@ -171,3 +171,24 @@ MIT, except for the following files:
     > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     > SOFTWARE.
+
+## How to run Waq and Mastodon on kind
+
+Install docker beforehand. Then:
+```
+cd e2e
+make start-tmole
+make create-cluster
+make start-waq
+make start-mastodon
+make waq-port-forward &
+make mastodon-port-forward &
+cat _test_waq # Access this domain for Waq.
+cat _test_mastodon # Access this domain for Mastodon.
+```
+
+When shutting down:
+```
+make clean-cluster
+make stop-tmole
+```
