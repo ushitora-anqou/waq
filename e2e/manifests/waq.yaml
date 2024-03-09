@@ -1,0 +1,62 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waq-web
+  namespace: e2e
+spec:
+  selector:
+    app: waq-web
+  ports:
+    - port: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waq-web
+  namespace: e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: waq-web
+  template:
+    metadata:
+      labels:
+        app: waq-web
+    spec:
+      volumes:
+        - name: tmole-data
+          emptyDir: {}
+      containers:
+        - name: web
+          image: waq:dev
+          command:
+            - bash
+            - -ce
+            - |
+              /waq/waq
+          envFrom:
+            - secretRef:
+                name: waq-secret-env
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: waq-secret-env
+  namespace: e2e
+type: Opaque
+stringData:
+  SERVER_NAME: "E2E_TEST_WAQ_SERVER_NAME"
+  DB_URL: "postgresql://waq:password@postgres.e2e.svc:5432/waq_prod"
+  STATIC_ROOT: "/static"
+  VAPID_PRIVATE_KEY: "lr6m1ywLiy6OTSbp0lPKJD7RGuHcvFF7R8s4c0OrOEU"
+  VAPID_PUBLIC_KEY: "BBDfkHCo603UjZYEDYSN-Yq62159oSZMDXGDBbhNaHPiAPhFnZDjP6FN1GRj5UAfHo3L4-sdyfUiFx-N50o3bF8"
+  LOG_FILE_PATH: ""
+  OCAMLRUNPARAM: "b"
+  WAQ_GENERATE_TEST_USERS: "true"
+  WAQ_DEBUG_JOB_KICK_BLOCK: "true"

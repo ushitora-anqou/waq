@@ -1,0 +1,82 @@
+---
+apiVersion: mahout.anqou.net/v1alpha1
+kind: Mastodon
+metadata:
+  name: mastodon
+  namespace: e2e
+spec:
+  serverName: "mastodon.test"
+  image: "ghcr.io/mastodon/mastodon:v4.2.0"
+  envFrom:
+    - secretRef:
+        name: mastodon-secret-env
+  gateway:
+    replicas: 1
+    image: "nginx:1.25.4"
+  sidekiq:
+    replicas: 1
+  streaming:
+    replicas: 1
+  web:
+    replicas: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: e2e
+  labels:
+    app: redis
+spec:
+  ports:
+    - port: 6379
+      name: redis
+  clusterIP: None
+  selector:
+    app: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: e2e
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  serviceName: "redis"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: redis
+          image: redis:7.2.3-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mastodon-secret-env
+  namespace: e2e
+type: Opaque
+stringData:
+  LOCAL_DOMAIN: "E2E_TEST_MASTODON_SERVER_NAME"
+  REDIS_HOST: redis.e2e.svc
+  REDIS_PORT: "6379"
+  DB_HOST: postgres.e2e.svc
+  DB_USER: mastodon
+  DB_PASS: password
+  DB_NAME: mastodon_production
+  DB_PORT: "5432"
+  IP_RETENTION_PERIOD: "31556952"
+  SESSION_RETENTION_PERIOD: "31556952"
+  SECRET_KEY_BASE: 928dab5fdf3cfd4a16e89ab92e343d9d3d96e232ee77bf9d0a18ea510d4231f0fb1425c51f3ca8cfb8f031ca6b7bc25a04e2aa2230e11b614b8215974bff23b6
+  OTP_SECRET: a2679b530056aa9a5aa2c5956684bdab64480f69bd5252e5c9f5eb64c6ea1dbcece44195d7f9236f5bfccad421413fd606996ec53c082147303736921e4ad07b
+  VAPID_PRIVATE_KEY: YMFYOwrat5ZQxRQmXka0oaHr56TpctygcO7XtYfuwCA=
+  VAPID_PUBLIC_KEY: BNQoJF_o0Jk-soeZuqdGIx-8vjUfk6bH7ezFw3JtGl29iTUAz8OtjZl6wkb2Zz2I_ekokAk4lI-dyLiUpHLV6gA=
