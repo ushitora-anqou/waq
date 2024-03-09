@@ -1,0 +1,26 @@
+name: Run e2e tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+      - run: echo "NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}" > e2e/.env && make -C e2e start-ngrok
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+#     - name: Setup tmate session
+#       uses: mxschmitt/action-tmate@v3
+      - name: Set-up OCaml 4.14.1
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: "4.14.1"
+      - run: opam install . --deps-only --with-test
+      - run: opam exec -- make -C e2e create-cluster
+      - run: opam exec -- make -C e2e test

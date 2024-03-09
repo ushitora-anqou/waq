@@ -1,11 +1,11 @@
-#!/usr/bin/bash -u
+#!/usr/bin/bash -ux
 
 set -o pipefail
 
 NAME=$1
 PORT=$2
 
-. .env
+[ -f .env ] && . .env
 docker run --init --rm --net=host \
   -e NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN} \
   -v $PWD/ngrok.yml:/home/ngrok/.config/ngrok/ngrok.yml \
