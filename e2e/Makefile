@@ -11,8 +11,8 @@ IMAGE=waq:dev
 
 .PHONY: run-test
 run-test:
-	#env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) dune exec src/main.exe
-	env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=http://localhost:58080 dune exec src/main.exe
+	env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) dune exec src/main.exe
+	#env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=http://localhost:58080 dune exec src/main.exe
 
 .PHONY: test
 test:
