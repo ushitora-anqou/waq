@@ -504,7 +504,12 @@ let fetch_access_token ~username =
           ("password", [ username ^ "password" ]);
         ]
     in
-    fetch ~meth:`POST ~body (waq "/oauth/authorize")
+    (* NOTE: The header "content-type: application/x-www-form-urlencoded"
+       should be specified explicitly like the following to send the POST
+       request body correctly via Tunnelmole. *)
+    fetch
+      ~headers:[ (`Content_type, "application/x-www-form-urlencoded") ]
+      ~meth:`POST ~body (waq "/oauth/authorize")
   in
   let auth_code =
     match r with
