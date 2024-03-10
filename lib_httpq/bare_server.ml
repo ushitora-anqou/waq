@@ -21,15 +21,38 @@ let respond ~(status : Status.t) ~(headers : Headers.t) ~(body : string) =
 let start_server port k callback =
   let callback _conn (req : Request.t) (body : Body.t) =
     (* Invoke the handler *)
-    try%lwt callback req body
-    with e ->
-      let uri = Request.uri req in
-      let meth = Request.meth req in
-      Logq.err (fun m ->
-          m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth)
-            (Uri.to_string uri) (Printexc.to_string e)
-            (Printexc.get_backtrace ()));
-      respond ~status:`Internal_server_error ~body:"" ~headers:[]
+    let%lwt resp =
+      try%lwt callback req body
+      with e ->
+        let uri = Request.uri req in
+        let meth = Request.meth req in
+        Logq.err (fun m ->
+            m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth)
+              (Uri.to_string uri) (Printexc.to_string e)
+              (Printexc.get_backtrace ()));
+        respond ~status:`Internal_server_error ~body:"" ~headers:[]
+    in
+    match resp with
+    | `Response (resp, body) ->
+        (* NOTE: Add a connection header if one doesn't exist. It is necessary to
+           receive HTTP requests correctly via Tunnelmole. FYI cohttp-async already
+           has the same functionality, but cohttp-lwt does not.
+           cf.: https://github.com/mirage/ocaml-cohttp/blob/cf2ae3344ed9211230a5680f251613326eacb296/cohttp-async/src/server.ml#L90-L95
+        *)
+        let resp =
+          let keep_alive =
+            Request.is_keep_alive req (*&& Http.Response.is_keep_alive resp*)
+          in
+          let headers =
+            Cohttp.Header.add_unless_exists
+              (Cohttp.Response.headers resp)
+              "connection"
+              (if keep_alive then "keep-alive" else "close")
+          in
+          { resp with headers }
+        in
+        Lwt.return (`Response (resp, body))
+    | _ -> Lwt.return resp
   in
   let server =
     Cohttp_lwt_unix.Server.make_response_action ~callback ()
