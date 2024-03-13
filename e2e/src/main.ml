@@ -27,7 +27,7 @@ let all_tests =
     ("waq-6", Waq_6_rel.f);
     ("waq-7", Waq_7_reblog.f);
     ("waq-8", Waq_8_delete.f);
-    (*("waq-9", Waq_9_ap.f);*)
+    ("waq-9", Waq_9_ap.f);
     ("waq-10", Waq_10_mention.f);
     ("waq-11", Waq_11_marker.f);
     (*

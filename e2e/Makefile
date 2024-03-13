@@ -11,7 +11,13 @@ IMAGE=waq:dev
 
 .PHONY: run-test
 run-test:
-	env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) dune exec src/main.exe
+	env \
+		KUBECTL=$(KUBECTL) \
+		MANIFESTS=$(WD)/manifests \
+		OCAMLRUNPARAM=b \
+		E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) \
+		E2E_TEST_MASTODON_SERVER_NAME=https://$(shell cat $(WD)/_test_mastodon_domain) \
+		dune exec src/main.exe
 	#env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=http://localhost:58080 dune exec src/main.exe
 
 .PHONY: test
@@ -51,18 +57,18 @@ build-image:
 clean-cluster:
 	$(KIND) delete cluster -n $(KIND_CLUSTER_NAME)
 
-.PHONY: start-tmole
-start-tmole:
-	systemctl --user reset-failed tmole-waq || true
-	systemctl --user reset-failed tmole-mastodon || true
-	systemd-run --user --unit=tmole-waq --working-directory=$(WD) ./launch-tmole.sh waq 58080
-	systemd-run --user --unit=tmole-mastodon --working-directory=$(WD) ./launch-tmole.sh mastodon 58081
+.PHONY: start-ngrok
+start-ngrok:
+	systemctl --user reset-failed ngrok-waq || true
+	systemctl --user reset-failed ngrok-mastodon || true
+	systemd-run --user --unit=ngrok-waq --working-directory=$(WD) ./start-ngrok.sh waq 58080
+	systemd-run --user --unit=ngrok-mastodon --working-directory=$(WD) ./start-ngrok.sh mastodon 58081
 
-.PHONY: stop-tmole
-stop-tmole:
-	systemctl --user stop tmole-waq || true
+.PHONY: stop-ngrok
+stop-ngrok:
+	systemctl --user stop ngrok-waq || true
 	rm -f _test_waq_domain
-	systemctl --user stop tmole-mastodon || true
+	systemctl --user stop ngrok-mastodon || true
 	rm -f _test_mastodon_domain
 
 .PHONY: create-cluster
