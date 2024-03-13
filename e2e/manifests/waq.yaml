@@ -25,9 +25,6 @@ spec:
       labels:
         app: waq-web
     spec:
-      volumes:
-        - name: tmole-data
-          emptyDir: {}
       containers:
         - name: web
           image: waq:dev
