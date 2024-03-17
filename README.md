@@ -12,22 +12,41 @@ A blog post about Waq is [here](https://hackmd.io/@anqou/H1qRfp_Fn). Its origina
 
 Although Waq can be deployed and used well for your daily microblogging, it currently lacks many of the features you would expect from a standard SNS, such as post privacy, custom emojis, profile editing, and so on. At the moment, I would not recommend using Waq as your primary SNS.
 
-## Quick Start
+## Quick start
 
-You can use Docker Compose to quickly launch Waq for a demo.
-Note that this setup is mainly prepared for testing, development and evaluation.
+Install docker beforehand. Then:
+```
+cd e2e
+make start-ngrok
+make create-cluster
+make start-waq
+make start-mastodon
+make start-elk
+make waq-port-forward &
+make mastodon-port-forward &
+make elk-port-forward &
+cat _test_waq # Access this domain for Waq.
+cat _test_mastodon # Access this domain for Mastodon.
+cat _test_elk # Access this domain for Elk.
+```
+
+Create a demo user:
+```
+kubectl exec -n e2e deploy/waq-web -- /waq/waq user:register --username=demo --password=demo --display-name=demo --email=demo@example.com
+```
+
+When shutting down:
+```
+make clean-cluster
+make stop-ngrok
+```
+
+## How to run E2E tests
 
 ```
-$ git clone https://github.com/ushitora-anqou/waq.git
-$ cd waq
-$ docker compose --profile demo up
+cd e2e
+make start-ngrok && make create-cluster && make test
 ```
-
-Docker Compose starts Waq, Elk, and Mastodon with a public IP address for each,
-thanks to [Tunnelmole](https://tunnelmole.com/).
-Run `cat _data/elk/server_name` and `cat _data/waq/server_name`
-to get URLs of Elk and Waq, respectively. Access Elk and sign in to Waq with username `admin` and password `waqpassword`. Mastodon is also launched at `cat _data/mastodon/server_name`,
-and you can see federation between Waq and Mastodon.
 
 ## Technology stack
 
@@ -172,38 +191,3 @@ MIT, except for the following files:
     > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     > SOFTWARE.
 
-## How to run Waq and Mastodon on kind
-
-Install docker beforehand. Then:
-```
-cd e2e
-make start-ngrok
-make create-cluster
-make start-waq
-make start-mastodon
-make start-elk
-make waq-port-forward &
-make mastodon-port-forward &
-make elk-port-forward &
-cat _test_waq # Access this domain for Waq.
-cat _test_mastodon # Access this domain for Mastodon.
-cat _test_elk # Access this domain for Elk.
-```
-
-Create a demo user:
-```
-kubectl exec -n e2e deploy/waq-web -- /waq/waq user:register --username=demo --password=demo --display-name=demo --email=demo@example.com
-```
-
-When shutting down:
-```
-make clean-cluster
-make stop-ngrok
-```
-
-## How to run E2E tests
-
-```
-cd e2e
-make start-ngrok && make create-cluster && make test
-```
