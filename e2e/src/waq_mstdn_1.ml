@@ -22,19 +22,19 @@ let f =
   in
   let uris = ref [] in
   websocket `Waq ~token:waq_token handler (fun pushf ->
-      (* Lookup @admin@localhost:3000 *)
+      (* Lookup @admin@mstdn_server_domain *)
       let%lwt admin_id, username, acct =
-        lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000"
-          ()
+        lookup `Waq ~token:waq_token ~username:"mstdn1"
+          ~domain:mstdn_server_domain ()
       in
-      assert (username = "admin");
-      assert (acct = "admin@localhost:3000");
+      assert (username = "mstdn1");
+      assert (acct = "mstdn1@" ^ mstdn_server_domain);
 
-      (* Follow @admin@localhost:3000 *)
+      (* Follow @admin@mstdn_server_domain *)
       follow `Waq ~token:waq_token admin_id;%lwt
       Lwt_unix.sleep 1.0;%lwt
 
-      (* Post by @admin@localhost:3000 *)
+      (* Post by @admin@mstdn_server_domain *)
       let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token () in
       uris := uri :: !uris;
       Lwt_unix.sleep 1.0;%lwt
@@ -51,9 +51,13 @@ let f =
            assert (uri = (l |> List.assoc "uri" |> expect_string));
            assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
            ()
-       | _ -> assert false);%lwt
+       | res ->
+           Logq.err (fun m ->
+               m "unexpected home timeline %s"
+                 (Yojson.Safe.to_string (`List res)));
+           assert false);%lwt
 
-      (* Unfollow @admin@localhost:3000 *)
+      (* Unfollow @admin@mstdn_server_domain *)
       unfollow `Waq ~token:waq_token admin_id;%lwt
       Lwt_unix.sleep 1.0;%lwt
 

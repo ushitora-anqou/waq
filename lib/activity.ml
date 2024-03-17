@@ -752,7 +752,13 @@ let verify_activity_json req =
         verify ~pub_key ~algorithm ~signed_headers ~signature ~headers ~meth
           ~path ~body:(Some body)
       with
-      | Error e -> (body, Error (`VerifFailure e))
+      | Error e ->
+          Logq.err (fun m ->
+              m "verify_activity_json failed: [%s]"
+                (headers |> Httpq.Headers.to_list
+                |> List.map (fun (k, v) -> k ^ "=" ^ v)
+                |> String.concat ", "));
+          (body, Error (`VerifFailure e))
       | Ok () -> (body, Ok ()))
 
 let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =

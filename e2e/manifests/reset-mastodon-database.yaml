@@ -1,0 +1,66 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reset-mastodon-database-script
+  namespace: e2e
+data:
+  script.sh: |
+    $app = Doorkeeper::Application.create!({ name: "fakeapp", redirect_uri: "http://example.com", scopes: "read write follow", website: "" })
+    def f(create_new: true, username:)
+      if create_new
+        account = Account.new(username: username)
+        password = "mastodon#{username}"
+        email = "#{username}@anqou.net"
+        user = User.new(email: email, password: password, agreement: true, approved: true, role_id: nil, confirmed_at: Time.now.utc, bypass_invite_request_check: true)
+        account.suspended_at = nil
+        user.account = account
+        user.save!
+        user.confirmed_at = nil
+        user.confirm!
+      end
+      Doorkeeper::AccessToken.create!(
+        application_id: $app,
+        resource_owner_id: Account.find_by(username: username, domain: nil).user.id,
+        scopes: "read write follow",
+      ).token
+    end
+    puts("TOKEN: #{f(username: "admin")}")
+    puts("TOKEN: #{f(username: "mstdn1")}")
+    puts("TOKEN: #{f(username: "mstdn2")}")
+    puts("TOKEN: #{f(username: "mstdn3")}")
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: reset-mastodon-database
+  namespace: e2e
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: reset-mastodon-database
+          image: ghcr.io/mastodon/mastodon:v4.2.0
+          command:
+            - bash
+            - -ceu
+            - |
+              rails db:setup >/dev/null 2>/dev/null
+              cat /mnt/reset-mastodon-database-script/script.sh | \
+              rails c --no-sandbox | \
+              egrep '^TOKEN:' | sed -r 's/^TOKEN: (.+)$/\1/'
+          env:
+            - name: DISABLE_DATABASE_ENVIRONMENT_CHECK
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: mastodon-secret-env
+          volumeMounts:
+            - name: reset-mastodon-database-script
+              mountPath: /mnt/reset-mastodon-database-script
+              readOnly: true
+      volumes:
+        - name: reset-mastodon-database-script
+          configMap:
+            name: reset-mastodon-database-script
