@@ -56,9 +56,10 @@ module Internal = struct
       |> fst |> expect_wexited_0
     in
     let () =
-      kubectl [ "wait"; "--for=condition=complete"; "job/reset-waq-database"; "-n"; "e2e" ]
-      ignore
-    [@ocamlformat "disable"]
+      kubectl
+        ([ "wait"; "--for=condition=complete"; "job/reset-waq-database";
+           "-n"; "e2e"; "--timeout=5m"] [@ocamlformat "disable"])
+        ignore
       |> fst |> expect_wexited_0
     in
     let () =
@@ -123,9 +124,10 @@ module Internal = struct
       |> fst |> expect_wexited_0
     in
     let () =
-      kubectl [ "wait"; "--for=condition=complete"; "job/reset-mastodon-database"; "-n"; "e2e" ]
-      ignore
-    [@ocamlformat "disable"]
+      kubectl
+        ([ "wait"; "--for=condition=complete"; "job/reset-mastodon-database";
+           "-n"; "e2e"; "--timeout=5m"] [@ocamlformat "disable"])
+        ignore
       |> fst |> expect_wexited_0
     in
     let () =

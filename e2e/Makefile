@@ -95,7 +95,7 @@ start-waq:
 	$(KUBECTL) delete -f $(WD)/manifests/reset-waq-database.yaml || true
 	cat $(WD)/manifests/waq.yaml | sed "s/E2E_TEST_WAQ_SERVER_NAME/$(shell cat $(WD)/_test_waq_domain)/" | $(KUBECTL) apply -f -
 	$(KUBECTL) apply -f $(WD)/manifests/reset-waq-database.yaml
-	$(KUBECTL) wait --for=condition=available deploy/waq-web -n e2e
+	$(KUBECTL) wait --for=condition=available deploy/waq-web -n e2e --timeout=5m
 
 .PHONY: waq-port-forward
 waq-port-forward:
