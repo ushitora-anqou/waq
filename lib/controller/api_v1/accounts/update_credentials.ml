@@ -1,6 +1,7 @@
 open Entity
 open Helper
 open Lwt.Infix
+open Util
 
 let patch req =
   let%lwt self = authenticate_account req in
@@ -23,6 +24,7 @@ let patch req =
    | _ -> raise_error_response `Bad_request);%lwt
 
   (* Avatar *)
+  Lwt_unix.mkpath (Config.account_avatar_dir ()) 0o755;%lwt
   Httpq.Server.formdata "avatar" req
   |> Lwt_result.iter (fun formdata ->
          let%lwt _, file_name, _ =
@@ -33,6 +35,7 @@ let patch req =
          Lwt.return_unit);%lwt
 
   (* Header *)
+  Lwt_unix.mkpath (Config.account_header_dir ()) 0o755;%lwt
   Httpq.Server.formdata "header" req
   |> Lwt_result.iter (fun formdata ->
          let%lwt _, file_name, _ =
