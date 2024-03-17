@@ -177,18 +177,33 @@ MIT, except for the following files:
 Install docker beforehand. Then:
 ```
 cd e2e
-make start-tmole
+make start-ngrok
 make create-cluster
 make start-waq
 make start-mastodon
+make start-elk
 make waq-port-forward &
 make mastodon-port-forward &
+make elk-port-forward &
 cat _test_waq # Access this domain for Waq.
 cat _test_mastodon # Access this domain for Mastodon.
+cat _test_elk # Access this domain for Elk.
+```
+
+Create a demo user:
+```
+kubectl exec -n e2e deploy/waq-web -- /waq/waq user:register --username=demo --password=demo --display-name=demo --email=demo@example.com
 ```
 
 When shutting down:
 ```
 make clean-cluster
-make stop-tmole
+make stop-ngrok
+```
+
+## How to run E2E tests
+
+```
+cd e2e
+make start-ngrok && make create-cluster && make test
 ```
