@@ -33,10 +33,10 @@ let all_tests =
     ("01-mention-mstdn-waq-waq", Waq_mstdn_11_mention.f_mstdn_waq_waq);
     ("01-mention-waq-waq-waq", Waq_mstdn_11_mention.f_waq_waq_waq);
     ("01-mention-mstdn-waq-mstdn", Waq_mstdn_11_mention.f_mstdn_waq_mstdn);
-    (*
     ("02-summary-mstdn-waq", Waq_mstdn_12_summary.f_mstdn_waq);
     ("02-summary-waq-mstdn", Waq_mstdn_12_summary.f_waq_mstdn);
     ("02-summary-waq-waq", Waq_mstdn_12_summary.f_waq_waq);
+    (*
     ("03-preview-card-waq-waq", Waq_mstdn_14_preview_card.f_waq_waq);
     ("03-preview-card-mstdn-waq", Waq_mstdn_14_preview_card.f_mstdn_waq);
     ("04-text-waq-waq", Waq_mstdn_15_text.f_waq_waq);
