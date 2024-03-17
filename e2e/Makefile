@@ -23,6 +23,7 @@ run-test:
 .PHONY: test
 test:
 	$(MAKE) start-waq
+	$(MAKE) start-mastodon
 	$(MAKE) run-test
 
 $(BIN):
@@ -91,9 +92,9 @@ start-waq:
 	$(MAKE) build-image
 	$(KIND) load docker-image $(IMAGE) -n $(KIND_CLUSTER_NAME)
 	$(KUBECTL) delete -f $(WD)/manifests/waq.yaml || true
-	$(KUBECTL) delete -f $(WD)/manifests/waq-reset-db.yaml || true
+	$(KUBECTL) delete -f $(WD)/manifests/reset-waq-database.yaml || true
 	cat $(WD)/manifests/waq.yaml | sed "s/E2E_TEST_WAQ_SERVER_NAME/$(shell cat $(WD)/_test_waq_domain)/" | $(KUBECTL) apply -f -
-	$(KUBECTL) apply -f $(WD)/manifests/waq-reset-db.yaml
+	$(KUBECTL) apply -f $(WD)/manifests/reset-waq-database.yaml
 	$(KUBECTL) wait --for=condition=available deploy/waq-web -n e2e
 
 .PHONY: waq-port-forward

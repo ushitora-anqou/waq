@@ -35,6 +35,8 @@ let kubectl_path = Sys.getenv "KUBECTL"
 let manifests = Sys.getenv "MANIFESTS" ^ "/"
 
 let kubectl args f =
+  Logq.info (fun m ->
+      m "execute: %s" (Filename.quote_command kubectl_path args));
   let open Unix in
   let ic =
     open_process_args_in kubectl_path (Array.of_list (kubectl_path :: args))
@@ -55,44 +57,139 @@ let port_forward ~ns ~svc ~ports f =
       Fun.protect ~finally:(fun () -> Unix.kill pid Sys.sigint) f)
   |> ignore
 
+let expect_wexited_0 = function
+  | Unix.WEXITED 0 -> ()
+  | WEXITED i ->
+      Logq.err (fun m -> m "expect WEXITED 0 but got WEXITED %d" i);
+      assert false
+  | WSIGNALED i ->
+      Logq.err (fun m -> m "expect WEXITED 0 but got WSIGNALED %d" i);
+      assert false
+  | WSTOPPED i ->
+      Logq.err (fun m -> m "expect WEXITED 0 but got WSTOPPED %d" i);
+      assert false
+
 let new_session f =
+  let () =
+    kubectl [ "scale"; "-n"; "e2e"; "deploy"; "waq-web"; "--replicas=0" ] ignore
+    |> fst |> expect_wexited_0
+  in
   let _ =
     kubectl [ "delete"; "job"; "reset-waq-database"; "-n"; "e2e" ] ignore
   in
-  let _ = kubectl [ "apply"; "-f"; manifests ^ "waq-reset-db.yaml" ] ignore in
+  let _ =
+    kubectl [ "apply"; "-f"; manifests ^ "reset-waq-database.yaml" ] ignore
+  in
   let _ =
     kubectl [ "wait"; "--for=condition=complete"; "job/reset-waq-database"; "-n"; "e2e" ]
       ignore
     [@ocamlformat "disable"]
   in
+  let () =
+    kubectl [ "scale"; "-n"; "e2e"; "deploy"; "waq-web"; "--replicas=1" ] ignore
+    |> fst |> expect_wexited_0
+  in
+
+  let token1 =
+    let rec loop i =
+      if i > 10 then failwith "timeout: couldn't get access tokens for Mastodon";
+      Unix.sleep 5;
+      let token =
+        kubectl
+          (["exec"; "-n"; "e2e"; "deploy/waq-web"; "--"; "bash"; "-ce";
+            "/waq/waq oauth:generate_access_token user1 2> /dev/null"] [@ocamlformat "disable"])
+          (fun ic -> In_channel.input_line ic |> Option.value ~default:"")
+        |> snd
+      in
+      if token = "" then loop (i + 1) else token
+    in
+    loop 0
+  in
 
   port_forward ~ns:"e2e" ~svc:"waq-web" ~ports:"58080:8000" @@ fun () ->
-  let token1 =
-    kubectl
-      (["exec"; "-n"; "e2e"; "deploy/waq-web"; "--"; "bash"; "-ce";
-        "/waq/waq oauth:generate_access_token user1 2> /dev/null"]
-       [@ocamlformat "disable"])
-      (fun ic -> In_channel.input_line ic |> Option.value ~default:"")
-    |> snd
-  in
   f token1;
   ()
 
 let new_mastodon_session f =
-  let path =
-    Sys.getenv_opt "MSTDN_BIN"
-    |> Option.value ~default:"test_e2e/launch_mstdn.sh"
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-web"; "--replicas=0" ]
+      ignore
+    |> fst |> expect_wexited_0
   in
-  let open Unix in
-  let ic = open_process_args_in path [| path |] in
-  let token = In_channel.input_line ic |> Option.value ~default:"" in
-  let pid = process_in_pid ic in
-  Fun.protect
-    (fun () -> f token)
-    ~finally:(fun () ->
-      Logq.debug (fun m -> m "Killing mastodon processes");
-      kill pid Sys.sigint;
-      close_process_in ic |> ignore)
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-streaming"; "--replicas=0" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-sidekiq"; "--replicas=0" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+  let _, () =
+    kubectl
+      [ "delete"; "-f"; manifests ^ "reset-mastodon-database.yaml" ]
+      ignore
+  in
+  let () =
+    kubectl [ "apply"; "-f"; manifests ^ "reset-mastodon-database.yaml" ] ignore
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl [ "wait"; "--for=condition=complete"; "job/reset-mastodon-database"; "-n"; "e2e" ]
+      ignore
+    [@ocamlformat "disable"]
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-web"; "--replicas=1" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-streaming"; "--replicas=1" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl
+      [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-sidekiq"; "--replicas=1" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+  let () =
+    kubectl
+      [ "rollout"; "restart"; "-n"; "e2e"; "deploy"; "mastodon-gateway-nginx" ]
+      ignore
+    |> fst |> expect_wexited_0
+  in
+
+  Logq.info (fun m -> m "Resetting database for Mastodon");
+  let token1, _token2, _token3 =
+    let rec loop i =
+      if i > 10 then failwith "timeout: couldn't get access tokens for Mastodon";
+      Unix.sleep 5;
+      match
+        kubectl [ "logs"; "-n"; "e2e"; "job/reset-mastodon-database" ]
+          (fun ic ->
+            List.init 3 (fun _ ->
+                In_channel.input_line ic |> Option.value ~default:""))
+        |> snd
+      with
+      | [ token1; token2; token3 ] -> (token1, token2, token3)
+      | _ -> loop (i + 1)
+    in
+    loop 0
+  in
+
+  port_forward ~ns:"e2e" ~svc:"mastodon-gateway" ~ports:"58081:80" @@ fun () ->
+  f token1;
+  ()
 
 let make_waq_and_mstdn_scenario ?(timeout = 30.0) handler () : unit =
   new_session @@ fun waq_token ->
@@ -121,11 +218,9 @@ let make_waq_scenario ?(timeout = 30.0) handler () : unit =
 let waq_server_name = Sys.getenv "E2E_TEST_WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
 let waq url = waq_server_name ^ url
-
-let mstdn url =
-  let server_name = "http://localhost:3000" in
-  server_name ^ url
-
+let mstdn_server_name = Sys.getenv "E2E_TEST_MASTODON_SERVER_NAME"
+let mstdn_server_domain = Uri.(of_string mstdn_server_name |> domain)
+let mstdn url = mstdn_server_name ^ url
 let url = function `Waq -> waq | `Mstdn -> mstdn
 
 let pp_json (s : string) =

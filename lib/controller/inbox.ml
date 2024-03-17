@@ -141,9 +141,17 @@ let kick_inbox_update_person (r : ap_person) =
 (* Recv POST /users/:name/inbox *)
 let post req =
   match%lwt Activity.verify_activity_json req with
-  | _, Error (`AccountNotFound | `AccountIsLocal) ->
+  | body, Error (`AccountNotFound | `AccountIsLocal) ->
+      Logq.err (fun m -> m "account not found or account is local: %s" body);
       Httpq.Server.respond ~status:`Accepted ""
-  | _, Error (`VerifFailure _) -> Httpq.Server.respond ~status:`Unauthorized ""
+  | body, Error (`VerifFailure e) ->
+      Logq.err (fun m ->
+          m "verification failure of activity json: %s: %s"
+            (match e with
+            | `AlgorithmNotImplemented -> "algorithm not implemented"
+            | `Msg msg -> msg)
+            body);
+      Httpq.Server.respond ~status:`Unauthorized ""
   | body, Ok () -> (
       try%lwt
         (*Logq.debug (fun m -> m ">>>>>>>>\n%s" body);*)
