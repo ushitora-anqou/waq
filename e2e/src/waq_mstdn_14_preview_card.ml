@@ -31,8 +31,8 @@ let f_case2 (a0 : agent) (a1 : agent) =
 let f_mstdn_waq =
   make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
   let a0 =
-    make_agent ~kind:`Mstdn ~token:mstdn_token ~username:"admin"
-      ~domain:"localhost:3000"
+    make_agent ~kind:`Mstdn ~token:mstdn_token ~username:"mstdn1"
+      ~domain:mstdn_server_domain
   in
   let a1 =
     make_agent ~kind:`Waq ~token:waq_token ~username:"user1"
