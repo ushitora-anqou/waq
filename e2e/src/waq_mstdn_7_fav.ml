@@ -2,16 +2,17 @@ open Common
 
 let f =
   make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
-  (* Lookup me from localhost:3000 *)
+  (* Lookup me from mstdn_server_domain *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
       ()
   in
-  (* Lookup @admin@localhost:3000 *)
-  let%lwt admin_id, _username, _acct =
-    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
+  (* Lookup @mstdn1@mstdn_server_domain *)
+  let%lwt mstdn1_id, _username, _acct =
+    lookup `Waq ~token:waq_token ~username:"mstdn1" ~domain:mstdn_server_domain
+      ()
   in
-  (* Follow me from @admin@localhost:3000 *)
+  (* Follow me from @mstdn1@mstdn_server_domain *)
   follow `Mstdn ~token:mstdn_token aid;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
@@ -26,14 +27,14 @@ let f =
     | _ -> assert false
   in
 
-  (* Favourite the post by @admin@localhost:3000 *)
+  (* Favourite the post by @mstdn1@mstdn_server_domain *)
   let%lwt _ = fav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
   Lwt_unix.sleep 1.0;%lwt
 
   (* Check if the post is favourited *)
   (match%lwt get_favourited_by `Waq ~token:waq_token ~id:waq_status_id with
   | [ a ] ->
-      assert (a.id = admin_id);
+      assert (a.id = mstdn1_id);
       Lwt.return_unit
   | _ -> assert false);%lwt
 
@@ -48,9 +49,9 @@ let f =
    };
    { typ = "follow"; account = { id = account_id'; _ }; _ };
   ] ->
-      assert (account_id = admin_id);
+      assert (account_id = mstdn1_id);
       assert (status_id = waq_status_id);
-      assert (account_id' = admin_id);
+      assert (account_id' = mstdn1_id);
       Lwt.return_unit
   | _ -> assert false);%lwt
 
