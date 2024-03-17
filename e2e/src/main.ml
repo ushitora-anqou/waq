@@ -18,7 +18,8 @@ let all_tests =
     ("waq-mstdn-10-3", Waq_mstdn_10_attachment.f_waq_waq);
     ("waq-mstdn-13", Waq_mstdn_13_v2_search.f);
     ("waq-1", Waq_1.f);
-    ("waq-2", Waq_2_ws.f);
+    ("waq-2-1", Waq_2_ws.f1);
+    ("waq-2-2", Waq_2_ws.f2);
     ("waq-3", Waq_3.f);
     ("waq-4", Waq_4_reblog.f);
     ("waq-5", Waq_5_fav.f);

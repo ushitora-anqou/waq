@@ -1,5 +1,18 @@
 open Lwt.Infix
 
+let may_subscribe ~user_id ~stream ~ws_conn subscription_ref =
+  match !subscription_ref with
+  | Some _ -> ()
+  | None ->
+      let key = Streaming.make_key ~user_id ~stream in
+      let conn_id = Streaming.(add key (`WebSocket ws_conn)) in
+      subscription_ref := Some (key, conn_id)
+
+let may_unsubscribe subscription_ref =
+  !subscription_ref
+  |> Option.iter (fun (key, conn_id) -> Streaming.remove key conn_id);
+  subscription_ref := None
+
 let get req =
   let%lwt access_token =
     let open Httpq.Server in
@@ -7,9 +20,7 @@ let get req =
     | Some v -> v
     | None -> req |> header `Sec_websocket_protocol
   in
-  let%lwt stream = req |> Httpq.Server.query "stream" in
-  if stream <> "user" then Httpq.Server.raise_error_response `Bad_request;
-  let stream = `User in
+  let%lwt stream = req |> Httpq.Server.query_opt "stream" in
 
   let%lwt user_id =
     try%lwt
@@ -18,14 +29,40 @@ let get req =
     with _ -> Httpq.Server.raise_error_response `Unauthorized
   in
 
-  Httpq.Server.websocket req @@ fun c ->
-  let key = Streaming.make_key ~user_id ~stream in
-  let conn_id = Streaming.(add key (`WebSocket c)) in
-  let rec loop () =
-    match%lwt Httpq.Server.ws_recv c with
-    | None -> Lwt.return_unit (* Closed *)
-    | Some e ->
-        Logq.warn (fun m -> m "Unhandled websocket event: %s" e);
-        loop () (* FIXME *)
+  Httpq.Server.websocket req @@ fun ws_conn ->
+  let user_subscription_ref = ref None in
+  let may_subscribe_user () =
+    may_subscribe ~user_id ~stream:`User ~ws_conn user_subscription_ref
   in
-  Lwt.finalize loop (fun () -> Lwt.return @@ Streaming.remove key conn_id)
+  let may_unsubscribe_user () = may_unsubscribe user_subscription_ref in
+
+  (match stream with
+  | None -> ()
+  | Some "user" -> may_subscribe_user ()
+  | _ -> Httpq.Server.raise_error_response `Bad_request);
+
+  let rec loop () =
+    match%lwt Httpq.Server.ws_recv ws_conn with
+    | None -> Lwt.return_unit (* Closed *)
+    | Some json ->
+        (match
+           let ev = Yojson.Safe.from_string json |> Yojson.Safe.Util.to_assoc in
+           let typ =
+             ev |> List.assoc_opt "type"
+             |> Option.map Yojson.Safe.Util.to_string
+           in
+           let stream =
+             ev |> List.assoc_opt "stream"
+             |> Option.map Yojson.Safe.Util.to_string
+           in
+           (typ, stream)
+         with
+        | Some "subscribe", Some "user" -> may_subscribe_user ()
+        | Some "unsubscribe", Some "user" -> may_unsubscribe_user ()
+        | _ | (exception (Yojson.Json_error _ | Yojson.Safe.Util.Type_error _))
+          ->
+            Logq.warn (fun m -> m "Unhandled websocket event: %s" json);
+            ());
+        loop ()
+  in
+  Lwt.finalize loop (fun () -> Lwt.return (may_unsubscribe_user ()))
