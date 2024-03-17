@@ -32,3 +32,9 @@ spec:
             - name: http
               containerPort: 5314
               protocol: TCP
+          volumeMounts:
+            - mountPath: /elk/data
+              name: data
+      volumes:
+        - name: data
+          emptyDir: {}

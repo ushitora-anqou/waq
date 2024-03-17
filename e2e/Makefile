@@ -62,8 +62,10 @@ clean-cluster:
 start-ngrok:
 	systemctl --user reset-failed ngrok-waq || true
 	systemctl --user reset-failed ngrok-mastodon || true
+	systemctl --user reset-failed ngrok-elk || true
 	systemd-run --user --unit=ngrok-waq --working-directory=$(WD) ./start-ngrok.sh waq 58080
 	systemd-run --user --unit=ngrok-mastodon --working-directory=$(WD) ./start-ngrok.sh mastodon 58081
+	systemd-run --user --unit=ngrok-elk --working-directory=$(WD) ./start-ngrok.sh elk 58082
 
 .PHONY: stop-ngrok
 stop-ngrok:
@@ -71,6 +73,8 @@ stop-ngrok:
 	rm -f _test_waq_domain
 	systemctl --user stop ngrok-mastodon || true
 	rm -f _test_mastodon_domain
+	systemctl --user stop ngrok-elk || true
+	rm -f _test_elk_domain
 
 .PHONY: create-cluster
 create-cluster:
@@ -81,6 +85,9 @@ create-cluster:
 	$(KUBECTL) create namespace e2e
 	KUBECONFIG=$(KUBECONFIG) $(HELM) install --namespace e2e --repo https://ushitora-anqou.github.io/mahout mahout mahout
 	$(KUBECTL) apply -f $(WD)/manifests/postgres.yaml
+
+.PHONY: start-elk
+start-elk:
 	$(KUBECTL) apply -f $(WD)/manifests/elk.yaml
 
 .PHONY: start-mastodon
