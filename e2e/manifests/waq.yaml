@@ -40,6 +40,12 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+          volumeMounts:
+            - mountPath: /static
+              name: static
+      volumes:
+        - name: static
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Secret
