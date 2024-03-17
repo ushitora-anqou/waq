@@ -1,7 +1,10 @@
 # Thanks to: https://docs.github.com/en/actions/publishing-packages/publishing-docker-images
 name: Publish Docker image
 
-on: push
+on:
+  push:
+    branches:
+      - master
 
 jobs:
   push_to_registry:
