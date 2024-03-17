@@ -93,45 +93,10 @@ let generate_mstdn_agent ctxt =
   ctxt.mstdn_num_used_tokens <- i + 1;
   let token = ctxt.mstdn_tokens.(i) in
   let username = "mstdn" ^ string_of_int (i + 1) in
-  make_agent ~kind:`Mstdn ~token ~username ~domain:"localhost:3000"
-
-let new_session f =
-  let path =
-    Sys.getenv_opt "WAQ_BIN" |> Option.value ~default:"test_e2e/launch_waq.sh"
-  in
-  let open Unix in
-  let ic = open_process_args_in path [| path |] in
-  let token1 = In_channel.input_line ic |> Option.get in
-  let token2 = In_channel.input_line ic |> Option.get in
-  let token3 = In_channel.input_line ic |> Option.get in
-  let pid = process_in_pid ic in
-  Fun.protect
-    (fun () -> f [| token1; token2; token3 |])
-    ~finally:(fun () ->
-      kill pid Sys.sigint;
-      close_process_in ic |> ignore)
-
-let new_mastodon_session f =
-  let path =
-    Sys.getenv_opt "MSTDN_BIN"
-    |> Option.value ~default:"test_e2e/launch_mstdn.sh"
-  in
-  let open Unix in
-  let ic = open_process_args_in path [| path |] in
-  let _admin = In_channel.input_line ic |> Option.get in
-  let token1 = In_channel.input_line ic |> Option.get in
-  let token2 = In_channel.input_line ic |> Option.get in
-  let token3 = In_channel.input_line ic |> Option.get in
-  let pid = process_in_pid ic in
-  Fun.protect
-    (fun () -> f [| token1; token2; token3 |])
-    ~finally:(fun () ->
-      Logq.debug (fun m -> m "Killing mastodon processes");
-      kill pid Sys.sigint;
-      close_process_in ic |> ignore)
+  make_agent ~kind:`Mstdn ~token ~username ~domain:mstdn_server_domain
 
 let launch_waq ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) : unit =
-  new_session @@ fun waq_tokens ->
+  Internal.launch_waq @@ fun waq_tokens ->
   Logq.debug (fun m ->
       m "Access token for Waq: [%s]"
         (waq_tokens |> Array.to_list |> String.concat ";"));
@@ -145,11 +110,11 @@ let launch_waq ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) : unit =
 
 let launch_waq_and_mstdn ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) :
     unit =
-  new_session @@ fun waq_tokens ->
+  Internal.launch_waq @@ fun waq_tokens ->
   Logq.debug (fun m ->
       m "Access token for Waq: [%s]"
         (waq_tokens |> Array.to_list |> String.concat ";"));
-  new_mastodon_session @@ fun mstdn_tokens ->
+  Internal.launch_mastodon @@ fun mstdn_tokens ->
   Logq.debug (fun m ->
       m "Access token for Mastodon: [%s]"
         (mstdn_tokens |> Array.to_list |> String.concat ";"));
