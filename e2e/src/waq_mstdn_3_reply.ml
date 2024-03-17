@@ -2,22 +2,23 @@ open Common
 
 let f =
   make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
-  (* Lookup me from localhost:3000 *)
+  (* Lookup me from mstdn_server_domain *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
       ()
   in
 
-  (* Lookup @admin@localhost:3000 *)
-  let%lwt admin_id, _username, _acct =
-    lookup `Waq ~token:waq_token ~username:"admin" ~domain:"localhost:3000" ()
+  (* Lookup @mstdn1@mstdn_server_domain *)
+  let%lwt mstdn1_id, _username, _acct =
+    lookup `Waq ~token:waq_token ~username:"mstdn1" ~domain:mstdn_server_domain
+      ()
   in
 
-  (* Follow @admin@localhost:3000 *)
-  follow `Waq ~token:waq_token admin_id;%lwt
+  (* Follow @mstdn1@mstdn_server_domain *)
+  follow `Waq ~token:waq_token mstdn1_id;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Follow me from @admin@localhost:3000 *)
+  (* Follow me from @mstdn1@mstdn_server_domain *)
   follow `Mstdn ~token:mstdn_token aid;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
@@ -25,7 +26,7 @@ let f =
   let%lwt { uri; _ } = post `Waq ~token:waq_token () in
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Get home timeline of @admin@localhost:3000 and obtain the status's id *)
+  (* Get home timeline of @mstdn1@mstdn_server_domain and obtain the status's id *)
   let%lwt id =
     home_timeline `Mstdn ~token:mstdn_token >|= function
     | [ `Assoc l ] ->
@@ -35,7 +36,7 @@ let f =
     | _ -> assert false
   in
 
-  (* Reply by @admin@localhost:3000 *)
+  (* Reply by @mstdn1@mstdn_server_domain *)
   let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token ~in_reply_to_id:id () in
   Lwt_unix.sleep 1.0;%lwt
 
@@ -56,7 +57,7 @@ let f =
   let%lwt { uri; _ } = post `Waq ~token:waq_token ~in_reply_to_id:id () in
   Lwt_unix.sleep 1.0;%lwt
 
-  (* Get home timeline of @admin@localhost:3000 and check *)
+  (* Get home timeline of @mstdn1@mstdn_server_domain and check *)
   let%lwt _ =
     home_timeline `Mstdn ~token:mstdn_token >|= function
     | [ `Assoc l; `Assoc l2; `Assoc _ ] ->
