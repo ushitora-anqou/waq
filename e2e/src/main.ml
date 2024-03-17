@@ -4,8 +4,8 @@ module Ptime = Waq.Util.Ptime
 let all_tests =
   [
     ("waq-mstdn-1", Waq_mstdn_1.f);
-    (*
     ("waq-mstdn-2", Waq_mstdn_2.f);
+    (*
     ("waq-mstdn-3", Waq_mstdn_3_reply.f);
     ("waq-mstdn-4", Waq_mstdn_4_reblog.f);
     ("waq-mstdn-5", Waq_mstdn_5_reblog.f);
