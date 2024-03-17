@@ -13,10 +13,10 @@ let all_tests =
     ("waq-mstdn-8", Waq_mstdn_8_lookup_search.f);
     ("waq-mstdn-9-1", Waq_mstdn_9_delete.f_waq_mstdn);
     ("waq-mstdn-9-2", Waq_mstdn_9_delete.f_mstdn_waq);
-    (*
     ("waq-mstdn-10-1", Waq_mstdn_10_attachment.f_waq_mstdn);
     ("waq-mstdn-10-2", Waq_mstdn_10_attachment.f_mstdn_waq);
     ("waq-mstdn-10-3", Waq_mstdn_10_attachment.f_waq_waq);
+    (*
     ("waq-mstdn-13", Waq_mstdn_13_v2_search.f);
     *)
     ("waq-1", Waq_1.f);
