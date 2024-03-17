@@ -29,6 +29,30 @@ module Internal = struct
         Fun.protect ~finally:(fun () -> Unix.kill pid Sys.sigint) f)
     |> ignore
 
+  let wait ?(num_retries = 5) ?(timeout = "5m") ~for_condition target =
+    let rec loop i =
+      if i >= num_retries then assert false
+      else
+        match
+          kubectl
+            [
+              "wait";
+              "--for=condition=" ^ for_condition;
+              target;
+              "-n";
+              "e2e";
+              "--timeout=" ^ timeout;
+            ]
+            ignore
+          |> fst
+        with
+        | Unix.WEXITED 0 -> ()
+        | _ ->
+            Unix.sleep 10;
+            loop (i + 1)
+    in
+    loop 0
+
   let expect_wexited_0 = function
     | Unix.WEXITED 0 -> ()
     | WEXITED i ->
@@ -55,13 +79,7 @@ module Internal = struct
       kubectl [ "apply"; "-f"; manifests ^ "reset-waq-database.yaml" ] ignore
       |> fst |> expect_wexited_0
     in
-    let () =
-      kubectl
-        ([ "wait"; "--for=condition=complete"; "job/reset-waq-database";
-           "-n"; "e2e"; "--timeout=5m"] [@ocamlformat "disable"])
-        ignore
-      |> fst |> expect_wexited_0
-    in
+    let () = wait ~for_condition:"complete" "job/reset-waq-database" in
     let () =
       kubectl
         [ "scale"; "-n"; "e2e"; "deploy"; "waq-web"; "--replicas=1" ]
@@ -94,6 +112,8 @@ module Internal = struct
     ()
 
   let launch_mastodon f =
+    let () = wait ~for_condition:"available" "deploy/mastodon-web" in
+
     let () =
       kubectl
         [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-web"; "--replicas=0" ]
@@ -123,13 +143,7 @@ module Internal = struct
         ignore
       |> fst |> expect_wexited_0
     in
-    let () =
-      kubectl
-        ([ "wait"; "--for=condition=complete"; "job/reset-mastodon-database";
-           "-n"; "e2e"; "--timeout=5m"] [@ocamlformat "disable"])
-        ignore
-      |> fst |> expect_wexited_0
-    in
+    let () = wait ~for_condition:"complete" "job/reset-mastodon-database" in
     let () =
       kubectl
         [ "scale"; "-n"; "e2e"; "deploy"; "mastodon-web"; "--replicas=1" ]
