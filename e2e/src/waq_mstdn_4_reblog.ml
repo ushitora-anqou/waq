@@ -2,13 +2,13 @@ open Common
 
 let f =
   make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
-  (* Lookup me from localhost:3000 *)
+  (* Lookup me from mstdn_server_domain *)
   let%lwt aid, _, _ =
     lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
       ()
   in
 
-  (* Follow me from @admin@localhost:3000 *)
+  (* Follow me from @mstdn1@mstdn_server_domain *)
   follow `Mstdn ~token:mstdn_token aid;%lwt
   Lwt_unix.sleep 1.0;%lwt
 
@@ -20,7 +20,7 @@ let f =
   let%lwt _ = reblog `Waq ~token:waq_token ~id in
   Lwt_unix.sleep 2.0;%lwt
 
-  (* Get home timeline of @admin@localhost:3000 *)
+  (* Get home timeline of @mstdn1@mstdn_server_domain *)
   let%lwt _ =
     home_timeline `Mstdn ~token:mstdn_token >|= function
     | [ `Assoc l ] ->
