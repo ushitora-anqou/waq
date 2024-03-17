@@ -8,8 +8,8 @@ let all_tests =
     ("waq-mstdn-3", Waq_mstdn_3_reply.f);
     ("waq-mstdn-4", Waq_mstdn_4_reblog.f);
     ("waq-mstdn-5", Waq_mstdn_5_reblog.f);
-    (*
     ("waq-mstdn-6", Waq_mstdn_6_fav.f);
+    (*
     ("waq-mstdn-7", Waq_mstdn_7_fav.f);
     ("waq-mstdn-8", Waq_mstdn_8_lookup_search.f);
     ("waq-mstdn-9-1", Waq_mstdn_9_delete.f_waq_mstdn);
