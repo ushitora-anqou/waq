@@ -41,6 +41,7 @@ let kubectl args f =
   in
   try
     let res = f ic in
+    let _ = In_channel.input_all ic (* necessary to avoid SIGPIPE *) in
     (close_process_in ic, res)
   with e ->
     close_process_in ic |> ignore;
