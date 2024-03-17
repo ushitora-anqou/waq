@@ -29,18 +29,7 @@ setup.log
 _opam/
 
 # Written for Waq
-/config/dev.yml
-/config/test.yml
 /misc/
-/Makefile
-/log
-/ctl
-/static/system
-/docker_prod/data
-/docker_prod/log
-/docker_prod/config/prod.yml
-/_data
-.env*
 e2e/_test*
 e2e/_bin
 e2e/.kubeconfig
