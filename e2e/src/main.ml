@@ -38,10 +38,10 @@ let all_tests =
     ("02-summary-waq-waq", Waq_mstdn_12_summary.f_waq_waq);
     ("03-preview-card-waq-waq", Waq_mstdn_14_preview_card.f_waq_waq);
     ("03-preview-card-mstdn-waq", Waq_mstdn_14_preview_card.f_mstdn_waq);
-    (*
     ("04-text-waq-waq", Waq_mstdn_15_text.f_waq_waq);
     ("04-text-waq-mstdn", Waq_mstdn_15_text.f_waq_mstdn);
     ("04-text-mstdn-waq", Waq_mstdn_15_text.f_mstdn_waq);
+    (*
     ("06-cred-waq-waq", Waq_mstdn_16_cred.f_waq_waq);
     ("06-cred-waq-mstdn", Waq_mstdn_16_cred.f_waq_mstdn);
     ("06-cred-mstdn-waq", Waq_mstdn_16_cred.f_mstdn_waq);
