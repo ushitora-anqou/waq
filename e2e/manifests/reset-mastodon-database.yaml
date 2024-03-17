@@ -25,7 +25,6 @@ data:
         scopes: "read write follow",
       ).token
     end
-    puts("TOKEN: #{f(username: "admin")}")
     puts("TOKEN: #{f(username: "mstdn1")}")
     puts("TOKEN: #{f(username: "mstdn2")}")
     puts("TOKEN: #{f(username: "mstdn3")}")

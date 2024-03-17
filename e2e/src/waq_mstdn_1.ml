@@ -22,19 +22,19 @@ let f =
   in
   let uris = ref [] in
   websocket `Waq ~token:waq_token handler (fun pushf ->
-      (* Lookup @admin@mstdn_server_domain *)
-      let%lwt admin_id, username, acct =
+      (* Lookup @mstdn1@mstdn_server_domain *)
+      let%lwt mstdn1_id, username, acct =
         lookup `Waq ~token:waq_token ~username:"mstdn1"
           ~domain:mstdn_server_domain ()
       in
       assert (username = "mstdn1");
       assert (acct = "mstdn1@" ^ mstdn_server_domain);
 
-      (* Follow @admin@mstdn_server_domain *)
-      follow `Waq ~token:waq_token admin_id;%lwt
+      (* Follow @mstdn1@mstdn_server_domain *)
+      follow `Waq ~token:waq_token mstdn1_id;%lwt
       Lwt_unix.sleep 1.0;%lwt
 
-      (* Post by @admin@mstdn_server_domain *)
+      (* Post by @mstdn1@mstdn_server_domain *)
       let%lwt { uri; _ } = post `Mstdn ~token:mstdn_token () in
       uris := uri :: !uris;
       Lwt_unix.sleep 1.0;%lwt
@@ -57,8 +57,8 @@ let f =
                  (Yojson.Safe.to_string (`List res)));
            assert false);%lwt
 
-      (* Unfollow @admin@mstdn_server_domain *)
-      unfollow `Waq ~token:waq_token admin_id;%lwt
+      (* Unfollow @mstdn1@mstdn_server_domain *)
+      unfollow `Waq ~token:waq_token mstdn1_id;%lwt
       Lwt_unix.sleep 1.0;%lwt
 
       (* Get my home timeline and check again *)
