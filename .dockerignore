@@ -5,4 +5,4 @@ static/system
 _data
 docker_dev/
 docker_prod/
-e2e
+e2e/
