@@ -9,6 +9,10 @@ KUBECTL:=$(BIN)/kubectl-$(KUBERNETES_VERSION)
 HELM:=$(BIN)/helm-$(HELM_VERSION)
 IMAGE=waq:dev
 
+.PHONY: build
+build:
+	dune build
+
 .PHONY: run-test
 run-test:
 	env \
