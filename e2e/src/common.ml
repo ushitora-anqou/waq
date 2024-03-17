@@ -77,13 +77,15 @@ let new_session f =
   let _ =
     kubectl [ "delete"; "job"; "reset-waq-database"; "-n"; "e2e" ] ignore
   in
-  let _ =
+  let () =
     kubectl [ "apply"; "-f"; manifests ^ "reset-waq-database.yaml" ] ignore
+    |> fst |> expect_wexited_0
   in
-  let _ =
+  let () =
     kubectl [ "wait"; "--for=condition=complete"; "job/reset-waq-database"; "-n"; "e2e" ]
       ignore
     [@ocamlformat "disable"]
+    |> fst |> expect_wexited_0
   in
   let () =
     kubectl [ "scale"; "-n"; "e2e"; "deploy"; "waq-web"; "--replicas=1" ] ignore
@@ -435,7 +437,13 @@ let lookup ~token kind ?domain ~username () =
            "@" ^ username ^ "@" ^ domain))
   >|= function
   | [ acct ], _, _ -> (acct.id, acct.username, acct.acct)
-  | _ -> assert false
+  | accts, _, _ ->
+      Logq.err (fun m ->
+          m "lookup failed: accts=[%s]"
+            (accts
+            |> List.map (fun (a : account) -> a.acct)
+            |> String.concat ", "));
+      assert false
 
 let get_account kind id =
   do_fetch kind ("/api/v1/accounts/" ^ id)
