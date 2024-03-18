@@ -1,3 +1,4 @@
+open Common
 open Lwt.Infix [@@warning "-33"]
 open Sqlx
 open Util
@@ -667,36 +668,31 @@ let test_migration _ _ =
 
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
-  match Sys.getenv_opt "SQLX_TEST_DB_URL" with
-  | None -> ()
-  | Some url ->
-      Db.initialize url;
-      Lwt_main.run
-      @@ Alcotest_lwt.run "sqlx"
+  with_postgres ~host_port:54321 ~container_name:"waq-test-sqlx-postgres"
+  @@ fun url ->
+  Db.initialize url;
+  Lwt_main.run
+  @@ Alcotest_lwt.run ~and_exit:false "sqlx"
+       [
+         ( "select/insert/update/delete",
            [
-             ( "select/insert/update/delete",
-               [
-                 Alcotest_lwt.test_case "account" `Quick
-                   test_account_basic_ops_case1;
-                 Alcotest_lwt.test_case "bool" `Quick test_bool;
-               ] );
-             ( "preload",
-               [
-                 Alcotest_lwt.test_case "status" `Quick test_status_preload;
-                 Alcotest_lwt.test_case "notification" `Quick
-                   test_notification_target_status;
-                 Alcotest_lwt.test_case "account" `Quick test_account_preload;
-               ] );
-             ( "transaction",
-               [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ]
-             );
-             ( "count",
-               [ Alcotest_lwt.test_case "status" `Quick test_count_status ] );
-             ( "*_one, *_many",
-               [
-                 Alcotest_lwt.test_case "account" `Quick
-                   test_account_derived_ops;
-               ] );
-             ( "migrate",
-               [ Alcotest_lwt.test_case "migration" `Quick test_migration ] );
-           ]
+             Alcotest_lwt.test_case "account" `Quick
+               test_account_basic_ops_case1;
+             Alcotest_lwt.test_case "bool" `Quick test_bool;
+           ] );
+         ( "preload",
+           [
+             Alcotest_lwt.test_case "status" `Quick test_status_preload;
+             Alcotest_lwt.test_case "notification" `Quick
+               test_notification_target_status;
+             Alcotest_lwt.test_case "account" `Quick test_account_preload;
+           ] );
+         ( "transaction",
+           [ Alcotest_lwt.test_case "case1" `Quick test_transaction_case1 ] );
+         ("count", [ Alcotest_lwt.test_case "status" `Quick test_count_status ]);
+         ( "*_one, *_many",
+           [ Alcotest_lwt.test_case "account" `Quick test_account_derived_ops ]
+         );
+         ( "migrate",
+           [ Alcotest_lwt.test_case "migration" `Quick test_migration ] );
+       ]

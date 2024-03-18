@@ -122,17 +122,17 @@ let test_statuses_replied_by _ _ =
    | _ -> assert false);%lwt
   Lwt.return_unit
 
+open Common
+
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
-  match Sys.getenv_opt "SQLX_TEST_DB_URL1" with
-  | None -> ()
-  | Some url ->
-      Db.initialize url;
-      Lwt_main.run
-      @@ Alcotest_lwt.run "sqlx"
-           [
-             ( "replied_statuses_by_account",
-               [
-                 Alcotest_lwt.test_case "case1" `Quick test_statuses_replied_by;
-               ] );
-           ]
+  with_postgres ~host_port:54320
+    ~container_name:"waq-test-sqlx-postgres-example"
+  @@ fun url ->
+  Db.initialize url;
+  Lwt_main.run
+  @@ Alcotest_lwt.run ~and_exit:false "sqlx"
+       [
+         ( "replied_statuses_by_account",
+           [ Alcotest_lwt.test_case "case1" `Quick test_statuses_replied_by ] );
+       ]
