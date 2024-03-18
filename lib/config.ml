@@ -1,11 +1,22 @@
 module Internal = struct
-  let getenv ~default name = Sys.getenv_opt name |> Option.value ~default
+  type cache = { m : (string, string) Hashtbl.t }
+
+  let cache = { m = Hashtbl.create 10 }
+
+  let getenv ~default name =
+    match Hashtbl.find_opt cache.m name with
+    | Some v -> v
+    | None -> Sys.getenv_opt name |> Option.value ~default
 
   let getenv_exn name =
-    match Sys.getenv_opt name with
-    | None -> failwith ("Failed to get the environment variable: " ^ name)
-    | Some s -> s
+    match Hashtbl.find_opt cache.m name with
+    | Some v -> v
+    | None -> (
+        match Sys.getenv_opt name with
+        | None -> failwith ("Failed to get the environment variable: " ^ name)
+        | Some s -> s)
 
+  let setenv name value = Hashtbl.replace cache.m name value
   let listen () = getenv ~default:"127.0.0.1:8000" "LISTEN"
   let server_name () = getenv_exn "SERVER_NAME"
   let db_url () = getenv_exn "DB_URL"

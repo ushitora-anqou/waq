@@ -1,6 +1,7 @@
 open Waq
 
 let test_match_mention () =
+  Config.Internal.setenv "SERVER_NAME" "";
   let m = Text_helper.match_mention in
   assert (m "test @foo" = [ (5, 4, "foo", None) ]);
   assert (m "test @foo@example.com" = [ (5, 16, "foo", Some "example.com") ]);

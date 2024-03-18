@@ -124,10 +124,15 @@ let test_statuses_replied_by _ _ =
 
 let () =
   Logq.(add_reporter (make_reporter ~l:Debug ()));
-  Db.initialize (Sys.getenv "SQLX_TEST_DB_URL1");
-  Lwt_main.run
-  @@ Alcotest_lwt.run "sqlx"
-       [
-         ( "replied_statuses_by_account",
-           [ Alcotest_lwt.test_case "case1" `Quick test_statuses_replied_by ] );
-       ]
+  match Sys.getenv_opt "SQLX_TEST_DB_URL1" with
+  | None -> ()
+  | Some url ->
+      Db.initialize url;
+      Lwt_main.run
+      @@ Alcotest_lwt.run "sqlx"
+           [
+             ( "replied_statuses_by_account",
+               [
+                 Alcotest_lwt.test_case "case1" `Quick test_statuses_replied_by;
+               ] );
+           ]
