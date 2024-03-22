@@ -58,7 +58,7 @@ let start_server port k callback =
     Cohttp_lwt_unix.Server.make_response_action ~callback ()
     |> Cohttp_lwt_unix.Server.create ~mode:(`TCP (`Port port))
   in
-  Lwt.pick [ server; (k >>= fun () -> Lwt.task () |> fst) ] |> Lwt_main.run
+  Lwt.pick [ server; (k >>= fun () -> Lwt.task () |> fst) ]
 
 type ws_conn = {
   mutable frames_out_fn : (Websocket.Frame.t option -> unit) option;

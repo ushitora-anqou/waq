@@ -14,33 +14,43 @@ let server () =
     req |> render ~default [ (text_html, main) ]
   in
 
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
   Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
   Migration.verify_migration_status ();%lwt
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
   Lwt.return_unit
 
-let db_migrate () = Lwt_main.run @@ Migration.migrate ()
-let db_rollback () = Lwt_main.run @@ Migration.rollback ()
+let db_migrate () =
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () -> Migration.migrate ()
+
+let db_rollback () =
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () -> Migration.rollback ()
 
 let db_reset () =
-  let f : unit Lwt.t =
-    Db.debug_drop_all_tables_in_db ();%lwt
-    Migration.migrate ();%lwt
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
+  Db.debug_drop_all_tables_in_db ();%lwt
+  Migration.migrate ();%lwt
 
-    if Config.debug_generate_test_users () then
-      (* Generate some users for tests *)
-      [ 1; 2; 3 ] |> List.rev
-      |> Lwt_list.iter_s (fun i ->
-             let open Printf in
-             let username = sprintf "user%d" i in
-             let display_name = sprintf "User %d's display name" i in
-             let email = sprintf "user%d@example.com" i in
-             let password = sprintf "user%dpassword" i in
-             Db.register_user ~username ~display_name ~email ~password
-             |> ignore_lwt)
-    else Lwt.return_unit
-  in
-  Lwt_main.run f
+  if Config.debug_generate_test_users () then
+    (* Generate some users for tests *)
+    [ 1; 2; 3 ] |> List.rev
+    |> Lwt_list.iter_s (fun i ->
+           let open Printf in
+           let username = sprintf "user%d" i in
+           let display_name = sprintf "User %d's display name" i in
+           let email = sprintf "user%d@example.com" i in
+           let password = sprintf "user%dpassword" i in
+           Db.register_user ~username ~display_name ~email ~password
+           |> ignore_lwt)
+  else Lwt.return_unit
 
 let db_generate_migration name =
   let (y, m, d), ((hh, mm, ss), _) = Ptime.(now () |> to_date_time) in
@@ -91,25 +101,24 @@ add_column ~table_name:"preview_cards" ~name:"blurhash" ~spec:"TEXT"
   ()
 
 let oauth_generate_access_token username =
-  let f =
-    (* Generate a new OAuth application named "Web" *)
-    let%lwt web =
-      Oauth_helper.generate_application ~name:"Web"
-        ~redirect_uri:"urn:ietf:wg:oauth:2.0:oob"
-        ~scopes:"read write follow push"
-    in
-    let%lwt user =
-      let%lwt a = Db.(e @@ Account.get_one ~username) in
-      Db.(e @@ User.get_one ~account_id:a#id)
-    in
-    let%lwt access_token =
-      Oauth_helper.generate_access_token ~scopes:"read write follow push"
-        ~resource_owner_id:user#id ~app:web ()
-    in
-    Lwt_io.printf "%s\n%!" access_token#token;%lwt
-    Lwt.return_unit
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
+  (* Generate a new OAuth application named "Web" *)
+  let%lwt web =
+    Oauth_helper.generate_application ~name:"Web"
+      ~redirect_uri:"urn:ietf:wg:oauth:2.0:oob" ~scopes:"read write follow push"
   in
-  Lwt_main.run f
+  let%lwt user =
+    let%lwt a = Db.(e @@ Account.get_one ~username) in
+    Db.(e @@ User.get_one ~account_id:a#id)
+  in
+  let%lwt access_token =
+    Oauth_helper.generate_access_token ~scopes:"read write follow push"
+      ~resource_owner_id:user#id ~app:web ()
+  in
+  Lwt_io.printf "%s\n%!" access_token#token;%lwt
+  Lwt.return_unit
 
 let hidden_input f =
   let open Unix in
@@ -122,70 +131,70 @@ let hidden_input f =
   res
 
 let user_register ?username ?display_name ?email ?password () =
-  let f =
-    let username =
-      match username with
-      | Some s -> s
-      | None ->
-          print_string "Username: ";
-          read_line () |> String.trim
-    in
-    let display_name =
-      match display_name with
-      | Some s -> s
-      | None ->
-          print_string "Display name: ";
-          read_line () |> String.trim
-    in
-    let email =
-      match email with
-      | Some s -> s
-      | None ->
-          print_string "Email: ";
-          read_line () |> String.trim
-    in
-    let password =
-      match password with
-      | Some s -> s
-      | None ->
-          hidden_input @@ fun () ->
-          print_string "Password: ";
-          let password = read_line () |> String.trim in
-          print_newline ();
-          print_string "Retype your password: ";
-          let password' = read_line () |> String.trim in
-          print_newline ();
-          if password <> password' then failwith "Password was not equal";
-          password
-    in
-    let%lwt _, u = Db.register_user ~username ~display_name ~email ~password in
-    Printf.printf "Correctly registered. User # = %d"
-      (u#id |> Model.User.ID.to_int);
-    Lwt.return_unit
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
+  let username =
+    match username with
+    | Some s -> s
+    | None ->
+        print_string "Username: ";
+        read_line () |> String.trim
   in
-  Lwt_main.run f
+  let display_name =
+    match display_name with
+    | Some s -> s
+    | None ->
+        print_string "Display name: ";
+        read_line () |> String.trim
+  in
+  let email =
+    match email with
+    | Some s -> s
+    | None ->
+        print_string "Email: ";
+        read_line () |> String.trim
+  in
+  let password =
+    match password with
+    | Some s -> s
+    | None ->
+        hidden_input @@ fun () ->
+        print_string "Password: ";
+        let password = read_line () |> String.trim in
+        print_newline ();
+        print_string "Retype your password: ";
+        let password' = read_line () |> String.trim in
+        print_newline ();
+        if password <> password' then failwith "Password was not equal";
+        password
+  in
+  let%lwt _, u = Db.register_user ~username ~display_name ~email ~password in
+  Printf.printf "Correctly registered. User # = %d"
+    (u#id |> Model.User.ID.to_int);
+  Lwt.return_unit
 
 let account_fetch () =
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
   let open Lwt.Infix in
-  let f =
-    let%lwt accts = Db.(e Account.all) in
-    accts
-    |> Lwt_list.iteri_s @@ fun i acct ->
-       Logq.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
-       match acct#domain with
-       | None -> Lwt.return_unit
-       | Some domain -> (
-           try%lwt
-             Activity.fetch_person (`DomainUser (domain, acct#username))
-             >|= Activity.model_account_of_person ~original:acct
-             >>= Db.(e *< Account.save_one)
-             |> ignore_lwt
-           with e ->
-             Logq.err (fun m ->
-                 m "Couldn't fetch person: %s" (Printexc.to_string e));
-             Lwt.return_unit)
-  in
-  Lwt_main.run f
+  let%lwt accts = Db.(e Account.all) in
+  accts
+  |> Lwt_list.iteri_s @@ fun i acct ->
+     Logq.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
+     match acct#domain with
+     | None -> Lwt.return_unit
+     | Some domain -> (
+         try%lwt
+           Activity.fetch_person (`DomainUser (domain, acct#username))
+           >|= Activity.model_account_of_person ~original:acct
+           >>= Db.(e *< Account.save_one)
+           |> ignore_lwt
+         with e ->
+           Logq.err (fun m ->
+               m "Couldn't fetch person: %s" (Printexc.to_string e));
+           Lwt.return_unit)
 
 let webpush_generate_vapid_key () =
   let priv_key, pub_key = Webpush.Vapid.generate_keys () in
@@ -194,17 +203,19 @@ let webpush_generate_vapid_key () =
   ()
 
 let webpush_deliver username message =
-  Lwt_main.run
-  @@ match%lwt
-       Db.(
-         (e @@ Account.(get_one ~preload:[ `user [] ] ~username ~domain:None))
-         |> maybe_no_row)
-     with
-     | None -> failwith "username is not found"
-     | Some a -> (
-         match a#user with
-         | None -> failwith "username is not local"
-         | Some u -> Webpush_helper.deliver ~user_id:u#id message)
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
+  match%lwt
+    Db.(
+      (e @@ Account.(get_one ~preload:[ `user [] ] ~username ~domain:None))
+      |> maybe_no_row)
+  with
+  | None -> failwith "username is not found"
+  | Some a -> (
+      match a#user with
+      | None -> failwith "username is not local"
+      | Some u -> Webpush_helper.deliver ~user_id:u#id message)
 
 let () =
   (let file_name = Config.log_file_path () in
