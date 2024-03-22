@@ -79,8 +79,7 @@ let load_image_as_rgb24 ~path =
 
 let blurhash (src : OImages.rgb24_class) =
   Blurhash.blur_hash_for_pixels ~x_components:3 ~y_components:3 ~width:src#width
-    ~height:src#height ~rgb:(Bytes.to_string src#dump)
-    ~bytes_per_row:(src#width * 3)
+    ~height:src#height ~bytes_per_row:(src#width * 3) src#dump
 
 let dummy_blurhash = "LEHLk~WB2yk8pyo0adR*.7kCMdnj"
 

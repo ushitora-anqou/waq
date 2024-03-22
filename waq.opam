@@ -15,6 +15,7 @@ depends: [
   "merlin" {with-dev-setup}
   "ocamlformat" {= "0.25.1" & with-dev-setup}
   "base64"
+  "blurhash"
   "camlimages" {= "5.0.4-1"}
   "cmdliner"
   "cohttp"
