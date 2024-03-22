@@ -22,11 +22,14 @@ depends: [
   "cohttp-lwt-unix"
   "cppo"
   "cstruct"
+  "eio"
+  "eio_main"
   "dune" {>= "3.7"}
   "fpath"
   "jingoo"
   "lambdasoup"
   "lwt"
+  "lwt_eio"
   "lwt_ppx"
   "lwt_ssl"
   "mirage-crypto-rng" {<= "0.10.7"}

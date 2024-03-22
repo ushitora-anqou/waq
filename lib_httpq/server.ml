@@ -185,7 +185,7 @@ let default_handler : handler = function
       in
       respond ~status ""
 
-let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit =
+let start_server ?(port = 8080) ?error_handler (handler : handler) k : unit Lwt.t =
   Bare_server.start_server port (k ())
   @@ fun (req : Bare_server.Request.t) (body : Bare_server.Body.t) :
     Bare_server.Response.t Lwt.t ->

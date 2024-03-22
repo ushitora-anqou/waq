@@ -14,6 +14,9 @@ let server () =
     req |> render ~default [ (text_html, main) ]
   in
 
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () ->
   Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
   Migration.verify_migration_status ();%lwt
   Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);

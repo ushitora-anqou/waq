@@ -30,12 +30,15 @@
   camlimages.xpm
   cstruct
   curl.lwt
+  eio
+  eio_main
   fpath
   httpq
   jingoo
   lambdasoup
   logq
   lwt
+  lwt_eio
   lwt.unix
   mirage-crypto-rng
   mirage-crypto-rng.lwt
