@@ -16,7 +16,7 @@ depends: [
   "ocamlformat" {= "0.25.1" & with-dev-setup}
   "base64"
   "blurhash"
-  "camlimages" {= "5.0.4-1"}
+  "camlimages"
   "cmdliner"
   "cohttp"
   "cohttp-lwt-unix"
@@ -32,7 +32,7 @@ depends: [
   "mirage-crypto-rng" {<= "0.10.7"}
   "multipart_form"
   "multipart_form-lwt"
-  "ocaml"
+  "ocaml" {>= "5.0.0"}
   "ocurl"
   "pcre"
   "postgresql"
@@ -68,3 +68,6 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
+pin-depends:[
+  [ "camlimages.5.0.5" "git+https://gitlab.com/camlspotter/camlimages.git#c3898f58d14af54d04d9cbc576bc5b1be7d98f6d" ]
+]

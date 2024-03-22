@@ -20,7 +20,14 @@
  (libraries
   base64
   blurhash
-  camlimages.all_formats
+  camlimages.core
+  camlimages.jpeg
+  camlimages.gif
+  camlimages.png
+  camlimages.tiff
+  camlimages.freetype
+  camlimages.exif
+  camlimages.xpm
   cstruct
   curl.lwt
   fpath
@@ -38,7 +45,6 @@
   result
   safepass
   sqlx
-  unix
   uri
   uuidm
   webpush

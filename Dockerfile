@@ -1,5 +1,4 @@
-FROM ocaml/opam:debian-11-ocaml-4.14
-# NOTE: ocaml/opam:ubuntu-22.04-ocaml-4.14 can't fetch Dune 3.7. I don't know why.
+FROM ocaml/opam:debian-11-ocaml-5.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
