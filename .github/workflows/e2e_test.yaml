@@ -19,10 +19,10 @@ jobs:
           NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
 #     - name: Setup tmate session
 #       uses: mxschmitt/action-tmate@v3
-      - name: Set-up OCaml 4.14.1
+      - name: Set-up OCaml
         uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-compiler: "4.14.1"
+          ocaml-compiler: "5.0.0"
       - run: opam install . --deps-only --with-test
       - run: opam exec -- make -C e2e create-cluster
       - run: opam exec -- make -C e2e test
