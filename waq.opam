@@ -69,5 +69,5 @@ build: [
 ]
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
 pin-depends:[
-  [ "camlimages.5.0.5" "git+https://gitlab.com/camlspotter/camlimages.git#c3898f58d14af54d04d9cbc576bc5b1be7d98f6d" ]
+  [ "camlimages.5.0.5" "git+https://github.com/ushitora-anqou/camlimages.git#90ceb604527e5e1daddc969d920ff37d118b8a60" ]
 ]
