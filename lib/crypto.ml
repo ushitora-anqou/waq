@@ -1,4 +1,5 @@
-let initialize () = Mirage_crypto_rng_lwt.initialize ()
+let initialize env f =
+  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env f
 
 module SecureRandom = struct
   let generate len = Mirage_crypto_rng.generate len |> Cstruct.to_string

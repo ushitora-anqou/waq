@@ -27,9 +27,9 @@ open Util
 let register_user ~username ~display_name ~email ~password =
   let now = Ptime.now () in
   let created_at, updated_at = (now, now) in
-  let private_key, public_key = Httpq.Signature.generate_keypair () in
-  let public_key = Httpq.Signature.encode_public_key public_key in
-  let private_key = Httpq.Signature.encode_private_key private_key in
+  let private_key, public_key = Yume.Signature.generate_keypair () in
+  let public_key = Yume.Signature.encode_public_key public_key in
+  let private_key = Yume.Signature.encode_private_key private_key in
   let uri = Config.url [ "users"; username ] in
   let inbox_url = uri ^/ "inbox" in
   let outbox_url = uri ^/ "outbox" in
@@ -58,3 +58,4 @@ let register_user ~username ~display_name ~email ~password =
 
 let initialize () = initialize (Config.db_url ())
 let transaction f = e (fun c -> c#transaction f)
+let e x = Lwt_eio.run_lwt @@ fun () -> e x

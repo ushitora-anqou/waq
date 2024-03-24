@@ -1,5 +1,4 @@
 open Util
-open Lwt.Infix
 
 let extract_urls (status : Model.Status.t) =
   let urls =
@@ -38,9 +37,9 @@ let extract_urls (status : Model.Status.t) =
   in
   urls |> List.sort_uniq compare
 
-let kick (status_id : Model.Status.ID.t) =
-  Job.kick ~name:__FUNCTION__ @@ fun () ->
-  let%lwt status =
+let kick env (status_id : Model.Status.ID.t) =
+  Job.kick env ~name:__FUNCTION__ @@ fun () ->
+  let status =
     Db.(
       e
         Status.(
@@ -50,40 +49,38 @@ let kick (status_id : Model.Status.ID.t) =
   in
 
   (* Find (or insert if necessary) PreviewCard *)
-  let%lwt cards_already_inserted, cards_not_inserted =
+  let cards_already_inserted, cards_not_inserted =
     extract_urls status
-    |> Lwt_list.filter_map_p (fun url ->
-           match%lwt Db.(e PreviewCard.(get_one ~url) |> maybe_no_row) with
-           | Some x -> Lwt.return_some x
-           | None -> (
-               let%lwt oembed_opt =
-                 match%lwt Ogp.fetch_oembed_opt url with
-                 | Some y -> Lwt.return_some y
-                 | None -> Ogp.fetch_opengraph_opt url
-               in
-               match oembed_opt with
-               | None -> Lwt.return_none
-               | Some x ->
-                   (* Convert x into PreviewCard *)
-                   let type_ =
-                     match x.typ with
-                     | "link" -> 0
-                     | "photo" -> 1
-                     | "video" -> 2
-                     | "rich" -> 3
-                     | _ -> failwith "Invalid oembed type"
-                   in
-                   Model.PreviewCard.make ~url:x.url ~title:x.title
-                     ~description:x.description ?image_url:x.image ~type_
-                     ~html:x.html ~author_name:x.author_name
-                     ~author_url:x.author_url ~provider_name:x.provider_name
-                     ~provider_url:x.provider_url ~width:x.width
-                     ~height:x.height ~embed_url:x.embed_url
-                     ?blurhash:x.blurhash ()
-                   |> Lwt.return_some))
-    >|= List.partition (fun c -> Option.is_some c#id_opt)
+    |> List.filter_map (fun url ->
+           try Some Db.(e PreviewCard.(get_one ~url))
+           with Sqlx.Error.NoRowFound -> (
+             let oembed_opt =
+               match Ogp.fetch_oembed_opt env url with
+               | Some y -> Some y
+               | None -> Ogp.fetch_opengraph_opt env url
+             in
+             match oembed_opt with
+             | None -> None
+             | Some x ->
+                 (* Convert x into PreviewCard *)
+                 let type_ =
+                   match x.typ with
+                   | "link" -> 0
+                   | "photo" -> 1
+                   | "video" -> 2
+                   | "rich" -> 3
+                   | _ -> failwith "Invalid oembed type"
+                 in
+                 Model.PreviewCard.make ~url:x.url ~title:x.title
+                   ~description:x.description ?image_url:x.image ~type_
+                   ~html:x.html ~author_name:x.author_name
+                   ~author_url:x.author_url ~provider_name:x.provider_name
+                   ~provider_url:x.provider_url ~width:x.width ~height:x.height
+                   ~embed_url:x.embed_url ?blurhash:x.blurhash ()
+                 |> Option.some))
+    |> List.partition (fun c -> Option.is_some c#id_opt)
   in
-  let%lwt cards_not_inserted = Db.(e PreviewCard.(insert cards_not_inserted)) in
+  let cards_not_inserted = Db.(e PreviewCard.(insert cards_not_inserted)) in
   let cards = cards_already_inserted @ cards_not_inserted in
 
   (* Insert PreviewCardStatus (associative entity) *)
@@ -93,12 +90,13 @@ let kick (status_id : Model.Status.ID.t) =
            Model.PreviewCardStatus.make ~preview_card_id:card#id
              ~status_id:status#id ())
   in
-  if%lwt
+  if
+    Lwt_eio.run_lwt @@ fun () ->
     Db.(
       transaction (fun c ->
           let open PreviewCardStatus in
           let%lwt cards = get_many ~status_id c in
           if cards <> [] then delete cards c else Lwt.return_unit;%lwt
           PreviewCardStatus.insert rels c |> ignore_lwt))
-  then Lwt.return_unit
+  then ()
   else failwith "Transaction failed"

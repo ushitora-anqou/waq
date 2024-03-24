@@ -1,41 +1,41 @@
 open Common
 
-let expect_no_status kind id =
-  try%lwt
-    get_status kind id |> ignore_lwt;%lwt
+let expect_no_status env kind id =
+  try
+    get_status env kind id |> ignore;
     assert false
-  with Httpq.Client.FetchFailure (Some (`Not_found, _, _)) -> Lwt.return_unit
+  with FetchFailure (Some (`Not_found, _, _)) -> ()
 
 let f =
-  make_waq_scenario @@ fun token ->
-  let%lwt token' = fetch_access_token ~username:"user2" in
-  let%lwt ws_recv_msgs =
-    websocket_stack `Waq ~token @@ fun _pushf ->
-    let%lwt { id; _ } = post `Waq ~token () in
-    let%lwt s = get_status `Waq id in
+  make_waq_scenario @@ fun env token ->
+  let token' = fetch_access_token env ~username:"user2" in
+  let ws_recv_msgs =
+    websocket_stack env `Waq ~token @@ fun _pushf ->
+    let ({ id; _ } : status) = post env `Waq ~token () in
+    let s = get_status env `Waq id in
     assert (s.id = id);
 
     (* Wrong delete *)
-    expect_exc_lwt (fun () -> delete_status `Waq ~token:token' id);%lwt
+    expect_exc (fun () -> delete_status env `Waq ~token:token' id);
     (* Should remain *)
-    get_status `Waq id |> ignore_lwt;%lwt
+    get_status env `Waq id |> ignore;
 
     (* Actual delete *)
-    let%lwt s = delete_status `Waq ~token id in
+    let s = delete_status env `Waq ~token id in
     assert (s.id = id);
-    expect_no_status `Waq id;%lwt
+    expect_no_status env `Waq id;
 
-    let%lwt { id; _ } = post `Waq ~token () in
-    let%lwt s = reblog `Waq ~token ~id in
-    delete_status `Waq ~token id |> ignore_lwt;%lwt
-    expect_no_status `Waq id;%lwt
-    expect_no_status `Waq s.id;%lwt
+    let ({ id; _ } : status) = post env `Waq ~token () in
+    let s = reblog env `Waq ~token ~id in
+    delete_status env `Waq ~token id |> ignore;
+    expect_no_status env `Waq id;
+    expect_no_status env `Waq s.id;
 
-    Lwt.return_unit
+    ()
   in
   let ws_delete_events =
     ws_recv_msgs
-    |> List.map (Yojson.Safe.from_string |.> expect_assoc)
+    |> List.map (fun x -> x |> Yojson.Safe.from_string |> expect_assoc)
     |> List.filter_map (fun (l : (string * Yojson.Safe.t) list) ->
            if
              List.assoc "stream" l = `List [ `String "user" ]
@@ -46,4 +46,4 @@ let f =
   assert (
     List.sort compare ws_delete_events = List.sort compare [ "1"; "2"; "3" ]);
 
-  Lwt.return_unit
+  ()

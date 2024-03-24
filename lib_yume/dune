@@ -1,0 +1,13 @@
+(library
+ (name yume)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.make))
+ (libraries
+  cohttp-eio
+  eio.unix
+  logq
+  multipart_form
+  multipart_form-eio
+  tls-eio
+  yojson
+  websocket))

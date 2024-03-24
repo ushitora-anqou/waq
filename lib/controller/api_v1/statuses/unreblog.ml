@@ -1,26 +1,21 @@
 open Helper
 open Entity
-open Lwt.Infix
 
-let post req =
-  let%lwt self = authenticate_account req in
+let post env req =
+  let self = authenticate_account req in
   let status_id =
-    req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
+    req |> Yume.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
-  try%lwt
-    let%lwt status = Db.e (Model.Status.get_one ~id:status_id) in
-    let%lwt reblog =
+  try
+    let status = Db.e (Model.Status.get_one ~id:status_id) in
+    let reblog =
       Db.(
         e
           Model.Status.(
-            get_one ~reblog_of_id:(Some status_id) ~account_id:self#id)
-        |> maybe_no_row)
-      >|= function
-      | None -> raise_error_response `Not_found
-      | Some s -> s
+            get_one ~reblog_of_id:(Some status_id) ~account_id:self#id))
     in
-    let%lwt entity = make_status_from_model ~self_id:self#id status in
-    Worker.Removal.kick ~account_id:self#id ~status_id:reblog#id;%lwt
+    let entity = make_status_from_model ~self_id:self#id status in
+    Worker.Removal.kick env ~account_id:self#id ~status_id:reblog#id;
     let entity =
       {
         entity with
@@ -29,4 +24,4 @@ let post req =
       }
     in
     yojson_of_status entity |> respond_yojson
-  with Sqlx.Error.NoRowFound -> Httpq.Server.raise_error_response `Not_found
+  with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found

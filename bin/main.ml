@@ -1,43 +1,46 @@
 open Waq
 open Util [@@warning "-33"]
 
-let server () =
-  let _host, port = Config.(listen_host (), listen_port ()) in
+let server env =
+  let host, port = Config.(listen_host (), listen_port ()) in
 
   let error_handler ~req ~status ~headers ~body =
     let open Controller.Helper in
-    let default () = Httpq.Server.respond ~status ~headers body in
+    let default () = Yume.Server.respond ~status ~headers body in
     let main () =
-      Httpq.Server.respond ~status ~headers
-        ("<h1>" ^ Httpq.Status.to_string status ^ "</h1>")
+      Yume.Server.respond ~status ~headers
+        ("<h1>" ^ Yume.Status.to_string status ^ "</h1>")
     in
     req |> render ~default [ (text_html, main) ]
   in
 
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
-  Lwt_eio.run_lwt @@ fun () ->
-  Httpq.Server.start_server ~port ~error_handler Router.handler @@ fun () ->
-  Migration.verify_migration_status ();%lwt
-  Logq.info (fun m -> m "Listening on 127.0.0.1:%d" port);
-  Lwt.return_unit
+  Eio.Switch.run @@ fun sw ->
+  Job.Runner.start_global_runner ~sw;
+  let listen =
+    match
+      Eio.Net.getaddrinfo_stream ~service:(string_of_int port)
+        (Eio.Stdenv.net env) host
+    with
+    | [] -> `Tcp (Eio.Net.Ipaddr.V4.loopback, 8080)
+    | x :: _ -> x
+  in
+  Yume.Server.start_server env ~sw ~listen ~error_handler Router.handler
+  @@ fun _ ->
+  Migration.verify_migration_status ();
+  (match listen with
+  | `Tcp (ipaddr, port) ->
+      Logq.info (fun m ->
+          m "Listening on %s:%d" (Fmt.str "%a" Eio.Net.Ipaddr.pp ipaddr) port)
+  | _ -> Logq.info (fun m -> m "Listening on <unknown>"));
+  ()
 
-let db_migrate () =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
-  Lwt_eio.run_lwt @@ fun () -> Migration.migrate ()
-
-let db_rollback () =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
-  Lwt_eio.run_lwt @@ fun () -> Migration.rollback ()
+let db_migrate () = Migration.migrate ()
+let db_rollback () = Migration.rollback ()
 
 let db_reset () =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
   Lwt_eio.run_lwt @@ fun () ->
   Db.debug_drop_all_tables_in_db ();%lwt
-  Migration.migrate ();%lwt
+  Migration.migrate ();
 
   if Config.debug_generate_test_users () then
     (* Generate some users for tests *)
@@ -101,19 +104,17 @@ add_column ~table_name:"preview_cards" ~name:"blurhash" ~spec:"TEXT"
   ()
 
 let oauth_generate_access_token username =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
   Lwt_eio.run_lwt @@ fun () ->
   (* Generate a new OAuth application named "Web" *)
-  let%lwt web =
+  let web =
     Oauth_helper.generate_application ~name:"Web"
       ~redirect_uri:"urn:ietf:wg:oauth:2.0:oob" ~scopes:"read write follow push"
   in
-  let%lwt user =
-    let%lwt a = Db.(e @@ Account.get_one ~username) in
+  let user =
+    let a = Db.(e @@ Account.get_one ~username) in
     Db.(e @@ User.get_one ~account_id:a#id)
   in
-  let%lwt access_token =
+  let access_token =
     Oauth_helper.generate_access_token ~scopes:"read write follow push"
       ~resource_owner_id:user#id ~app:web ()
   in
@@ -131,8 +132,6 @@ let hidden_input f =
   res
 
 let user_register ?username ?display_name ?email ?password () =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
   Lwt_eio.run_lwt @@ fun () ->
   let username =
     match username with
@@ -174,27 +173,22 @@ let user_register ?username ?display_name ?email ?password () =
     (u#id |> Model.User.ID.to_int);
   Lwt.return_unit
 
-let account_fetch () =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
-  Lwt_eio.run_lwt @@ fun () ->
-  let open Lwt.Infix in
-  let%lwt accts = Db.(e Account.all) in
+let account_fetch env =
+  let accts = Db.(e Account.all) in
   accts
-  |> Lwt_list.iteri_s @@ fun i acct ->
+  |> List.iteri @@ fun i acct ->
      Logq.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
      match acct#domain with
-     | None -> Lwt.return_unit
+     | None -> ()
      | Some domain -> (
-         try%lwt
-           Activity.fetch_person (`DomainUser (domain, acct#username))
-           >|= Activity.model_account_of_person ~original:acct
-           >>= Db.(e *< Account.save_one)
-           |> ignore_lwt
+         try
+           Activity.fetch_person env (`DomainUser (domain, acct#username))
+           |> Activity.model_account_of_person ~original:acct
+           |> (fun a -> Db.(e (Account.save_one a)))
+           |> ignore
          with e ->
            Logq.err (fun m ->
-               m "Couldn't fetch person: %s" (Printexc.to_string e));
-           Lwt.return_unit)
+               m "Couldn't fetch person: %s" (Printexc.to_string e)))
 
 let webpush_generate_vapid_key () =
   let priv_key, pub_key = Webpush.Vapid.generate_keys () in
@@ -202,22 +196,19 @@ let webpush_generate_vapid_key () =
   Printf.printf "vapid_public_key: \"%s\"\n" pub_key;
   ()
 
-let webpush_deliver username message =
-  Eio_main.run @@ fun env ->
-  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
-  Lwt_eio.run_lwt @@ fun () ->
-  match%lwt
-    Db.(
-      (e @@ Account.(get_one ~preload:[ `user [] ] ~username ~domain:None))
-      |> maybe_no_row)
+let webpush_deliver env username message =
+  match
+    Db.(e @@ Account.(get_one ~preload:[ `user [] ] ~username ~domain:None))
   with
-  | None -> failwith "username is not found"
-  | Some a -> (
+  | exception Sqlx.Error.NoRowFound -> failwith "username is not found"
+  | a -> (
       match a#user with
       | None -> failwith "username is not local"
-      | Some u -> Webpush_helper.deliver ~user_id:u#id message)
+      | Some u -> Webpush_helper.deliver env ~user_id:u#id message)
 
 let () =
+  Eio_main.run @@ fun env ->
+  Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
   (let file_name = Config.log_file_path () in
    if file_name = "" then Logq.(add_reporter (make_stderr_reporter ~l:Debug))
    else Logq.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
@@ -226,14 +217,14 @@ let () =
   Config.to_list ()
   |> List.iter (fun (k, v) -> Logq.debug (fun m -> m "Config %s = %s" k v));
 
-  Crypto.initialize ();
+  Crypto.initialize env @@ fun () ->
   Db.initialize ();
 
   (* Parse command-line arguments and call a proper handler *)
   let open Cmdliner in
   Cmd.(
     group
-      ~default:Term.(const server $ const ())
+      ~default:Term.(const server $ const env)
       (info "waq")
       [
         v (info "db:reset") Term.(const db_reset $ const ());
@@ -268,17 +259,17 @@ let () =
                 value
                 & opt (some string) None
                 & info ~docv:"PASSWORD" [ "password" ]));
-        v (info "account:fetch") Term.(const account_fetch $ const ());
+        v (info "account:fetch") Term.(const account_fetch $ const env);
         v
           (info "webpush:generate_vapid_key")
           Term.(const webpush_generate_vapid_key $ const ());
         v (info "webpush:deliver")
           Term.(
-            const webpush_deliver
+            const webpush_deliver $ const env
             $ Arg.(
                 required & pos 0 (some string) None & info ~docv:"USERNAME" [])
             $ Arg.(
                 required & pos 1 (some string) None & info ~docv:"MESSAGE" []));
-        v (info "server") Term.(const server $ const ());
+        v (info "server") Term.(const server $ const env);
       ])
   |> Cmd.eval |> exit

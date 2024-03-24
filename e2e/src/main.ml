@@ -1,6 +1,3 @@
-module Uri = Httpq.Uri
-module Ptime = Waq.Util.Ptime
-
 let all_tests =
   [
     ("waq-mstdn-1", Waq_mstdn_1.f);

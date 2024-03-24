@@ -30,13 +30,9 @@ let generate_access_token ~scopes ?resource_owner_id
 let authenticate_access_token token = Db.(e (OAuthAccessToken.get_one ~token))
 
 let authenticate_application uid =
-  match%lwt Db.(e (OAuthApplication.get_one ~uid) |> maybe_no_row) with
-  | Some app -> Lwt.return app
-  | None -> Httpq.Server.raise_error_response `Bad_request
+  try Db.(e (OAuthApplication.get_one ~uid))
+  with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Bad_request
 
 let authenticate_access_grant auth_code =
-  match%lwt
-    Db.(e (OAuthAccessGrant.get_one ~token:auth_code) |> maybe_no_row)
-  with
-  | Some grant -> Lwt.return grant
-  | None -> Httpq.Server.raise_error_response `Bad_request
+  try Db.(e (OAuthAccessGrant.get_one ~token:auth_code))
+  with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Bad_request

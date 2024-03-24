@@ -1,6 +1,16 @@
-open Lwt.Infix
 open Util
-module Uri = Httpq.Uri
+
+module Uri = struct
+  include Uri
+
+  let http_host (u : t) =
+    let host = Uri.host u |> Option.get in
+    match Uri.port u with
+    | None -> host
+    | Some port -> host ^ ":" ^ string_of_int port
+
+  let domain (u : t) = http_host u
+end
 
 let is_my_domain (u : string) =
   u |> Uri.of_string |> Uri.domain |> Config.is_my_domain
@@ -608,7 +618,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
 
 let sign_spec_of_account (src : Db.Account.t) =
   let priv_key =
-    src#private_key |> Option.get |> Httpq.Signature.decode_private_key
+    src#private_key |> Option.get |> Yume.Signature.decode_private_key
   in
   let key_id = src#uri ^ "#main-key" in
   let signed_headers =
@@ -616,12 +626,10 @@ let sign_spec_of_account (src : Db.Account.t) =
   in
   Some (priv_key, key_id, signed_headers)
 
-let post_activity_json ~body ~sign ~url =
+let post_activity_json env ~body ~sign ~url =
   let meth = `POST in
   let headers = [ (`Content_type, "application/activity+json") ] in
-  let%lwt res = Throttle_fetch.f ~meth ~headers ~body ~sign url in
-  Lwt.return
-  &
+  let res = Throttle_fetch.f env ~meth ~headers ~body ~sign url in
   match res with
   | Ok (status, _, _body)
     when Cohttp.Code.(status |> code_of_status |> is_success) ->
@@ -629,27 +637,27 @@ let post_activity_json ~body ~sign ~url =
   | _ -> failwith "Failed to post activity json"
 
 (* Get activity+json from the Internet *)
-let fetch_activity ~uri =
+let fetch_activity env ~uri =
   match uri with
   | "https://www.w3.org/ns/activitystreams" -> failwith "Not valid activity URI"
   | _ ->
-      Throttle_fetch.f_exn
+      Throttle_fetch.f_exn env
         ~headers:
           [
             (`Accept, "application/activity+json");
             (`Content_type, "text/html" (* dummy *));
           ]
         uri
-      >|= Yojson.Safe.from_string
+      |> Yojson.Safe.from_string
 
 (* Send GET /.well-known/webfinger *)
-let get_webfinger ~scheme ~domain ~username =
+let get_webfinger env ~scheme ~domain ~username =
   (* FIXME: Check /.well-known/host-meta if necessary *)
-  let%lwt body =
-    Throttle_fetch.f_exn @@ scheme ^ ":/" ^/ domain
+  let body =
+    Throttle_fetch.f_exn env @@ scheme ^ ":/" ^/ domain
     ^/ ".well-known/webfinger?resource=acct:" ^ username ^ "@" ^ domain
   in
-  body |> Yojson.Safe.from_string |> webfinger_of_yojson |> Lwt.return
+  body |> Yojson.Safe.from_string |> webfinger_of_yojson
 
 let model_account_of_person ?original (r : ap_person) : Model.Account.t =
   let domain = Uri.(r.id |> of_string |> domain) |> Option.some in
@@ -682,28 +690,27 @@ let model_account_of_person ?original (r : ap_person) : Model.Account.t =
       a#set_actor_type (Some (if r.is_service then `Service else `Person));
       a
 
-let fetch_person by =
+let fetch_person env by =
   let get_uri = function
     | `DomainUser (domain, username) | `UserDomain (username, domain) ->
-        get_webfinger ~scheme:"https" ~domain ~username >|= fun webfinger ->
+        let webfinger = get_webfinger env ~scheme:"https" ~domain ~username in
         webfinger.links
         |> List.find_map @@ fun l ->
            let l = webfinger_link_of_yojson l in
            if l.rel = "self" then Some l.href else None
     | `Uri uri ->
-        Uri.(with_fragment (of_string uri) None |> to_string)
-        |> Option.some |> Lwt.return
+        Uri.(with_fragment (of_string uri) None |> to_string) |> Option.some
   in
-  match%lwt get_uri by with
+  match get_uri by with
   | None -> failwith "Couldn't find person's uri"
   | Some uri -> (
-      fetch_activity ~uri >|= of_yojson >|= get_person >|= function
+      fetch_activity env ~uri |> of_yojson |> get_person |> function
       | None -> failwith "Couldn't parse the activity Person"
       | Some person -> person)
 
-let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
+let search_account env ?(resolve = true) by : Model.Account.t =
   let make_new_account by =
-    let%lwt a = fetch_person by >|= model_account_of_person in
+    let a = fetch_person env by |> model_account_of_person in
     Db.(e @@ Account.save_one a)
   in
   match by with
@@ -713,37 +720,33 @@ let search_account ?(resolve = true) by : Model.Account.t Lwt.t =
         | Some s when s <> Config.server_name () -> Some s
         | _ -> None
       in
-      match%lwt Db.(e @@ Account.get_one ~domain ~username) with
-      | acc -> Lwt.return acc
-      | exception Sqlx.Error.NoRowFound
-        when domain = None (* Local *) || not resolve ->
+      try Db.(e @@ Account.get_one ~domain ~username) with
+      | Sqlx.Error.NoRowFound when domain = None (* Local *) || not resolve ->
           failwith "Couldn't find the account"
-      | exception Sqlx.Error.NoRowFound ->
+      | Sqlx.Error.NoRowFound ->
           make_new_account (`DomainUser (Option.get domain, username)))
   | `Uri uri -> (
       let uri = Uri.(with_fragment (of_string uri) None |> to_string) in
-      match%lwt Db.(e @@ Account.get_one ~uri) with
-      | acct -> Lwt.return acct
-      | exception Sqlx.Error.NoRowFound when not resolve ->
+      try Db.(e @@ Account.get_one ~uri) with
+      | Sqlx.Error.NoRowFound when not resolve ->
           failwith "Couldn't find the account"
-      | exception Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
+      | Sqlx.Error.NoRowFound -> make_new_account (`Uri uri))
 
-let search_account_opt ?resolve by =
-  try%lwt search_account ?resolve by >>= Lwt.return_some
-  with _ -> Lwt.return_none
+let search_account_opt env ?resolve by =
+  try Some (search_account env ?resolve by) with _ -> None
 
-let verify_activity_json req =
-  let%lwt body = Httpq.Server.body req in
-  let signature = Httpq.Server.header `Signature req in
-  let headers = Httpq.Server.headers req in
-  let path = Httpq.Server.path req in
-  let meth = Httpq.Server.meth req in
+let verify_activity_json env req =
+  let body = Yume.Server.body req in
+  let signature = Yume.Server.header `Signature req in
+  let headers = Yume.Server.headers req in
+  let path = Yume.Server.path req in
+  let meth = Yume.Server.meth req in
 
-  let open Httpq.Signature in
+  let open Yume.Signature in
   let { key_id; algorithm; headers = signed_headers; signature } =
     parse_signature_header signature
   in
-  search_account_opt (`Uri key_id) >|= function
+  match search_account_opt env (`Uri key_id) with
   | None -> (body, Error `AccountNotFound)
   | Some acct when Model.Account.is_local acct -> (body, Error `AccountIsLocal)
   | Some acct -> (
@@ -755,7 +758,7 @@ let verify_activity_json req =
       | Error e ->
           Logq.err (fun m ->
               m "verify_activity_json failed: [%s]"
-                (headers |> Httpq.Headers.to_list
+                (headers |> Yume.Headers.to_list
                 |> List.map (fun (k, v) -> k ^ "=" ^ v)
                 |> String.concat ", "));
           (body, Error (`VerifFailure e))
@@ -810,9 +813,9 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
     url = s#url;
   }
 
-let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
-  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
-  let%lwt s =
+let note_of_status (s : Db.Status.t) : ap_note =
+  let self = Db.(e Account.(get_one ~id:s#account_id)) in
+  let s =
     Db.(
       e
         Status.(
@@ -825,23 +828,26 @@ let note_of_status (s : Db.Status.t) : ap_note Lwt.t =
                 `account [];
               ]))
   in
-  serialize_status s self |> Lwt.return
+  serialize_status s self
 
-let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
+let rec status_of_note' env (note : ap_note) : Db.Status.t =
   let published, _, _ = Ptime.of_rfc3339 note.published |> Result.get_ok in
-  let%lwt in_reply_to_id =
-    let uri_to_status_id uri = fetch_status ~uri >|= fun s -> Some s#id in
+  let in_reply_to_id =
+    let uri_to_status_id uri =
+      let s = fetch_status env ~uri in
+      Some s#id
+    in
     match note.in_reply_to with
     | `String uri -> uri_to_status_id uri
     | `Assoc l -> (
         match l |> List.assoc_opt "id" with
         | Some (`String uri) -> uri_to_status_id uri
-        | _ -> Lwt.return_none)
-    | _ -> Lwt.return_none
+        | _ -> None)
+    | _ -> None
   in
-  let%lwt attributedTo = search_account (`Uri note.attributed_to) in
+  let attributedTo = search_account env (`Uri note.attributed_to) in
 
-  let%lwt status =
+  let status =
     Db.(
       e
         Status.(
@@ -854,14 +860,15 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
   (* Handle attachments *)
   note.attachment
   |> List.filter_map get_document
-  |> Lwt_list.iter_s (fun (d : ap_document) ->
-         let%lwt blurhash =
+  |> List.iter (fun (d : ap_document) ->
+         let blurhash =
            match (d.blurhash, d.url) with
-           | Some h, _ -> Lwt.return h
-           | None, "" -> Lwt.return Image.dummy_blurhash
+           | Some h, _ -> h
+           | None, "" -> Image.dummy_blurhash
            | None, url ->
-               Throttle_fetch.http_get url >>= Image.inspect
-               >|= fun (_, _, h) -> h
+               let body = Throttle_fetch.http_get env url in
+               let _, _, h = Lwt_eio.run_lwt (fun () -> Image.inspect body) in
+               h
          in
          Db.(
            e
@@ -869,28 +876,28 @@ let rec status_of_note' (note : ap_note) : Db.Status.t Lwt.t =
                make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
                  ~status_id:status#id ~blurhash ()
                |> save_one))
-         |> ignore_lwt);%lwt
+         |> ignore);
 
   (* Handle mentions *)
-  (note.cc @ note.to_
-  |> Lwt_list.filter_map_p (fun uri -> search_account_opt (`Uri uri))
-  >>= Lwt_list.iter_p @@ fun acct ->
-      let m =
-        Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
-      in
-      Db.(e @@ Mention.(save_one m)) |> ignore_lwt);%lwt
+  (* FIXME: can be processed in parallel *)
+  note.cc @ note.to_
+  |> List.filter_map (fun uri -> search_account_opt env (`Uri uri))
+  |> List.iter (fun acct ->
+         let m =
+           Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
+         in
+         Db.(e @@ Mention.(save_one m)) |> ignore);
 
-  Lwt.return status
+  status
 
-and status_of_note (note : ap_note) : Db.Status.t Lwt.t =
-  match%lwt Db.(e Status.(get_one ~uri:note.id)) with
-  | s -> Lwt.return s
-  | exception Sqlx.Error.NoRowFound -> status_of_note' note
+and status_of_note env (note : ap_note) : Db.Status.t =
+  try Db.(e Status.(get_one ~uri:note.id))
+  with Sqlx.Error.NoRowFound -> status_of_note' env note
 
-and status_of_announce' (ann : ap_announce) : Db.Status.t Lwt.t =
+and status_of_announce' env (ann : ap_announce) : Db.Status.t =
   let published, _, _ = Ptime.of_rfc3339 ann.published |> Result.get_ok in
-  let%lwt reblogee = fetch_status ~uri:ann.obj in
-  let%lwt account = search_account (`Uri ann.actor) in
+  let reblogee = fetch_status env ~uri:ann.obj in
+  let account = search_account env (`Uri ann.actor) in
   Db.(
     e
       Status.(
@@ -898,23 +905,21 @@ and status_of_announce' (ann : ap_announce) : Db.Status.t Lwt.t =
           ~account_id:account#id ~reblog_of_id:reblogee#id ~spoiler_text:"" ()
         |> save_one))
 
-and status_of_announce (ann : ap_announce) : Db.Status.t Lwt.t =
-  match%lwt Db.(e Status.(get_one ~uri:ann.id)) with
-  | s -> Lwt.return s
-  | exception Sqlx.Error.NoRowFound -> status_of_announce' ann
+and status_of_announce env (ann : ap_announce) : Db.Status.t =
+  try Db.(e Status.(get_one ~uri:ann.id))
+  with Sqlx.Error.NoRowFound -> status_of_announce' env ann
 
-and fetch_status ~uri =
-  match%lwt Db.(e Status.(get_one ~uri)) with
-  | s -> Lwt.return s
-  | exception Sqlx.Error.NoRowFound -> (
-      match%lwt fetch_activity ~uri >|= of_yojson with
-      | Note note -> status_of_note note
-      | Announce ann -> status_of_announce ann
-      | _ -> failwith "fetch_status failed: fetched activity is invalid")
+and fetch_status env ~uri =
+  try Db.(e Status.(get_one ~uri))
+  with Sqlx.Error.NoRowFound -> (
+    match fetch_activity env ~uri |> of_yojson with
+    | Note note -> status_of_note env note
+    | Announce ann -> status_of_announce env ann
+    | _ -> failwith "fetch_status failed: fetched activity is invalid")
 
-let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
-  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
-  note_of_status s >|= fun note ->
+let create_note_of_status (s : Db.Status.t) : ap_create =
+  let self = Db.(e Account.(get_one ~id:s#account_id)) in
+  let note = note_of_status s in
   {
     id = note.id ^/ "activity";
     actor = `String self#uri;
@@ -924,14 +929,13 @@ let create_note_of_status (s : Db.Status.t) : ap_create Lwt.t =
     obj = Note note;
   }
 
-let announce_of_status ?(deleted = false) (s : Db.Status.t) : ap_announce Lwt.t
-    =
-  let%lwt reblog =
+let announce_of_status ?(deleted = false) (s : Db.Status.t) : ap_announce =
+  let reblog =
     let id = Option.get s#reblog_of_id in
     Db.(if deleted then e Status.(get_one' ~id) else e Status.(get_one ~id))
   in
-  let%lwt reblog_acct = Db.(e Account.(get_one ~id:reblog#account_id)) in
-  let%lwt self = Db.(e Account.(get_one ~id:s#account_id)) in
+  let reblog_acct = Db.(e Account.(get_one ~id:reblog#account_id)) in
+  let self = Db.(e Account.(get_one ~id:s#account_id)) in
 
   let id = s#uri ^/ "activity" in
   let actor = self#uri in
@@ -940,11 +944,11 @@ let announce_of_status ?(deleted = false) (s : Db.Status.t) : ap_announce Lwt.t
   let cc = [ reblog_acct#uri; self#followers_url ] in
   let obj = reblog#uri in
 
-  make_announce ~id ~actor ~published ~to_ ~cc ~obj |> Lwt.return
+  make_announce ~id ~actor ~published ~to_ ~cc ~obj
 
-let like_of_favourite (f : Db.Favourite.t) : ap_like Lwt.t =
-  let%lwt acct = Db.(e Account.(get_one ~id:f#account_id)) in
-  let%lwt status = Db.(e Status.(get_one ~id:f#status_id)) in
+let like_of_favourite (f : Db.Favourite.t) : ap_like =
+  let acct = Db.(e Account.(get_one ~id:f#account_id)) in
+  let status = Db.(e Status.(get_one ~id:f#status_id)) in
 
   let id =
     acct#uri ^ "#likes/" ^ (f#id |> Model.Favourite.ID.to_int |> string_of_int)
@@ -952,27 +956,24 @@ let like_of_favourite (f : Db.Favourite.t) : ap_like Lwt.t =
   let actor = acct#uri in
   let obj = status#uri in
 
-  make_like ~id ~actor ~obj |> Lwt.return
+  make_like ~id ~actor ~obj
 
 let favourite_of_like ?(must_already_exist = false) (l : ap_like) :
-    Db.Favourite.t Lwt.t =
-  let%lwt acct = Db.(e Account.(get_one ~uri:l.actor)) in
-  let%lwt status = Db.(e Status.(get_one ~uri:l.obj)) in
+    Db.Favourite.t =
+  let acct = Db.(e Account.(get_one ~uri:l.actor)) in
+  let status = Db.(e Status.(get_one ~uri:l.obj)) in
   let now = Ptime.now () in
-  match%lwt
-    Db.(e Favourite.(get_one ~account_id:acct#id ~status_id:status#id))
-  with
-  | fav -> Lwt.return fav
-  | exception Sqlx.Error.NoRowFound ->
-      if must_already_exist then
-        failwith "favourite_of_like: must_already_exist failed"
-      else
-        Db.(
-          e
-            Favourite.(
-              make ~created_at:now ~updated_at:now ~account_id:acct#id
-                ~status_id:status#id ()
-              |> save_one))
+  try Db.(e Favourite.(get_one ~account_id:acct#id ~status_id:status#id))
+  with Sqlx.Error.NoRowFound ->
+    if must_already_exist then
+      failwith "favourite_of_like: must_already_exist failed"
+    else
+      Db.(
+        e
+          Favourite.(
+            make ~created_at:now ~updated_at:now ~account_id:acct#id
+              ~status_id:status#id ()
+            |> save_one))
 
 let to_undo ~actor =
   let actor = `String actor in

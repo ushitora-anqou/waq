@@ -15,16 +15,16 @@ let get_body path =
     s
   with _ -> raise_error_response `Not_found
 
-let get req =
+let get _ req =
   let root = Config.static_root () |> Unix.realpath in
   let path =
-    try Filename.concat root (Httpq.Server.path req) |> Unix.realpath
+    try Filename.concat root (Yume.Server.path req) |> Unix.realpath
     with Unix.Unix_error (Unix.ENOENT, "realpath", _) ->
       raise_error_response `Not_found
   in
   if not (String.starts_with ~prefix:root path) then
     raise_error_response `Not_found
   else
-    Httpq.Server.respond
+    Yume.Server.respond
       ~headers:[ (`Content_type, Filename.extension path |> get_content_type) ]
       (get_body path)

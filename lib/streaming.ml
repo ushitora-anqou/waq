@@ -1,6 +1,6 @@
 type stream = [ `User ]
 type key = int * stream
-type connection = [ `WebSocket of Httpq.Server.ws_conn ]
+type connection = [ `WebSocket of Yume.Server.ws_conn ]
 type connection_id = int
 
 let connections : (key, (connection_id, connection) Hashtbl.t) Hashtbl.t =
@@ -52,4 +52,4 @@ let push ~(key : key) ~(event : string) ?payload () =
                  |> Option.fold ~none:l ~some:(fun payload ->
                         ("payload", `String payload) :: l)
                in
-               `Assoc l |> Yojson.Safe.to_string |> Httpq.Server.ws_send conn)
+               `Assoc l |> Yojson.Safe.to_string |> Yume.Server.ws_send conn)

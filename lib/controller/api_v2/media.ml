@@ -2,12 +2,13 @@ open Helper
 open Lwt.Infix
 open Util
 
-let post req =
-  let%lwt self = authenticate_account req in
-  let%lwt formdata = Httpq.Server.formdata_exn "file" req in
+let post _ req =
+  let self = authenticate_account req in
+  let formdata = Yume.Server.formdata_exn "file" req in
 
   let result_attachment = ref None in
-  let%lwt success =
+  let success =
+    Lwt_eio.run_lwt @@ fun () ->
     Db.transaction @@ fun c ->
     let%lwt attachment =
       Model.MediaAttachment.(

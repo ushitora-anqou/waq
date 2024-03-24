@@ -1,11 +1,11 @@
 open Common
 
 let f =
-  make_waq_scenario @@ fun _token ->
-  let%lwt access_token = fetch_access_token ~username:"user1" in
+  make_waq_scenario @@ fun env _token ->
+  let access_token = fetch_access_token env ~username:"user1" in
 
-  let%lwt r =
-    fetch_exn
+  let r =
+    fetch_exn env
       ~headers:[ (`Authorization, "Bearer " ^ access_token) ]
       (waq "/api/v1/apps/verify_credentials")
   in
@@ -14,8 +14,8 @@ let f =
     | `Assoc l -> l |> List.assoc "name" |> expect_string = "foo"
     | _ -> false);
 
-  let%lwt r =
-    fetch_exn
+  let r =
+    fetch_exn env
       ~headers:[ (`Authorization, "Bearer " ^ access_token) ]
       (waq "/api/v1/accounts/verify_credentials")
   in
@@ -29,11 +29,11 @@ let f =
     |> expect_string = "public");
   let account_id = l |> List.assoc "id" |> expect_string in
 
-  let%lwt r = fetch_exn (waq "/api/v1/instance") in
+  let r = fetch_exn env (waq "/api/v1/instance") in
   let l = Yojson.Safe.from_string r |> expect_assoc in
   assert (l |> List.mem_assoc "uri");
 
-  let%lwt r = get_account `Waq account_id in
+  let r = get_account env `Waq account_id in
   assert (r.id = account_id);
   assert (r.username = "user1");
   assert (r.acct = "user1");
@@ -42,11 +42,11 @@ let f =
   assert (r.followers_count = 0);
   assert (r.following_count = 0);
 
-  let%lwt a =
-    update_credentials `Waq ~token:access_token ~display_name:"mod user1" ()
+  let a =
+    update_credentials env `Waq ~token:access_token ~display_name:"mod user1" ()
   in
   assert (a.display_name = "mod user1");
-  let%lwt a = get_account `Waq account_id in
+  let a = get_account env `Waq account_id in
   assert (a.display_name = "mod user1");
 
-  Lwt.return_unit
+  ()

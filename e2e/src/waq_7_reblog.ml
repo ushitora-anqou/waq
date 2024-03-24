@@ -1,15 +1,15 @@
 open Common
 
 let f =
-  make_waq_scenario @@ fun token ->
-  let%lwt user2_id, _, _ = lookup `Waq ~token ~username:"user2" () in
-  let%lwt token2 = fetch_access_token ~username:"user2" in
-  let%lwt token3 = fetch_access_token ~username:"user3" in
-  let%lwt { id; _ } = post `Waq ~token () in
-  let%lwt _ = reblog `Waq ~token ~id in
-  let%lwt _ = reblog `Waq ~token:token2 ~id in
+  make_waq_scenario @@ fun env token ->
+  let user2_id, _, _ = lookup env `Waq ~token ~username:"user2" () in
+  let token2 = fetch_access_token env ~username:"user2" in
+  let token3 = fetch_access_token env ~username:"user3" in
+  let ({ id; _ } : status) = post env `Waq ~token () in
+  let _ = reblog env `Waq ~token ~id in
+  let _ = reblog env `Waq ~token:token2 ~id in
 
-  let%lwt ntfs = get_notifications `Waq ~token in
+  let ntfs = get_notifications env `Waq ~token in
   (match ntfs with
   | [
    {
@@ -22,26 +22,26 @@ let f =
       assert (account_id2 = user2_id);
       assert (status_id2 = id);
       assert (reblogs_count = 2);
-      Lwt.return_unit
-  | _ -> assert false);%lwt
+      ()
+  | _ -> assert false);
 
   (* Wrong unreblog *)
-  expect_exc_lwt (fun () -> unreblog `Waq ~token:token3 ~id);%lwt
-  let%lwt { reblogs_count; _ } = get_status `Waq ~token id in
+  expect_exc (fun () -> unreblog env `Waq ~token:token3 ~id);
+  let { reblogs_count; _ } = get_status env `Waq ~token id in
   assert (reblogs_count = 2);
 
   (* Actual unreblogs *)
-  let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
-    unreblog `Waq ~token:token2 ~id
+  let { id = unreblog_id; reblogs_count; reblogged; _ } =
+    unreblog env `Waq ~token:token2 ~id
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 1);
   assert (not reblogged);
-  let%lwt { id = unreblog_id; reblogs_count; reblogged; _ } =
-    unreblog `Waq ~token ~id
+  let { id = unreblog_id; reblogs_count; reblogged; _ } =
+    unreblog env `Waq ~token ~id
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 0);
   assert (not reblogged);
 
-  Lwt.return_unit
+  ()

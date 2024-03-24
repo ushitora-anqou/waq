@@ -1,36 +1,38 @@
 open Helper
 
-let post req =
-  let%lwt response_type = req |> Httpq.Server.query "response_type" in
-  let%lwt client_id = req |> Httpq.Server.query "client_id" in
-  let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
-  let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
-  let%lwt state = req |> Httpq.Server.query_opt "state" in
-  let%lwt username = req |> Httpq.Server.query "username" in
-  let%lwt password = req |> Httpq.Server.query "password" in
+let post _env req =
+  let response_type = req |> Yume.Server.query "response_type" in
+  let client_id = req |> Yume.Server.query "client_id" in
+  let redirect_uri = req |> Yume.Server.query "redirect_uri" in
+  let scope = req |> Yume.Server.query ~default:"read" "scope" in
+  let state = req |> Yume.Server.query_opt "state" in
+  let username = req |> Yume.Server.query "username" in
+  let password = req |> Yume.Server.query "password" in
 
   if response_type <> "code" then raise_error_response `Bad_request;
-  let%lwt app = Oauth_helper.authenticate_application client_id in
+  let app = Oauth_helper.authenticate_application client_id in
   (* FIXME: Check if scope is correct *)
   if redirect_uri <> app#redirect_uri then raise_error_response `Bad_request;
 
-  let%lwt account =
-    Db.(e Account.(get_one ~domain:None ~username)) |> raise_if_no_row_found
+  let account =
+    try Db.(e Account.(get_one ~domain:None ~username))
+    with Sqlx.Error.NoRowFound -> raise_error_response `Bad_request
   in
-  let%lwt user =
-    Db.(e User.(get_one ~account_id:account#id)) |> raise_if_no_row_found
+  let user =
+    try Db.(e User.(get_one ~account_id:account#id))
+    with Sqlx.Error.NoRowFound -> raise_error_response `Bad_request
   in
   if not Bcrypt.(verify password (hash_of_string user#encrypted_password)) then
     raise_error_response `Unauthorized;
   let resource_owner_id = user#id in
 
-  let%lwt grant =
+  let grant =
     Oauth_helper.generate_access_grant ~expires_in:600 ~redirect_uri
       ~scopes:scope ~app ~resource_owner_id
   in
 
   if grant#redirect_uri = "urn:ietf:wg:oauth:2.0:oob" then
-    Httpq.Server.respond grant#token
+    Yume.Server.respond grant#token
   else
     let u = Uri.of_string grant#redirect_uri in
     let u = Uri.add_query_param u ("code", [ grant#token ]) in
@@ -39,16 +41,16 @@ let post req =
       |> Option.fold ~none:u ~some:(fun s ->
              Uri.add_query_param u ("state", [ s ]))
     in
-    Httpq.Server.respond ~status:`Found
+    Yume.Server.respond ~status:`Found
       ~headers:[ (`Location, Uri.to_string u) ]
       ""
 
-let get req =
-  let%lwt response_type = req |> Httpq.Server.query "response_type" in
-  let%lwt client_id = req |> Httpq.Server.query "client_id" in
-  let%lwt redirect_uri = req |> Httpq.Server.query "redirect_uri" in
-  let%lwt scope = req |> Httpq.Server.query ~default:"read" "scope" in
-  let%lwt state = req |> Httpq.Server.query_opt "state" in
+let get _ req =
+  let response_type = req |> Yume.Server.query "response_type" in
+  let client_id = req |> Yume.Server.query "client_id" in
+  let redirect_uri = req |> Yume.Server.query "redirect_uri" in
+  let scope = req |> Yume.Server.query ~default:"read" "scope" in
+  let state = req |> Yume.Server.query_opt "state" in
 
   let models =
     let open Jingoo.Jg_types in

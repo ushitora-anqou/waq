@@ -1,5 +1,5 @@
 (* Recv GET /.well-known/host-meta *)
-let get _req =
+let get _env _req =
   let url = Config.url [ ".well-known"; "webfinger" ] in
   Jingoo.Jg_template.from_string
     ~models:[ ("url", Tstr url) ]
@@ -7,4 +7,4 @@ let get _req =
 <XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0">
   <Link rel="lrdd" template="{{ url }}?resource={uri}"/>
 </XRD>|}
-  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
+  |> Yume.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]

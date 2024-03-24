@@ -1,45 +1,47 @@
 open Common
 
 let f =
-  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
+  make_waq_and_mstdn_scenario @@ fun env waq_token mstdn_token ->
   (* Lookup me from mstdn_server_domain *)
-  let%lwt aid, _, _ =
-    lookup `Mstdn ~token:mstdn_token ~username:"user1" ~domain:waq_server_domain
-      ()
+  let aid, _, _ =
+    lookup env `Mstdn ~token:mstdn_token ~username:"user1"
+      ~domain:waq_server_domain ()
   in
   (* Lookup @mstdn1@mstdn_server_domain *)
-  let%lwt mstdn1_id, _username, _acct =
-    lookup `Waq ~token:waq_token ~username:"mstdn1" ~domain:mstdn_server_domain
-      ()
+  let mstdn1_id, _username, _acct =
+    lookup env `Waq ~token:waq_token ~username:"mstdn1"
+      ~domain:mstdn_server_domain ()
   in
   (* Follow me from @mstdn1@mstdn_server_domain *)
-  follow `Mstdn ~token:mstdn_token aid;%lwt
-  Lwt_unix.sleep 1.0;%lwt
+  follow env `Mstdn ~token:mstdn_token aid;
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Post by me *)
-  let%lwt { id = waq_status_id; _ } = post `Waq ~token:waq_token () in
-  Lwt_unix.sleep 1.0;%lwt
+  let ({ id = waq_status_id; _ } : status) =
+    post env `Waq ~token:waq_token ()
+  in
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Get id of the post *)
-  let%lwt mstdn_status_id =
-    home_timeline `Mstdn ~token:mstdn_token >|= function
+  let mstdn_status_id =
+    home_timeline env `Mstdn ~token:mstdn_token |> function
     | [ `Assoc l ] -> List.assoc "id" l |> expect_string
     | _ -> assert false
   in
 
   (* Favourite the post by @mstdn1@mstdn_server_domain *)
-  let%lwt _ = fav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
-  Lwt_unix.sleep 1.0;%lwt
+  let _ = fav env `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Check if the post is favourited *)
-  (match%lwt get_favourited_by `Waq ~token:waq_token ~id:waq_status_id with
+  (match get_favourited_by env `Waq ~token:waq_token ~id:waq_status_id with
   | [ a ] ->
       assert (a.id = mstdn1_id);
-      Lwt.return_unit
-  | _ -> assert false);%lwt
+      ()
+  | _ -> assert false);
 
   (* Check notification *)
-  (match%lwt get_notifications `Waq ~token:waq_token with
+  (match get_notifications env `Waq ~token:waq_token with
   | [
    {
      typ = "favourite";
@@ -52,16 +54,16 @@ let f =
       assert (account_id = mstdn1_id);
       assert (status_id = waq_status_id);
       assert (account_id' = mstdn1_id);
-      Lwt.return_unit
-  | _ -> assert false);%lwt
+      ()
+  | _ -> assert false);
 
   (* Unfavourite the post *)
-  let%lwt _ = unfav `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
-  Lwt_unix.sleep 1.0;%lwt
+  let _ = unfav env `Mstdn ~token:mstdn_token ~id:mstdn_status_id in
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Check if the post is unfavourited *)
-  (match%lwt get_favourited_by `Waq ~token:waq_token ~id:waq_status_id with
-  | [] -> Lwt.return_unit
-  | _ -> assert false);%lwt
+  (match get_favourited_by env `Waq ~token:waq_token ~id:waq_status_id with
+  | [] -> ()
+  | _ -> assert false);
 
-  Lwt.return_unit
+  ()
