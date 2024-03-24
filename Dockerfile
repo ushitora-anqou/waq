@@ -30,9 +30,3 @@ USER waq:waq
 WORKDIR /waq/
 COPY --from=0 /home/opam/waq/_build/default/bin/main.exe ./waq
 COPY --from=0 /home/opam/waq/static /static
-
-RUN if [ -n "$INSTALL_TMOLE" ]; then curl -s https://tunnelmole.com/sh/install-linux.sh | bash; fi
-
-CMD ["bash", "-c", "/waq/waq db:migrate && /waq/waq"]
-
-# docker build . -t waq && docker run -it -v $PWD/config:/waq/config waq [/bin/bash]
