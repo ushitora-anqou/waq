@@ -36,7 +36,6 @@ depends: [
   "multipart_form"
   "multipart_form-lwt"
   "ocaml" {>= "5.0.0"}
-  "ocurl"
   "pcre"
   "postgresql"
   "ppx_deriving_yaml"

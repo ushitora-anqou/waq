@@ -29,7 +29,6 @@
   camlimages.exif
   camlimages.xpm
   cstruct
-  curl.lwt
   eio
   eio_main
   fpath

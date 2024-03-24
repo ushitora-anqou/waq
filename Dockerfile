@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 RUN apt-get update && apt-get install -y \
-    pkg-config libpq-dev libgmp-dev libssl-dev libpcre3-dev libcurl4-gnutls-dev \
+    pkg-config libpq-dev libgmp-dev libssl-dev libpcre3-dev \
     libpng-dev libjpeg62-turbo-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,8 +20,8 @@ FROM debian:11-slim
 
 ARG INSTALL_TMOLE
 RUN apt-get update && apt-get install -y \
-    libpq5 libgmp10 netbase ca-certificates imagemagick libcurl3-gnutls \
-    libjpeg62-turbo libpng16-16 curl \
+    libpq5 libgmp10 netbase ca-certificates imagemagick \
+    libjpeg62-turbo libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r waq && useradd -r -g waq waq
