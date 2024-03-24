@@ -1,38 +1,34 @@
 open Entity
 open Util
-open Lwt.Infix [@@warning "-33"]
 open Helper
 
 (* GET /api/v1/statuses/:id *)
-let get req =
+let get _ req =
   let status_id =
-    req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
+    req |> Yume.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
-  let%lwt self_id =
-    may_authenticate_account req >|= fun a -> a |> Option.map (fun x -> x#id)
+  let self_id = may_authenticate_account req |> Option.map (fun x -> x#id) in
+  let s =
+    try Db.(e @@ Status.get_one ~id:status_id)
+    with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found
   in
-  match%lwt Db.(e @@ Status.get_one ~id:status_id |> maybe_no_row) with
-  | None -> Httpq.Server.raise_error_response `Not_found
-  | Some s ->
-      let%lwt s = make_status_from_model ?self_id s in
-      s |> yojson_of_status |> Yojson.Safe.to_string
-      |> Httpq.Server.respond ~headers:[ content_type_app_json ]
+  let s = make_status_from_model ?self_id s in
+  s |> yojson_of_status |> Yojson.Safe.to_string
+  |> Yume.Server.respond ~headers:[ content_type_app_json ]
 
 (* Recv POST /api/v1/statuses *)
-let post req =
-  let%lwt self = authenticate_account req in
-  let%lwt status =
-    req |> Httpq.Server.query ~default:"" "status" >|= String.trim
+let post env req =
+  let self = authenticate_account req in
+  let status = req |> Yume.Server.query ~default:"" "status" |> String.trim in
+  let spoiler_text =
+    req |> Yume.Server.query ~default:"" "spoiler_text" |> String.trim
   in
-  let%lwt spoiler_text =
-    req |> Httpq.Server.query ~default:"" "spoiler_text" >|= String.trim
-  in
-  let%lwt in_reply_to_id =
+  let in_reply_to_id =
     req
-    |> Httpq.Server.query_opt "in_reply_to_id"
-    >|= Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
+    |> Yume.Server.query_opt "in_reply_to_id"
+    |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
-  let%lwt media_ids = req |> Httpq.Server.query_many "media_ids" in
+  let media_ids = req |> Yume.Server.query_many "media_ids" in
 
   (* Sanity check *)
   (match (status = "", media_ids) with
@@ -40,7 +36,7 @@ let post req =
   | _ -> raise_error_response `Unprocessable_entity);
 
   (* Handle media attachments *)
-  let%lwt attachments =
+  let attachments =
     let ids =
       media_ids |> List.map (int_of_string *> Model.MediaAttachment.ID.of_int)
     in
@@ -50,22 +46,21 @@ let post req =
     raise_error_response `Bad_request;
 
   (* Handle mentions *)
-  let%lwt mentioned_accts =
+  let mentioned_accts =
     Text_helper.match_mention status
-    |> Lwt_list.filter_map_p (fun (_off, _len, username, domain) ->
-           try%lwt
-             Activity.search_account (`Webfinger (domain, username))
-             >|= Option.some
+    |> List.filter_map (fun (_off, _len, username, domain) ->
+           try
+             Some (Activity.search_account env (`Webfinger (domain, username)))
            with _ ->
              Logq.debug (fun m ->
                  m "Couldn't find the mentioned account: %s"
                    (username
                    ^ match domain with None -> "" | Some s -> "@" ^ s));
-             Lwt.return_none)
+             None)
   in
 
   (* Insert status and mentions *)
-  let%lwt s =
+  let s =
     Db.(
       e
         Status.(
@@ -74,39 +69,37 @@ let post req =
                ~spoiler_text ())))
   in
   (mentioned_accts
-  |> Lwt_list.iter_p @@ fun acct ->
+  |> List.iter @@ fun acct ->
      Db.(e Mention.(make ~account_id:acct#id ~status_id:s#id () |> save_one))
-     |> ignore_lwt);%lwt
+     |> ignore);
 
   (* Update attachments *)
-  ( attachments |> List.map (fun m -> m#with_status_id (Some s#id)) |> fun xs ->
-    Db.(e MediaAttachment.(update xs)) |> ignore_lwt );%lwt
+  (let xs = attachments |> List.map (fun m -> m#with_status_id (Some s#id)) in
+   Db.(e MediaAttachment.(update xs)) |> ignore);
 
   (* Deliver the status to others *)
-  Worker.Distribute.kick s;%lwt
+  Worker.Distribute.kick env s;
 
   (* Attach preview cards if any *)
-  Worker.Link_crawl.kick s#id;%lwt
+  Worker.Link_crawl.kick env s#id;
 
   (* Return the result to the client *)
-  let%lwt s = make_status_from_model ~self_id:self#id s in
+  let s = make_status_from_model ~self_id:self#id s in
   s |> yojson_of_status |> Yojson.Safe.to_string
-  |> Httpq.Server.respond ~headers:[ content_type_app_json ]
+  |> Yume.Server.respond ~headers:[ content_type_app_json ]
 
-let delete req =
-  let%lwt self = authenticate_account req in
+let delete env req =
+  let self = authenticate_account req in
   let status_id =
-    req |> Httpq.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
+    req |> Yume.Server.param ":id" |> int_of_string |> Model.Status.ID.of_int
   in
-  let%lwt status =
+  let status =
     try Db.e (Model.Status.get_one ~id:status_id)
-    with Sqlx.Error.NoRowFound -> Httpq.Server.raise_error_response `Not_found
+    with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found
   in
   if status#account_id <> self#id then raise_error_response `Not_found;
 
   (* We should construct the result BEFORE the removal *)
-  let%lwt status_to_be_returned =
-    make_status_from_model ~self_id:self#id status
-  in
-  Worker.Removal.kick ~account_id:self#id ~status_id;%lwt
+  let status_to_be_returned = make_status_from_model ~self_id:self#id status in
+  Worker.Removal.kick env ~account_id:self#id ~status_id;
   yojson_of_status status_to_be_returned |> respond_yojson

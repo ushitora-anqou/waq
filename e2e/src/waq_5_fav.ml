@@ -1,23 +1,23 @@
 open Common
 
 let f =
-  make_waq_scenario @@ fun token ->
-  let%lwt user1_id, _, _ = lookup `Waq ~token ~username:"user1" () in
-  let%lwt user2_id, _, _ = lookup `Waq ~token ~username:"user2" () in
-  let%lwt user3_id, _, _ = lookup `Waq ~token ~username:"user3" () in
-  let%lwt token2 = fetch_access_token ~username:"user2" in
-  let%lwt token3 = fetch_access_token ~username:"user3" in
+  make_waq_scenario @@ fun env token ->
+  let user1_id, _, _ = lookup env `Waq ~token ~username:"user1" () in
+  let user2_id, _, _ = lookup env `Waq ~token ~username:"user2" () in
+  let user3_id, _, _ = lookup env `Waq ~token ~username:"user3" () in
+  let token2 = fetch_access_token env ~username:"user2" in
+  let token3 = fetch_access_token env ~username:"user3" in
 
-  let%lwt { id; _ } = post `Waq ~token () in
-  let%lwt { favourited; _ } = fav `Waq ~token ~id in
+  let ({ id; _ } : status) = post env `Waq ~token () in
+  let { favourited; _ } = fav env `Waq ~token ~id in
   assert favourited;
-  let%lwt { favourited; _ } = fav `Waq ~token:token2 ~id in
+  let { favourited; _ } = fav env `Waq ~token:token2 ~id in
   assert favourited;
-  let%lwt { favourited; favourites_count; _ } = fav `Waq ~token:token3 ~id in
+  let { favourited; favourites_count; _ } = fav env `Waq ~token:token3 ~id in
   assert favourited;
   assert (favourites_count = 3);
 
-  let%lwt l = get_favourited_by `Waq ~token ~id in
+  let l = get_favourited_by env `Waq ~token ~id in
   assert (List.length l = 3);
   assert (
     l |> List.find_opt (fun (a : account) -> a.id = user1_id) |> Option.is_some);
@@ -26,7 +26,7 @@ let f =
   assert (
     l |> List.find_opt (fun (a : account) -> a.id = user3_id) |> Option.is_some);
 
-  (match%lwt get_notifications `Waq ~token with
+  (match get_notifications env `Waq ~token with
   | [
    {
      typ = "favourite";
@@ -44,24 +44,21 @@ let f =
       assert (account_id3 = user3_id);
       assert (account_id2 = user2_id);
       assert (status_id3 = id);
-      assert (status_id2 = id);
-      Lwt.return_unit
-  | _ -> assert false);%lwt
+      assert (status_id2 = id)
+  | _ -> assert false);
 
-  let%lwt { favourited; _ } = unfav `Waq ~token ~id in
+  let { favourited; _ } = unfav env `Waq ~token ~id in
   assert (not favourited);
-  let%lwt { favourited; _ } = unfav `Waq ~token:token2 ~id in
+  let { favourited; _ } = unfav env `Waq ~token:token2 ~id in
   assert (not favourited);
-  let%lwt { favourited; favourites_count; _ } = unfav `Waq ~token:token3 ~id in
+  let { favourited; favourites_count; _ } = unfav env `Waq ~token:token3 ~id in
   assert (not favourited);
   assert (favourites_count = 0);
 
-  (match%lwt get_favourited_by `Waq ~token ~id with
-  | [] -> Lwt.return_unit
-  | _ -> assert false);%lwt
+  (match get_favourited_by env `Waq ~token ~id with
+  | [] -> ()
+  | _ -> assert false);
 
-  (match%lwt get_notifications `Waq ~token with
-  | [] -> Lwt.return_unit
-  | _ -> assert false);%lwt
+  (match get_notifications env `Waq ~token with [] -> () | _ -> assert false);
 
-  Lwt.return_unit
+  ()

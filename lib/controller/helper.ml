@@ -1,5 +1,4 @@
 open Util
-open Lwt.Infix
 
 let app_activity_json = "application/activity+json"
 let text_html = "text/html"
@@ -13,10 +12,10 @@ let content_type_app_jrd_json =
 let content_type_app_json = (`Content_type, "application/json; charset=utf-8")
 let content_type_app_activity_json = (`Content_type, "application/activity+json")
 let content_type_text_html = (`Content_type, "text/html; charset=utf-8")
-let raise_error_response = Httpq.Server.raise_error_response
+let raise_error_response = Yume.Server.raise_error_response
 
 let authenticate_bearer = function
-  | Httpq.Server.Request r -> (
+  | Yume.Server.Request r -> (
       try
         let header = r.headers |> List.assoc `Authorization in
         assert (String.starts_with ~prefix:"Bearer " header);
@@ -24,23 +23,22 @@ let authenticate_bearer = function
         Oauth_helper.authenticate_access_token bearer_token
       with _ -> raise_error_response `Unauthorized)
 
-let authenticate_user (r : Httpq.Server.request) : Model.User.t Lwt.t =
+let authenticate_user (r : Yume.Server.request) : Model.User.t =
   try
-    let%lwt token = authenticate_bearer r in
+    let token = authenticate_bearer r in
     Db.(e User.(get_one ~id:(Option.get token#resource_owner_id)))
   with _ -> raise_error_response `Unauthorized
 
-let authenticate_account (r : Httpq.Server.request) : Model.Account.t Lwt.t =
+let authenticate_account (r : Yume.Server.request) : Model.Account.t =
   try
-    let%lwt user = authenticate_user r in
+    let user = authenticate_user r in
     Db.(e Account.(get_one ~id:user#account_id))
   with _ -> raise_error_response `Unauthorized
 
-let may_authenticate_user r =
-  try%lwt authenticate_user r >|= Option.some with _ -> Lwt.return_none
+let may_authenticate_user r = try Some (authenticate_user r) with _ -> None
 
 let may_authenticate_account r =
-  try%lwt authenticate_account r >|= Option.some with _ -> Lwt.return_none
+  try Some (authenticate_account r) with _ -> None
 
 let int_of_string s =
   match int_of_string_opt s with
@@ -53,19 +51,19 @@ let bool_of_string s =
   | Some b -> b
 
 let respond_html ?(headers = []) s =
-  Httpq.Server.respond ~headers:(content_type_text_html :: headers) s
+  Yume.Server.respond ~headers:(content_type_text_html :: headers) s
 
 let respond_yojson ?(headers = []) y =
   Yojson.Safe.to_string y
-  |> Httpq.Server.respond ~headers:(content_type_app_json :: headers)
+  |> Yume.Server.respond ~headers:(content_type_app_json :: headers)
 
 let respond_activity_yojson y =
   Yojson.Safe.to_string y
-  |> Httpq.Server.respond ~headers:[ content_type_app_activity_json ]
+  |> Yume.Server.respond ~headers:[ content_type_app_activity_json ]
 
 let render ~default routes req =
   let accept =
-    Httpq.Server.header_opt `Accept req
+    Yume.Server.header_opt `Accept req
     |> Option.map (String.split_on_char ',' |.> List.map String.trim)
   in
   let default = ("default", default) in
@@ -90,7 +88,7 @@ let parse_webfinger_address q =
   | _ -> raise_error_response `Bad_request
 
 let raise_if_no_row_found ?(status = `Bad_request) f =
-  try%lwt f with Sqlx.Error.NoRowFound -> raise_error_response status
+  try f with Sqlx.Error.NoRowFound -> raise_error_response status
 
 let string_to_status_id s = s |> int_of_string |> Model.Status.ID.of_int
 let string_to_account_id s = s |> int_of_string |> Model.Account.ID.of_int

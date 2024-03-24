@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Util
 
 type oembed = {
@@ -77,13 +76,13 @@ let parse_json_oembed ~url src =
       make ~image ()
   | _ -> failwith "Invalid type"
 
-let fetch_oembed url =
-  Throttle_fetch.http_get url
-  >|= find_json_oembed_href >>= Throttle_fetch.http_get
-  >|= parse_json_oembed ~url
+let fetch_oembed env url =
+  Throttle_fetch.http_get env url
+  |> find_json_oembed_href
+  |> Throttle_fetch.http_get env
+  |> parse_json_oembed ~url
 
-let fetch_oembed_opt url =
-  try%lwt fetch_oembed url >|= Option.some with _ -> Lwt.return_none
+let fetch_oembed_opt env url = try Some (fetch_oembed env url) with _ -> None
 
 let parse_opengraph ~url src =
   let open Soup in
@@ -121,23 +120,25 @@ let parse_opengraph ~url src =
 
   make_oembed ~url ~typ:"link" ~title ~description ?image ?provider_name ()
 
-let fetch_image_info url = Throttle_fetch.http_get url >>= Image.inspect
+let fetch_image_info env url =
+  let body = Throttle_fetch.http_get env url in
+  Lwt_eio.run_lwt @@ fun () -> Image.inspect body
 
-let fetch_opengraph url =
-  let%lwt src = Throttle_fetch.http_get url >|= parse_opengraph ~url in
+let fetch_opengraph env url =
+  let src = Throttle_fetch.http_get env url |> parse_opengraph ~url in
   match src.image with
-  | None -> Lwt.return src
+  | None -> src
   | Some image_url -> (
-      try%lwt
-        let%lwt width, height, blurhash = fetch_image_info image_url in
+      try
+        let width, height, blurhash = fetch_image_info env image_url in
         let blurhash = Some blurhash in
-        Lwt.return { src with width; height; blurhash }
-      with _ -> Lwt.return { src with image = None })
+        { src with width; height; blurhash }
+      with _ -> { src with image = None })
 
-let fetch_opengraph_opt url =
-  try%lwt fetch_opengraph url >|= Option.some
+let fetch_opengraph_opt env url =
+  try Some (fetch_opengraph env url)
   with e ->
     Logq.err (fun m ->
         m "Couldn't fetch opengraph: %s\n%s" (Printexc.to_string e)
           (Printexc.get_backtrace ()));
-    Lwt.return_none
+    None

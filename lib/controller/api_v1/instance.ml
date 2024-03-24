@@ -23,7 +23,7 @@ type v1_instance = {
 }
 [@@deriving make, yojson]
 
-let get _req =
+let get _ _req =
   let uri = Config.server_name () in
   let streaming_api = "wss://" ^ uri in
   make_v1_instance ~uri ~title:"Waq"
@@ -32,4 +32,4 @@ let get _req =
     ~version:"0.0.1"
     ~urls:(make_v1_instance_urls ~streaming_api)
   |> yojson_of_v1_instance |> Yojson.Safe.to_string
-  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]

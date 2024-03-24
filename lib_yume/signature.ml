@@ -65,7 +65,10 @@ let may_cons_digest_header ?(prefix = "SHA-256") (headers : Headers.t)
     (body : string option) : Headers.t =
   body
   |> Option.fold ~none:headers ~some:(fun body ->
-         let digest = Sha256.(string body |> to_bin |> Base64.encode_exn) in
+         let digest =
+           body |> Cstruct.of_string |> Mirage_crypto.Hash.SHA256.digest
+           |> Cstruct.to_string |> Base64.encode_exn
+         in
          let digest = prefix ^ "=" ^ digest in
          match List.assoc_opt `Digest headers with
          | Some v when v <> digest -> failwith "Digest not match"

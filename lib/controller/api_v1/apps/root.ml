@@ -9,12 +9,12 @@ type res = {
 }
 [@@deriving make, yojson]
 
-let post req =
-  let%lwt client_name = req |> Httpq.Server.query "client_name" in
-  let%lwt redirect_uris = req |> Httpq.Server.query "redirect_uris" in
-  let%lwt scopes = req |> Httpq.Server.query ~default:"read" "scopes" in
+let post _ req =
+  let client_name = req |> Yume.Server.query "client_name" in
+  let redirect_uris = req |> Yume.Server.query "redirect_uris" in
+  let scopes = req |> Yume.Server.query ~default:"read" "scopes" in
 
-  let%lwt app =
+  let app =
     Oauth_helper.generate_application ~name:client_name
       ~redirect_uri:redirect_uris ~scopes
   in
@@ -25,4 +25,4 @@ let post req =
     ~vapid_key:(Config.vapid_public_key ())
     ()
   |> yojson_of_res |> Yojson.Safe.to_string
-  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]

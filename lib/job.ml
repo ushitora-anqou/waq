@@ -1,23 +1,32 @@
-open Lwt.Infix
+module Runner = struct
+  type t = { chan : (unit -> unit) Eio.Stream.t }
 
-let kick ~name (f : unit -> unit Lwt.t) : unit Lwt.t =
+  let global_runner = { chan = Eio.Stream.create 0 }
+
+  let start_global_runner ~sw =
+    Eio.Fiber.fork ~sw (fun () ->
+        let rec loop () =
+          let task = Eio.Stream.take global_runner.chan in
+          Eio.Fiber.fork ~sw task;
+          loop ()
+        in
+        loop ())
+
+  let queue task = Eio.Stream.add global_runner.chan task
+end
+
+let kick env ~name (f : unit -> unit) : unit =
   let timeout_seconds = 25.0 in
-  let timeout_f () =
-    let timeout = Lwt_unix.sleep timeout_seconds in
-    let task_done = ref false in
-    Lwt.pick [ timeout; (f () >|= fun () -> task_done := true) ] >|= fun () ->
-    if not !task_done then failwith "Timeout"
-  in
 
   if Config.debug_job_kick_block () then (
     Logq.debug (fun m -> m "[DEBUG ONLY] Blocked kick: %s" name);
-    try%lwt timeout_f ()
+    try Eio.Time.with_timeout_exn env#clock timeout_seconds f
     with e ->
       Logq.warn (fun m ->
           m "[DEBUG ONLY] Fail immediately due to job failure:\n%s: %s: %s" name
             (match e with _ -> Printexc.to_string e)
             (Printexc.get_backtrace ()));
-      Lwt.fail e)
+      raise e)
   else
     let task () =
       let num_repeats = 3 in
@@ -26,21 +35,20 @@ let kick ~name (f : unit -> unit Lwt.t) : unit Lwt.t =
         (i * i * i * i) + 15 + (Random.int 10 * (i + 1)) |> float_of_int
       in
       let rec loop i =
-        try%lwt timeout_f ()
+        try Eio.Time.with_timeout_exn env#clock timeout_seconds f
         with e ->
           Logq.warn (fun m ->
               m "Job failed: %s: %s: %s" name (Printexc.to_string e)
                 (Printexc.get_backtrace ()));
-          if i + 1 = num_repeats then (
-            Logq.err (fun m -> m "Job killed: %s: Limit reached" name);
-            Lwt.return_unit)
+          if i + 1 = num_repeats then
+            Logq.err (fun m -> m "Job killed: %s: Limit reached" name)
           else
             let dur = sleep_duration i in
             Logq.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
-            Lwt_unix.sleep dur;%lwt
+            Eio.Time.sleep env#clock dur;
             loop (i + 1)
       in
       loop 0
     in
-    Lwt.async task;
-    Lwt.return_unit
+    Runner.queue task;
+    ()

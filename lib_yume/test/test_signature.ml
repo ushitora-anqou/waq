@@ -1,18 +1,4 @@
-open Waq
-open Httpq
-
-let test_parse_path () =
-  let open Path_pattern in
-  assert (of_string "" = []);
-  assert (of_string "/foo/bar/2000" = [ L "foo"; L "bar"; L "2000" ]);
-  assert (of_string "/foo/:bar/2000" = [ L "foo"; P ":bar"; L "2000" ]);
-  assert (of_string "/foo/*" = [ L "foo"; S ]);
-  assert (of_string "/foo/:bar" = [ L "foo"; P ":bar" ]);
-  assert (perform ~pat:(of_string "/foo/:bar") "/foo/1" = Some [ (":bar", "1") ]);
-  assert (perform ~pat:(of_string "/foo/*") "/foo/1/2" |> Option.is_some);
-  assert (perform ~pat:(of_string "/foo/bar") "/foo/bar/" |> Option.is_some);
-  assert (perform ~pat:(of_string "/foo/bar") "/foo/bar//" |> Option.is_some);
-  ()
+open Yume
 
 let test_build_signing_string () =
   let signed_headers =
@@ -183,35 +169,13 @@ KgbztieZwDBihVKbPtiaiGxeNXrxGWfL37BB0Jcy/RRYomLBjwTj2Ks=
     @@ Signature.verify ~pub_key ~algorithm ~signed_headers ~signature ~headers
          ~meth ~path ~body)
 
-let test_url () =
-  (* Thanks to: https://ja.wikipedia.org/wiki/Uniform_Resource_Identifier *)
-  let url =
-    Uri.of_string
-      "https://user:password@www.example.com:123/forum/questions/?tag=networking&order=newest#top"
-  in
-  assert (Uri.getaddrinfo_port url = "123");
-  assert (Uri.http_host url = "www.example.com:123");
-  assert (Uri.domain url = "www.example.com:123");
-  assert (
-    Uri.path_query_fragment url
-    = "/forum/questions/?tag=networking&order=newest#top");
-
-  let url = Uri.of_string "http://example.com" in
-  assert (Uri.getaddrinfo_port url = "http");
-  assert (Uri.http_host url = "example.com");
-  assert (Uri.domain url = "example.com");
-  assert (Uri.path_query_fragment url = "");
-  ()
-
 let () =
   let open Alcotest in
-  Crypto.initialize ();
-  run "http"
+  Mirage_crypto_rng_unix.initialize (module Mirage_crypto_rng.Fortuna);
+  run "signature"
     [
-      ("parse_path", [ test_case "case1" `Quick test_parse_path ]);
       ( "build_signing_string",
         [ test_case "case1" `Quick test_build_signing_string ] );
       ("sign", [ test_case "case1" `Quick test_sign ]);
       ("verify", [ test_case "case1" `Quick test_verify ]);
-      ("url", [ test_case "case1" `Quick test_url ]);
     ]

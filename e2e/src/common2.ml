@@ -11,25 +11,27 @@ type agent = {
 let acct_of_agent ~(from : agent) (a : agent) =
   if a.domain = from.domain then a.username else a.username ^ "@" ^ a.domain
 
-let lookup src = lookup src.kind ~token:src.token
-let follow src = follow src.kind ~token:src.token
-let post src = post src.kind ~token:src.token
-let search src = search src.kind ~token:src.token
-let reblog src = reblog src.kind ~token:src.token
-let unreblog src = unreblog src.kind ~token:src.token
+let lookup env src = lookup env src.kind ~token:src.token
+let follow env src = follow env src.kind ~token:src.token
+let post env src = post env src.kind ~token:src.token
+let search env src = search env src.kind ~token:src.token
+let reblog env src = reblog env src.kind ~token:src.token
+let unreblog env src = unreblog env src.kind ~token:src.token
 
-let home_timeline src =
-  home_timeline src.kind ~token:src.token >|= List.map status_of_yojson
+let home_timeline env src =
+  home_timeline env src.kind ~token:src.token |> List.map status_of_yojson
 
-let delete_status src = delete_status src.kind ~token:src.token
-let get_status src = get_status src.kind ~token:src.token
-let get_notifications src = get_notifications src.kind ~token:src.token
-let update_credentials src = update_credentials src.kind ~token:src.token
+let delete_status env src = delete_status env src.kind ~token:src.token
+let get_status env src = get_status env src.kind ~token:src.token
+let get_notifications env src = get_notifications env src.kind ~token:src.token
 
-let websocket src ?target handler f =
-  websocket src.kind ~token:src.token ?target handler f
+let update_credentials env src =
+  update_credentials env src.kind ~token:src.token
 
-let upload_media src ~filename ~data ~content_type =
+let websocket env src ?target handler f =
+  websocket env src.kind ~token:src.token ?target handler f
+
+let upload_media env src ~filename ~data ~content_type =
   let target = "/api/v2/media" in
   let headers =
     [
@@ -56,22 +58,22 @@ let upload_media src ~filename ~data ~content_type =
   in
   assert (List.length body <> 2);
   let body = String.concat "\r\n" body in
-  fetch_exn ~headers ~meth:`POST ~body (url src.kind target)
-  >|= Yojson.Safe.from_string >|= media_attachment_of_yojson
+  fetch_exn env ~headers ~meth:`POST ~body (url src.kind target)
+  |> Yojson.Safe.from_string |> media_attachment_of_yojson
 
-let lookup_agent src dst =
+let lookup_agent env src dst =
   let domain = if src.domain = dst.domain then None else Some dst.domain in
-  lookup src ~username:dst.username ?domain ()
+  lookup env src ~username:dst.username ?domain ()
 
-let follow_agent src dst =
-  let%lwt id, _, _ = lookup_agent src dst in
-  follow src id
+let follow_agent env src dst =
+  let id, _, _ = lookup_agent env src dst in
+  follow env src id
 
-let expect_no_status src id =
-  try%lwt
-    get_status src id |> ignore_lwt;%lwt
+let expect_no_status env src id =
+  try
+    get_status env src id |> ignore;
     assert false
-  with Httpq.Client.FetchFailure (Some (`Not_found, _, _)) -> Lwt.return_unit
+  with FetchFailure (Some (`Not_found, _, _)) -> ()
 
 type runtime_context = {
   waq_tokens : string array;
@@ -95,7 +97,8 @@ let generate_mstdn_agent ctxt =
   let username = "mstdn" ^ string_of_int (i + 1) in
   make_agent ~kind:`Mstdn ~token ~username ~domain:mstdn_server_domain
 
-let launch_waq ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) : unit =
+let launch_waq ?(timeout = 30.0)
+    (f : Eio_unix.Stdenv.base -> runtime_context -> unit) : unit =
   Internal.launch_waq @@ fun waq_tokens ->
   Logq.debug (fun m ->
       m "Access token for Waq: [%s]"
@@ -105,11 +108,12 @@ let launch_waq ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) : unit =
       ~mstdn_num_used_tokens:0
   in
   Unix.sleep 10;
-  Lwt.pick [ f ctxt; (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout") ]
-  |> Lwt_main.run
+  Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
+  Eio.Time.with_timeout_exn env#clock timeout (fun () -> f env ctxt)
 
-let launch_waq_and_mstdn ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) :
-    unit =
+let launch_waq_and_mstdn ?(timeout = 30.0)
+    (f : Eio_unix.Stdenv.base -> runtime_context -> unit) : unit =
   Internal.launch_waq @@ fun waq_tokens ->
   Logq.debug (fun m ->
       m "Access token for Waq: [%s]"
@@ -123,5 +127,6 @@ let launch_waq_and_mstdn ?(timeout = 30.0) (f : runtime_context -> unit Lwt.t) :
       ~mstdn_num_used_tokens:0
   in
   Unix.sleep 10;
-  Lwt.pick [ f ctxt; (Lwt_unix.sleep timeout >>= fun () -> failwith "Timeout") ]
-  |> Lwt_main.run
+  Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
+  Eio.Time.with_timeout_exn env#clock timeout (fun () -> f env ctxt)

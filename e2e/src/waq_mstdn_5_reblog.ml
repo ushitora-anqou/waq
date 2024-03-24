@@ -1,30 +1,30 @@
 open Common
 
 let f =
-  make_waq_and_mstdn_scenario @@ fun waq_token mstdn_token ->
+  make_waq_and_mstdn_scenario @@ fun env waq_token mstdn_token ->
   (* Lookup @mstdn1@mstdn_server_domain *)
-  let%lwt mstdn1_id, _username, _acct =
-    lookup `Waq ~token:waq_token ~username:"mstdn1" ~domain:mstdn_server_domain
-      ()
+  let mstdn1_id, _username, _acct =
+    lookup env `Waq ~token:waq_token ~username:"mstdn1"
+      ~domain:mstdn_server_domain ()
   in
 
   (* Follow @mstdn1@mstdn_server_domain *)
-  follow `Waq ~token:waq_token mstdn1_id;%lwt
-  Lwt_unix.sleep 1.0;%lwt
+  follow env `Waq ~token:waq_token mstdn1_id;
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Post by user1 *)
-  let%lwt { uri; id = post_id; _ } = post `Waq ~token:waq_token () in
-  Lwt_unix.sleep 1.0;%lwt
+  let ({ uri; id = post_id; _ } : status) = post env `Waq ~token:waq_token () in
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Reblog the post by @mstdn1@locahost:3000 *)
-  (match%lwt search `Mstdn ~token:mstdn_token uri with
+  (match search env `Mstdn ~token:mstdn_token uri with
   | _, [ status ], _ ->
-      reblog `Mstdn ~token:mstdn_token ~id:status.id |> ignore_lwt
-  | _ -> assert false);%lwt
-  Lwt_unix.sleep 1.0;%lwt
+      reblog env `Mstdn ~token:mstdn_token ~id:status.id |> ignore
+  | _ -> assert false);
+  Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Check home timeline *)
-  (home_timeline `Waq ~token:waq_token >|= function
+  (home_timeline env `Waq ~token:waq_token |> function
    | [ `Assoc l1; `Assoc l2 ] ->
        (* Check if the timeline is correct *)
        assert (uri = (l2 |> List.assoc "uri" |> expect_string));
@@ -33,10 +33,10 @@ let f =
          = (l1 |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
           |> expect_string));
        ()
-   | _ -> assert false);%lwt
+   | _ -> assert false);
 
   (* Check notifications *)
-  (get_notifications `Waq ~token:waq_token >|= function
+  (get_notifications env `Waq ~token:waq_token |> function
    | [
        {
          typ = "reblog";
@@ -47,6 +47,6 @@ let f =
      ] ->
        assert (account_id = mstdn1_id);
        assert (status_id = post_id)
-   | _ -> assert false);%lwt
+   | _ -> assert false);
 
-  Lwt.return_unit
+  ()

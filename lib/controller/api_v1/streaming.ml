@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let may_subscribe ~user_id ~stream ~ws_conn subscription_ref =
   match !subscription_ref with
   | Some _ -> ()
@@ -13,23 +11,23 @@ let may_unsubscribe subscription_ref =
   |> Option.iter (fun (key, conn_id) -> Streaming.remove key conn_id);
   subscription_ref := None
 
-let get req =
-  let%lwt access_token =
-    let open Httpq.Server in
-    req |> query_opt "access_token" >|= function
+let get _env req =
+  let access_token =
+    let open Yume.Server in
+    req |> query_opt "access_token" |> function
     | Some v -> v
     | None -> req |> header `Sec_websocket_protocol
   in
-  let%lwt stream = req |> Httpq.Server.query_opt "stream" in
+  let stream = req |> Yume.Server.query_opt "stream" in
 
-  let%lwt user_id =
-    try%lwt
-      Oauth_helper.authenticate_access_token access_token >|= fun token ->
+  let user_id =
+    try
+      Oauth_helper.authenticate_access_token access_token |> fun token ->
       Option.get token#resource_owner_id
-    with _ -> Httpq.Server.raise_error_response `Unauthorized
+    with _ -> Yume.Server.raise_error_response `Unauthorized
   in
 
-  Httpq.Server.websocket req @@ fun ws_conn ->
+  Yume.Server.websocket req @@ fun ws_conn ->
   let user_subscription_ref = ref None in
   let may_subscribe_user () =
     may_subscribe ~user_id ~stream:`User ~ws_conn user_subscription_ref
@@ -39,11 +37,11 @@ let get req =
   (match stream with
   | None -> ()
   | Some "user" -> may_subscribe_user ()
-  | _ -> Httpq.Server.raise_error_response `Bad_request);
+  | _ -> Yume.Server.raise_error_response `Bad_request);
 
   let rec loop () =
-    match%lwt Httpq.Server.ws_recv ws_conn with
-    | None -> Lwt.return_unit (* Closed *)
+    match Yume.Server.ws_recv ws_conn with
+    | None -> () (* Closed *)
     | Some json ->
         (match
            let ev = Yojson.Safe.from_string json |> Yojson.Safe.Util.to_assoc in
@@ -65,4 +63,4 @@ let get req =
             ());
         loop ()
   in
-  Lwt.finalize loop (fun () -> Lwt.return (may_unsubscribe_user ()))
+  Fun.protect ~finally:may_unsubscribe_user loop

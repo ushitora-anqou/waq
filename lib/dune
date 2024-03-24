@@ -32,7 +32,6 @@
   eio
   eio_main
   fpath
-  httpq
   jingoo
   lambdasoup
   logq
@@ -40,7 +39,7 @@
   lwt_eio
   lwt.unix
   mirage-crypto-rng
-  mirage-crypto-rng.lwt
+  mirage-crypto-rng-eio
   pcre
   postgresql
   ptime
@@ -53,7 +52,8 @@
   xml-light
   yaml
   yaml.unix
-  yojson)
+  yojson
+  yume)
  (flags :standard -warn-error -33))
 
 (include_subdirs qualified)

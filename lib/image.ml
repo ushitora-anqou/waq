@@ -46,7 +46,7 @@ let generate_unique_filename img_type =
   Uuidm.(v `V4 |> to_string)
   ^ match img_type with `PNG -> ".png" | `JPEG -> ".jpeg"
 
-let save_formdata ~outdir (formdata : Httpq.Server.formdata_t) =
+let save_formdata ~outdir (formdata : Yume.Server.formdata_t) =
   let fdata = formdata in
   let input_type =
     match
@@ -54,7 +54,7 @@ let save_formdata ~outdir (formdata : Httpq.Server.formdata_t) =
       |> parse_content_type
     with
     | Ok t -> t
-    | Error _ -> Httpq.Server.raise_error_response `Bad_request
+    | Error _ -> Yume.Server.raise_error_response `Bad_request
   in
   let file_name = generate_unique_filename input_type in
   let file_path = Filename.concat outdir file_name in

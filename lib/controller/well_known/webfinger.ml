@@ -4,7 +4,7 @@ open Util
 
 let respond_jrd w () =
   w |> yojson_of_webfinger |> Yojson.Safe.to_string
-  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
+  |> Yume.Server.respond ~headers:[ Helper.content_type_app_jrd_json ]
 
 let respond_xrd w () =
   ({|<?xml version="1.0" encoding="UTF-8"?>|}
@@ -27,12 +27,12 @@ let respond_xrd w () =
                        ],
                        [] ))) )
       |> to_string))
-  |> Httpq.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
+  |> Yume.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
 
 (* Recv GET /.well-known/webfinger *)
-let get req =
-  try%lwt
-    let%lwt s = req |> Httpq.Server.query "resource" in
+let get _ req =
+  try
+    let s = req |> Yume.Server.query "resource" in
     let s =
       (* Remove 'acct:' prefix if exists *)
       if String.starts_with ~prefix:"acct:" s then
@@ -45,8 +45,8 @@ let get req =
       failwith "Invalid request";
     (* Return the body *)
     let name, dom = (List.hd s, List.nth s 1) in
-    let%lwt a = Db.(e & Account.get_one ~domain:None ~username:name) in
-    let%lwt _ = Db.(e & User.get_one ~account_id:a#id) in
+    let a = Db.(e & Account.get_one ~domain:None ~username:name) in
+    let _ = Db.(e & User.get_one ~account_id:a#id) in
     let res =
       make_webfinger
         ~subject:("acct:" ^ name ^ "@" ^ dom)
@@ -67,4 +67,4 @@ let get req =
         m "[well_known_webfinger] Can't find user: %s\n%s"
           (Printexc.to_string e)
           (Printexc.get_backtrace ()));
-    Httpq.Server.raise_error_response `Not_found
+    Yume.Server.raise_error_response `Not_found

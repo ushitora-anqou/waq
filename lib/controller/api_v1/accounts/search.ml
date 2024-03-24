@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Activity
 open Helper
 
@@ -14,18 +13,16 @@ type entry = {
 type t = entry list [@@deriving yojson]
 
 let parse_req req =
-  let open Httpq.Server in
-  let%lwt resolve =
-    req |> query ~default:"false" "resolve" >|= bool_of_string
-  in
-  req |> query "q" >|= parse_webfinger_address >|= fun (username, domain) ->
+  let open Yume.Server in
+  let resolve = req |> query ~default:"false" "resolve" |> bool_of_string in
+  let username, domain = req |> query "q" |> parse_webfinger_address in
   (resolve, username, domain)
 
-let get req =
-  let%lwt _ = authenticate_bearer req in
-  let%lwt _resolve, username, domain = parse_req req in
-  try%lwt
-    let%lwt acc = search_account (`Webfinger (domain, username)) in
+let get env req =
+  let _ = authenticate_bearer req in
+  let _resolve, username, domain = parse_req req in
+  try
+    let acc = search_account env (`Webfinger (domain, username)) in
     let acct =
       match acc#domain with
       | None -> username
@@ -37,5 +34,5 @@ let get req =
         ~username ~acct ~display_name:acc#display_name
     in
     [ ent ] |> yojson_of_t |> Yojson.Safe.to_string
-    |> Httpq.Server.respond ~headers:[ Helper.content_type_app_json ]
-  with _ -> Httpq.Server.raise_error_response `Not_found
+    |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]
+  with _ -> Yume.Server.raise_error_response `Not_found

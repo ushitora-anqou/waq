@@ -1,0 +1,10 @@
+(tests
+ (names test_signature test_path_pattern test_ws)
+ (libraries
+  alcotest
+  eio_main
+  yume
+  logq
+  mirage-crypto-rng
+  mirage-crypto-rng.unix
+  mirage-crypto-rng-eio))

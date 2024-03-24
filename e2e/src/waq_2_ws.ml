@@ -2,7 +2,7 @@ open Common
 
 open struct
   let f ~use_query_param =
-    make_waq_scenario @@ fun waq_token ->
+    make_waq_scenario @@ fun env waq_token ->
     let got_uri = ref None in
     let set_current_state, handler =
       websocket_handler_state_machine ~init:`Init
@@ -21,13 +21,13 @@ open struct
                 got_uri := Some uri;
 
                 (* Check that no event should be received once an unsubscribe message is sent. *)
-                if%lwt Lwt.return (not use_query_param) then (
-                  pushf (Some {|{"type":"unsubscribe","stream":"user"}|});%lwt
-                  let%lwt _ = post `Waq ~token:waq_token () in
-                  Lwt_unix.sleep 5.0);%lwt
+                if not use_query_param then (
+                  pushf (Some {|{"type":"unsubscribe","stream":"user"}|});
+                  let _ = post env `Waq ~token:waq_token () in
+                  Eio.Time.sleep (Eio.Stdenv.clock env) 5.0);
 
-                pushf None;%lwt
-                Lwt.return `End );
+                pushf None;
+                `End );
             (`End, fun _ -> assert false);
           ]
         ()
@@ -39,17 +39,16 @@ open struct
     in
 
     let expected_uri = ref None in
-    let mtx = Lwt_mutex.create () in
-    websocket ~mtx `Waq ~target ~token:waq_token handler (fun pushf ->
-        if%lwt Lwt.return (not use_query_param) then
-          pushf (Some {|{"type":"subscribe","stream":"user"}|});%lwt
-        let%lwt { uri; _ } = post `Waq ~token:waq_token () in
+    let mtx = Eio.Mutex.create () in
+    websocket env ~mtx `Waq ~target ~token:waq_token handler (fun pushf ->
+        if not use_query_param then
+          pushf (Some {|{"type":"subscribe","stream":"user"}|});
+        let { uri; _ } = post env `Waq ~token:waq_token () in
         expected_uri := Some uri;
-        set_current_state `Recv;
-        Lwt.return_unit);%lwt
+        set_current_state `Recv);
 
     assert (Option.get !got_uri = Option.get !expected_uri);
-    Lwt.return_unit
+    ()
 end
 
 let f1 = f ~use_query_param:true

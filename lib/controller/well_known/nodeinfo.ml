@@ -1,6 +1,6 @@
 open Helper
 
-let get _req =
+let get _ _req =
   `Assoc
     [
       ( "links",

@@ -1,6 +1,6 @@
 open Helper
 
-let get _req =
+let get _ _req =
   let open Jingoo.Jg_types in
   let models = [ ("server_name", Tstr (Config.server_name ())) ] in
   {|

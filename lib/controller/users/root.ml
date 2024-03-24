@@ -1,5 +1,4 @@
 open Helper
-open Lwt.Infix
 open Util
 
 let respond_activity a () =
@@ -8,13 +7,13 @@ let respond_activity a () =
 
 let respond_html (a : Db.Account.t) () =
   let open Jingoo.Jg_types in
-  let%lwt statuses =
+  let statuses =
     Db.(
       e
       @@ account_statuses ~id:a#id ~limit:30 ~max_id:None ~since_id:None
            ~exclude_replies:false)
-    >|= List.map (fun (s : Db.Status.t) -> s#id)
-    >>= Entity.load_statuses_from_db
+    |> List.map (fun (s : Db.Status.t) -> s#id)
+    |> Entity.load_statuses_from_db
   in
   let status_to_Tobj (s : Entity.status) =
     let rec aux (s : Entity.status) =
@@ -78,13 +77,13 @@ let respond_html (a : Db.Account.t) () =
   |> String.trim |> respond_html
 
 (* Recv GET /users/:name *)
-let get req =
-  let username = req |> Httpq.Server.param ":name" in
-  match%lwt Db.e (Model.Account.get_one ~domain:None ~username) with
-  | exception Sqlx.Error.NoRowFound ->
-      Httpq.Server.raise_error_response `Not_found
-  | a ->
-      let%lwt _ = Db.(e @@ User.get_one ~account_id:a#id) in
-      req
-      |> render ~default:(respond_html a)
-           [ (app_activity_json, respond_activity a) ]
+let get _env req =
+  let username = req |> Yume.Server.param ":name" in
+  let a =
+    try Db.e (Model.Account.get_one ~domain:None ~username)
+    with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found
+  in
+  let _ = Db.(e @@ User.get_one ~account_id:a#id) in
+  req
+  |> render ~default:(respond_html a)
+       [ (app_activity_json, respond_activity a) ]

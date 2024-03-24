@@ -1,5 +1,4 @@
 open Util
-open Lwt.Infix
 
 (* Entity account *)
 type emoji = {
@@ -99,18 +98,19 @@ let serialize_account ?(credential = false) (a : Model.Account.t) : account =
     ~following_count:stat#following_count ?source ()
 
 let load_accounts_from_db ?(credential = false)
-    (account_ids : Model.Account.ID.t list) : account list Lwt.t =
-  Db.(e Account.(select ~id:(`In account_ids) ~preload:[ `stat [] ]))
-  >|= index_by (fun x -> x#id)
-  >|= fun accts ->
+    (account_ids : Model.Account.ID.t list) : account list =
+  let accts =
+    Db.(e Account.(select ~id:(`In account_ids) ~preload:[ `stat [] ]))
+    |> index_by (fun x -> x#id)
+  in
   account_ids
   |> List.map (fun id -> Hashtbl.find accts id |> serialize_account ~credential)
 
-let make_account_from_model (a : Db.Account.t) : account Lwt.t =
-  load_accounts_from_db [ a#id ] >|= List.hd
+let make_account_from_model (a : Db.Account.t) : account =
+  load_accounts_from_db [ a#id ] |> List.hd
 
-let make_credential_account_from_model (a : Db.Account.t) : account Lwt.t =
-  load_accounts_from_db ~credential:true [ a#id ] >|= List.hd
+let make_credential_account_from_model (a : Db.Account.t) : account =
+  load_accounts_from_db ~credential:true [ a#id ] |> List.hd
 
 (* Entity MediaAttachment *)
 type media_attachment_meta = MAImage
@@ -348,8 +348,8 @@ let status_preload_spec self_id : Model.Status.preload_spec =
   ]
 
 let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
-    (status_ids : Model.Status.ID.t list) : status list Lwt.t =
-  let%lwt statuses =
+    (status_ids : Model.Status.ID.t list) : status list =
+  let statuses =
     Db.(
       e
         Status.(
@@ -359,11 +359,10 @@ let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
   status_ids
   |> List.map (fun id ->
          Hashtbl.find statuses id |> serialize_status ?visibility)
-  |> Lwt.return
 
 let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
-    status Lwt.t =
-  load_statuses_from_db ~visibility ?self_id [ s#id ] >|= List.hd
+    status =
+  load_statuses_from_db ~visibility ?self_id [ s#id ] |> List.hd
 
 (* Entity relationship *)
 type relationship = {
@@ -385,17 +384,16 @@ type relationship = {
 
 let make_relationship_from_model (self : Db.Account.t) (acct : Db.Account.t) =
   let id = acct#id |> Model.Account.ID.to_int |> string_of_int in
-  let%lwt following =
+  let following =
     Db.(e Follow.(does_follow ~account_id:self#id ~target_account_id:acct#id))
   in
-  let%lwt followed_by =
+  let followed_by =
     Db.(e Follow.(does_follow ~target_account_id:self#id ~account_id:acct#id))
   in
   make_relationship ~id ~following ~followed_by ~showing_reblogs:true
     ~notifying:false ~blocking:false ~blocked_by:false ~muting:false
     ~muting_notifications:false ~requested:false ~domain_blocking:false
     ~endorsed:false ~note:""
-  |> Lwt.return
 
 (* Entity push_notification *)
 type push_notification = {
@@ -477,18 +475,19 @@ let serialize_notification (n : Model.Notification.t) : notification =
     ()
 
 let load_notifications_from_db ?self_id
-    (noti_ids : Model.Notification.ID.t list) : notification list Lwt.t =
-  Db.(
-    e
-      Notification.(
-        select ~id:(`In noti_ids)
-          ~preload:
-            [
-              `from_account [ `stat [] ];
-              `target_status (status_preload_spec self_id);
-            ]))
-  >|= index_by (fun x -> x#id)
-  >|= fun notis ->
+    (noti_ids : Model.Notification.ID.t list) : notification list =
+  let notis =
+    Db.(
+      e
+        Notification.(
+          select ~id:(`In noti_ids)
+            ~preload:
+              [
+                `from_account [ `stat [] ];
+                `target_status (status_preload_spec self_id);
+              ]))
+    |> index_by (fun x -> x#id)
+  in
   noti_ids
   |> List.filter_map (fun id ->
          let n = Hashtbl.find notis id in

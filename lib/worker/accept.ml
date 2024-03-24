@@ -1,7 +1,7 @@
 open Activity
 
 (* Send Accept to POST inbox *)
-let kick ~(f : Db.Follow.t) ~(followee : Db.Account.t)
+let kick env ~(f : Db.Follow.t) ~(followee : Db.Account.t)
     ~(follower : Db.Account.t) =
   let id =
     followee#uri ^ "#accepts/follows/"
@@ -11,4 +11,4 @@ let kick ~(f : Db.Follow.t) ~(followee : Db.Account.t)
     make_follow ~id:f#uri ~actor:follower#uri ~obj:followee#uri |> follow
   in
   let activity = make_accept ~id ~actor:(`String followee#uri) ~obj |> accept in
-  Delivery.kick ~activity ~src:followee ~url:follower#inbox_url
+  Delivery.kick env ~activity ~src:followee ~url:follower#inbox_url

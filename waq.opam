@@ -19,7 +19,7 @@ depends: [
   "camlimages"
   "cmdliner"
   "cohttp"
-  "cohttp-lwt-unix"
+  "cohttp-eio"
   "cppo"
   "cstruct"
   "eio"
@@ -32,9 +32,10 @@ depends: [
   "lwt_eio"
   "lwt_ppx"
   "lwt_ssl"
-  "mirage-crypto-rng" {<= "0.10.7"}
+  "mirage-crypto-rng"
+  "mirage-crypto-rng-eio"
   "multipart_form"
-  "multipart_form-lwt"
+  "multipart_form-eio"
   "ocaml" {>= "5.1.0"}
   "pcre"
   "postgresql"
@@ -45,10 +46,10 @@ depends: [
   "result"
   "safepass"
   "sha"
+  "tls-eio"
   "uri"
   "uuidm"
   "websocket"
-  "websocket-lwt-unix"
   "x509"
   "xml-light"
   "yaml"
@@ -71,5 +72,10 @@ build: [
 ]
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
 pin-depends:[
+  [ "cohttp.6.0.0~alpha2" "git+https://github.com/mirage/ocaml-cohttp.git#v6.0.0_beta2" ]
+  [ "cohttp-eio.6.0.0~alpha2" "git+https://github.com/mirage/ocaml-cohttp.git#v6.0.0_beta2" ]
   [ "camlimages.5.0.5" "git+https://github.com/ushitora-anqou/camlimages.git#90ceb604527e5e1daddc969d920ff37d118b8a60" ]
+  [ "websocket.2.16" "git+https://github.com/ushitora-anqou/ocaml-websocket#74988ec5ec7d7c620e7d58c5509acd003107c513" ]
+  [ "multipart_form.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
+  [ "multipart_form-eio.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
 ]

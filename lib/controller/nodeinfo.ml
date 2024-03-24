@@ -1,6 +1,6 @@
 open Helper
 
-let get_2_0 _req =
+let get_2_0 _ _req =
   (* FIXME: Fill in correct values *)
   `Assoc
     [
