@@ -35,7 +35,7 @@ depends: [
   "mirage-crypto-rng" {<= "0.10.7"}
   "multipart_form"
   "multipart_form-lwt"
-  "ocaml" {>= "5.0.0"}
+  "ocaml" {>= "5.1.0"}
   "pcre"
   "postgresql"
   "ppx_deriving_yaml"

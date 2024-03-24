@@ -1,4 +1,4 @@
-FROM ocaml/opam:debian-11-ocaml-5.0
+FROM ocaml/opam:debian-11-ocaml-5.1
 
 ENV DEBIAN_FRONTEND=noninteractive
 
