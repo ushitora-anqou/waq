@@ -59,7 +59,7 @@ let get _env req =
         | Some "unsubscribe", Some "user" -> may_unsubscribe_user ()
         | _ | (exception (Yojson.Json_error _ | Yojson.Safe.Util.Type_error _))
           ->
-            Logq.warn (fun m -> m "Unhandled websocket event: %s" json);
+            Logs.warn (fun m -> m "Unhandled websocket event: %s" json);
             ());
         loop ()
   in

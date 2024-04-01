@@ -100,7 +100,7 @@ let generate_mstdn_agent ctxt =
 let launch_waq ?(timeout = 30.0)
     (f : Eio_unix.Stdenv.base -> runtime_context -> unit) : unit =
   Internal.launch_waq @@ fun waq_tokens ->
-  Logq.debug (fun m ->
+  Logs.debug (fun m ->
       m "Access token for Waq: [%s]"
         (waq_tokens |> Array.to_list |> String.concat ";"));
   let ctxt =
@@ -115,11 +115,11 @@ let launch_waq ?(timeout = 30.0)
 let launch_waq_and_mstdn ?(timeout = 30.0)
     (f : Eio_unix.Stdenv.base -> runtime_context -> unit) : unit =
   Internal.launch_waq @@ fun waq_tokens ->
-  Logq.debug (fun m ->
+  Logs.debug (fun m ->
       m "Access token for Waq: [%s]"
         (waq_tokens |> Array.to_list |> String.concat ";"));
   Internal.launch_mastodon @@ fun mstdn_tokens ->
-  Logq.debug (fun m ->
+  Logs.debug (fun m ->
       m "Access token for Mastodon: [%s]"
         (mstdn_tokens |> Array.to_list |> String.concat ";"));
   let ctxt =

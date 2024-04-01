@@ -2,4 +2,4 @@
  (names test_util test_text_helper test_regex test_ogp)
  (preprocess
   (pps lwt_ppx))
- (libraries alcotest alcotest-lwt logq waq))
+ (libraries alcotest alcotest-lwt waq))

@@ -137,7 +137,7 @@ let fetch env ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
       | _ -> failwith "Not implemented method"
     in
     let status = Response.status resp in
-    Logq.debug (fun m ->
+    Logs.debug (fun m ->
         m "[fetch] %s %s --> %s" meth_s url
           (Cohttp.Code.string_of_status status));
     let headers = Response.headers resp in
@@ -145,7 +145,7 @@ let fetch env ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
     Ok (status, headers, body)
   with e ->
     let backtrace = Printexc.get_backtrace () in
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
     Error ()
 

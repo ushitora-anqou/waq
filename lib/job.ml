@@ -19,10 +19,10 @@ let kick env ~name (f : unit -> unit) : unit =
   let timeout_seconds = 25.0 in
 
   if Config.debug_job_kick_block () then (
-    Logq.debug (fun m -> m "[DEBUG ONLY] Blocked kick: %s" name);
+    Logs.debug (fun m -> m "[DEBUG ONLY] Blocked kick: %s" name);
     try Eio.Time.with_timeout_exn env#clock timeout_seconds f
     with e ->
-      Logq.warn (fun m ->
+      Logs.warn (fun m ->
           m "[DEBUG ONLY] Fail immediately due to job failure:\n%s: %s: %s" name
             (match e with _ -> Printexc.to_string e)
             (Printexc.get_backtrace ()));
@@ -37,14 +37,14 @@ let kick env ~name (f : unit -> unit) : unit =
       let rec loop i =
         try Eio.Time.with_timeout_exn env#clock timeout_seconds f
         with e ->
-          Logq.warn (fun m ->
+          Logs.warn (fun m ->
               m "Job failed: %s: %s: %s" name (Printexc.to_string e)
                 (Printexc.get_backtrace ()));
           if i + 1 = num_repeats then
-            Logq.err (fun m -> m "Job killed: %s: Limit reached" name)
+            Logs.err (fun m -> m "Job killed: %s: Limit reached" name)
           else
             let dur = sleep_duration i in
-            Logq.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
+            Logs.debug (fun m -> m "Job: %s will sleep %.1f seconds" name dur);
             Eio.Time.sleep env#clock dur;
             loop (i + 1)
       in

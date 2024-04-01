@@ -4,7 +4,8 @@
   alcotest
   eio_main
   yume
-  logq
+  logs
+  logs.fmt
   mirage-crypto-rng
   mirage-crypto-rng.unix
   mirage-crypto-rng-eio))

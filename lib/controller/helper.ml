@@ -77,7 +77,7 @@ let render ~default routes req =
                else None)
         |> Option.value ~default
   in
-  Logq.debug (fun m -> m "[render] Choose %s" content_type);
+  Logs.debug (fun m -> m "[render] Choose %s" content_type);
   route ()
 
 let parse_webfinger_address q =

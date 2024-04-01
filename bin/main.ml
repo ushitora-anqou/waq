@@ -29,9 +29,9 @@ let server env =
   Migration.verify_migration_status ();
   (match listen with
   | `Tcp (ipaddr, port) ->
-      Logq.info (fun m ->
+      Logs.info (fun m ->
           m "Listening on %s:%d" (Fmt.str "%a" Eio.Net.Ipaddr.pp ipaddr) port)
-  | _ -> Logq.info (fun m -> m "Listening on <unknown>"));
+  | _ -> Logs.info (fun m -> m "Listening on <unknown>"));
   ()
 
 let db_migrate () = Migration.migrate ()
@@ -99,7 +99,7 @@ add_column ~table_name:"preview_cards" ~name:"blurhash" ~spec:"TEXT"
       |> Out_channel.output_string oc)
     ~finally:(fun () -> close_out oc);
 
-  Logq.info (fun m -> m "Migration %s_%s created" timestamp name);
+  Logs.info (fun m -> m "Migration %s_%s created" timestamp name);
 
   ()
 
@@ -177,7 +177,7 @@ let account_fetch env =
   let accts = Db.(e Account.all) in
   accts
   |> List.iteri @@ fun i acct ->
-     Logq.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
+     Logs.info (fun m -> m "[%d/%d] %s" (i + 1) (List.length accts) acct#uri);
      match acct#domain with
      | None -> ()
      | Some domain -> (
@@ -187,7 +187,7 @@ let account_fetch env =
            |> (fun a -> Db.(e (Account.save_one a)))
            |> ignore
          with e ->
-           Logq.err (fun m ->
+           Logs.err (fun m ->
                m "Couldn't fetch person: %s" (Printexc.to_string e)))
 
 let webpush_generate_vapid_key () =
@@ -209,13 +209,18 @@ let webpush_deliver env username message =
 let () =
   Eio_main.run @@ fun env ->
   Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
+  (*
   (let file_name = Config.log_file_path () in
-   if file_name = "" then Logq.(add_reporter (make_stderr_reporter ~l:Debug))
-   else Logq.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
+   if file_name = "" then Logs.(add_reporter (make_stderr_reporter ~l:Debug))
+   else Logs.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
+   *)
+  Fmt.set_style_renderer Fmt.stdout `Ansi_tty;
+  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_level (Some Logs.Debug);
 
-  Logq.info (fun m -> m "========== Waq booted ==========");
+  Logs.info (fun m -> m "========== Waq booted ==========");
   Config.to_list ()
-  |> List.iter (fun (k, v) -> Logq.debug (fun m -> m "Config %s = %s" k v));
+  |> List.iter (fun (k, v) -> Logs.debug (fun m -> m "Config %s = %s" k v));
 
   Crypto.initialize env @@ fun () ->
   Db.initialize ();

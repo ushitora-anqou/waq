@@ -49,7 +49,7 @@ let migrate ~migrations ~config (c : Connection.t) =
         let sql = "INSERT INTO " ^ config.schema_migrations ^ " VALUES ($1)" in
         cands
         |> Lwt_list.iter_s @@ fun (id, (module M : S)) ->
-           Logq.info (fun m -> m "Migrate %d" id);
+           Logs.info (fun m -> m "Migrate %d" id);
            c#transaction (fun c ->
                M.change [] |> List.rev_map fst |> Lwt_list.iter_s (fun f -> f c);%lwt
                c#execute sql ~p:[ `Int id ])
@@ -70,7 +70,7 @@ let rollback ~n ~migrations ~config (c : Connection.t) =
   let%lwt versions = get_commited_versions ~config c in
   versions |> List.rev |> take n
   |> Lwt_list.iter_s @@ fun last_v ->
-     Logq.info (fun m -> m "Rollback %d" last_v);
+     Logs.info (fun m -> m "Rollback %d" last_v);
      let (module M : S) = migrations |> List.assoc last_v in
      let sql =
        "DELETE FROM " ^ config.schema_migrations ^ " WHERE version = $1"

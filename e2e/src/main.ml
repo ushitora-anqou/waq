@@ -45,17 +45,20 @@ let all_tests =
   ]
 
 let execute_one_test (name, f) =
-  Logq.debug (fun m -> m "===== Testcase %s =====" name);
+  Logs.debug (fun m -> m "===== Testcase %s =====" name);
   try f ()
   with e ->
-    Logq.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
-    Logq.err (fun m -> m "Testcase %s failed: %s" name (Printexc.to_string e));
-    Logq.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
+    Logs.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
+    Logs.err (fun m -> m "Testcase %s failed: %s" name (Printexc.to_string e));
+    Logs.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
     raise e
 
 let () =
   print_newline ();
-  Logq.(add_reporter (make_reporter ~l:Debug ()));
+  let formatter = Fmt.stdout in
+  Fmt.set_style_renderer formatter `Ansi_tty;
+  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_level (Some Logs.Debug);
   Random.self_init ();
 
   let shuffle d =
@@ -72,7 +75,7 @@ let () =
         |> List.map (fun name -> (name, List.assoc name all_tests))
   in
 
-  Logq.info (fun m ->
+  Logs.info (fun m ->
       chosen_tests |> List.map fst |> String.concat " "
       |> m "[e2e] Chosen tests: %s");
 

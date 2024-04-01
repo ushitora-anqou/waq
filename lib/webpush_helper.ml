@@ -9,7 +9,7 @@ let deliver env ?user_id message =
              ~vapid_priv_key:(Config.vapid_private_key ())
          with
          | Error _ ->
-             Logq.err (fun m ->
+             Logs.err (fun m ->
                  m "Couldn't construct request of webpush: %s" s#endpoint)
          | Ok (headers, body) -> (
              let body = Cstruct.to_string body in
@@ -18,8 +18,8 @@ let deliver env ?user_id message =
              with
              | Ok (status, _, _) when Yume.Status.is_success status -> ()
              | Ok (`Gone, _, _) ->
-                 Logq.debug (fun m -> m "Subscription gone: %s" s#endpoint);
+                 Logs.debug (fun m -> m "Subscription gone: %s" s#endpoint);
                  Db.(e WebPushSubscription.(delete [ s ]))
-             | _ -> Logq.err (fun m -> m "Couldn't post webpush: %s" s#endpoint)
+             | _ -> Logs.err (fun m -> m "Couldn't post webpush: %s" s#endpoint)
              ))
   |> Eio.Fiber.all

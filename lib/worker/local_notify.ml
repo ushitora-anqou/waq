@@ -39,7 +39,7 @@ let kick env ~(activity_id : int)
     ~(activity_type : Db.Notification.activity_type_t) ~(dst : Db.Account.t)
     ~(src : Db.Account.t) ~(typ : Db.Notification.typ_t) =
   if not (Model.Account.is_local dst) then
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "Local_notify.kick: dst is not a local account: %s"
           (Model.Notification.activity_type_t_to_string activity_type))
   else

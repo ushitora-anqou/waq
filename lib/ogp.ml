@@ -138,7 +138,7 @@ let fetch_opengraph env url =
 let fetch_opengraph_opt env url =
   try Some (fetch_opengraph env url)
   with e ->
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "Couldn't fetch opengraph: %s\n%s" (Printexc.to_string e)
           (Printexc.get_backtrace ()));
     None

@@ -62,17 +62,17 @@ let raise_error msg = function
 
 let rec finish_conn socket_fd connect_poll = function
   | Pg.Polling_failed ->
-      (*Logq.debug (fun m -> m "Polling failed");*)
+      (*Logs.debug (fun m -> m "Polling failed");*)
       Lwt.return_unit
   | Polling_ok ->
-      (*Logq.debug (fun m -> m "Polling ok");*)
+      (*Logs.debug (fun m -> m "Polling ok");*)
       Lwt.return_unit
   | Polling_reading ->
-      (*Logq.debug (fun m -> m "Polling reading");*)
+      (*Logs.debug (fun m -> m "Polling reading");*)
       ignore_lwt @@ Lwt.choose [ Lwt_unix.wait_read socket_fd ];%lwt
       finish_conn socket_fd connect_poll (connect_poll ())
   | Polling_writing ->
-      (*Logq.debug (fun m -> m "Polling writing");*)
+      (*Logs.debug (fun m -> m "Polling writing");*)
       ignore_lwt @@ Lwt.choose [ Lwt_unix.wait_write socket_fd ];%lwt
       finish_conn socket_fd connect_poll (connect_poll ())
 
@@ -227,7 +227,7 @@ let transaction (c : connection) (f : unit -> unit Lwt.t) : bool Lwt.t =
     execute_direct c "COMMIT";%lwt
     Lwt.return_true
   with e ->
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "Exception raised in transaction: %s\n%s" (Printexc.to_string e)
           (Printexc.get_backtrace ()));
     execute_direct c "ROLLBACK";%lwt

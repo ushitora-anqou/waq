@@ -5,7 +5,6 @@
  (libraries
   cohttp-eio
   eio.unix
-  logq
   multipart_form
   multipart_form-eio
   tls-eio

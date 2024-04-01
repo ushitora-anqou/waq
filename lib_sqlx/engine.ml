@@ -56,7 +56,7 @@ module Make (D : Driver) = struct
         | `Bool b -> string_of_bool b
       in
       fun sql params ->
-        Logq.debug (fun m ->
+        Logs.debug (fun m ->
             m "\o033[1;34m%s\o033[0m [%s]"
               (sql |> split_on_char '\n' |> List.map trim
               |> List.filter (( <> ) "")

@@ -63,7 +63,7 @@ let get _ req =
     |> render ~default:(respond_jrd res)
          [ ("application/xrd+xml", respond_xrd res) ]
   with e ->
-    Logq.debug (fun m ->
+    Logs.debug (fun m ->
         m "[well_known_webfinger] Can't find user: %s\n%s"
           (Printexc.to_string e)
           (Printexc.get_backtrace ()));

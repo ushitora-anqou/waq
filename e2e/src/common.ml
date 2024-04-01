@@ -70,7 +70,7 @@ module Internal = struct
   let manifests = Sys.getenv "MANIFESTS" ^ "/"
 
   let kubectl args f =
-    Logq.info (fun m ->
+    Logs.info (fun m ->
         m "execute: %s" (Filename.quote_command kubectl_path args));
     let open Unix in
     let ic =
@@ -119,13 +119,13 @@ module Internal = struct
   let expect_wexited_0 = function
     | Unix.WEXITED 0 -> ()
     | WEXITED i ->
-        Logq.err (fun m -> m "expect WEXITED 0 but got WEXITED %d" i);
+        Logs.err (fun m -> m "expect WEXITED 0 but got WEXITED %d" i);
         assert false
     | WSIGNALED i ->
-        Logq.err (fun m -> m "expect WEXITED 0 but got WSIGNALED %d" i);
+        Logs.err (fun m -> m "expect WEXITED 0 but got WSIGNALED %d" i);
         assert false
     | WSTOPPED i ->
-        Logq.err (fun m -> m "expect WEXITED 0 but got WSTOPPED %d" i);
+        Logs.err (fun m -> m "expect WEXITED 0 but got WSTOPPED %d" i);
         assert false
 
   let launch_waq f =
@@ -234,7 +234,7 @@ module Internal = struct
       |> fst |> expect_wexited_0
     in
 
-    Logq.info (fun m -> m "Resetting database for Mastodon");
+    Logs.info (fun m -> m "Resetting database for Mastodon");
     let token1, token2, token3 =
       let rec loop i =
         if i > 10 then
@@ -309,7 +309,7 @@ let fetch env ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
       | _ -> failwith "Not implemented method"
     in
     let status = Client.Response.status resp in
-    Logq.debug (fun m ->
+    Logs.debug (fun m ->
         m "[fetch] %s %s --> %s" meth_s url
           (Cohttp.Code.string_of_status status));
     let headers = Client.Response.headers resp in
@@ -317,7 +317,7 @@ let fetch env ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
     Ok (status, headers, body)
   with e ->
     let backtrace = Printexc.get_backtrace () in
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
     Error ()
 
@@ -367,9 +367,9 @@ let new_mastodon_session f =
 
 let make_waq_and_mstdn_scenario ?(timeout = 30.0) handler () : unit =
   new_session @@ fun waq_token ->
-  Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
+  Logs.debug (fun m -> m "Access token for Waq: %s" waq_token);
   new_mastodon_session @@ fun mstdn_token ->
-  Logq.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
+  Logs.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
   Unix.sleep 10;
   Eio_main.run @@ fun env ->
   Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
@@ -378,7 +378,7 @@ let make_waq_and_mstdn_scenario ?(timeout = 30.0) handler () : unit =
 
 let make_waq_scenario ?(timeout = 30.0) handler () : unit =
   new_session @@ fun waq_token ->
-  Logq.debug (fun m -> m "Access token for Waq: %s" waq_token);
+  Logs.debug (fun m -> m "Access token for Waq: %s" waq_token);
   Unix.sleep 1;
   Eio_main.run @@ fun env ->
   Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
@@ -393,7 +393,7 @@ let mstdn url = mstdn_server_name ^ url
 let url = function `Waq -> waq | `Mstdn -> mstdn
 
 let pp_json (s : string) =
-  Logq.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
+  Logs.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
   [@@warning "-32"]
 
 let do_fetch env ?token ?(meth = `GET) ?(body = "") kind target =
@@ -605,7 +605,7 @@ let lookup env ~token kind ?domain ~username () =
   with
   | [ acct ], _, _ -> (acct.id, acct.username, acct.acct)
   | accts, _, _ ->
-      Logq.err (fun m ->
+      Logs.err (fun m ->
           m "lookup failed: accts=[%s]"
             (accts
             |> List.map (fun (a : account) -> a.acct)

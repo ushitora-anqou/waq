@@ -29,7 +29,7 @@ let handle_query_uri env resolve q =
   let try_search_account uri =
     try Some (Activity.search_account env ~resolve (`Uri uri))
     with e ->
-      Logq.debug (fun m ->
+      Logs.debug (fun m ->
           m "try_search_account failed: %s\n%s" (Printexc.to_string e)
             (Printexc.get_backtrace ()));
       None
@@ -37,7 +37,7 @@ let handle_query_uri env resolve q =
   let try_fetch_status uri =
     try Some (Activity.fetch_status env ~uri)
     with e ->
-      Logq.debug (fun m ->
+      Logs.debug (fun m ->
           m "try_fetch_status failed: %s\n%s" (Printexc.to_string e)
             (Printexc.get_backtrace ()));
       None
@@ -72,5 +72,5 @@ let handle_query env resolve q =
 let get env req =
   let self = may_authenticate_account req in
   let q = req |> Yume.Server.query "q" in
-  Logq.debug (fun m -> m "[/api/v2/search] %b %s" (Option.is_some self) q);
+  Logs.debug (fun m -> m "[/api/v2/search] %b %s" (Option.is_some self) q);
   handle_query env (Option.is_some self) q |> yojson_of_t |> respond_yojson

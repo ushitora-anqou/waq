@@ -667,7 +667,8 @@ let test_migration _ _ =
   [@@warning "-8"]
 
 let () =
-  Logq.(add_reporter (make_reporter ~l:Debug ()));
+  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_level (Some Logs.Debug);
   with_postgres ~host_port:54321 ~container_name:"waq-test-sqlx-postgres"
   @@ fun url ->
   Db.initialize url;

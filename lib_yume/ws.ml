@@ -198,7 +198,7 @@ module Server = struct
        with
       | End_of_file -> ()
       | e ->
-          Logq.err (fun m ->
+          Logs.err (fun m ->
               m "ws connection broken by exc: %s: %s" (Printexc.to_string e)
                 (Printexc.get_backtrace ())));
       handler None

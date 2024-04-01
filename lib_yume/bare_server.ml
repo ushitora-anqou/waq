@@ -26,7 +26,7 @@ let start_server ~listen ~sw env k callback =
     with e ->
       let uri = Request.uri req in
       let meth = Request.meth req in
-      Logq.err (fun m ->
+      Logs.err (fun m ->
           m "Unexpected exception: %s %s: %s\n%s" (Method.to_string meth)
             (Uri.to_string uri) (Printexc.to_string e)
             (Printexc.get_backtrace ()));
@@ -56,13 +56,13 @@ let websocket_handler conn frames_out_fn frame =
   | Some Websocket.Frame.{ opcode; content; _ } -> (
       match opcode with
       | Close ->
-          Logq.debug (fun m -> m "Websocket: recv Close");
+          Logs.debug (fun m -> m "Websocket: recv Close");
           frames_out_fn
             (Some (Websocket.Frame.create ~opcode:Close ~content:"" ()));
           conn.closed <- true;
           Eio.Stream.add conn.recv_stream None
       | Text | Binary ->
-          Logq.debug (fun m -> m "Websocket: recv: %s" content);
+          Logs.debug (fun m -> m "Websocket: recv: %s" content);
           Eio.Stream.add conn.recv_stream (Some content)
       | Ping ->
           frames_out_fn (Some (Websocket.Frame.create ~opcode:Pong ~content ()))
@@ -84,7 +84,7 @@ let websocket env ~sw (req : Request.t) f =
   conn.frames_out_fn <- Some frames_out_fn;
   Eio.Fiber.fork ~sw (fun () ->
       try
-        Logq.debug (fun m -> m "Websocket: start thread");
+        Logs.debug (fun m -> m "Websocket: start thread");
 
         Eio.Fiber.both
           (fun () ->
@@ -99,7 +99,7 @@ let websocket env ~sw (req : Request.t) f =
             (* Start the process *)
             f conn)
       with e ->
-        Logq.err (fun m ->
+        Logs.err (fun m ->
             m "Websocket: thread error: %s\n%s" (Printexc.to_string e)
               (Printexc.get_backtrace ())));
   resp

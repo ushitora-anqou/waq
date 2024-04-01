@@ -125,7 +125,7 @@ let test_statuses_replied_by _ _ =
 open Common
 
 let () =
-  Logq.(add_reporter (make_reporter ~l:Debug ()));
+  Logs.set_reporter (Logs_fmt.reporter ());
   with_postgres ~host_port:54320
     ~container_name:"waq-test-sqlx-postgres-example"
   @@ fun url ->

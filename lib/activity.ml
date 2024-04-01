@@ -756,7 +756,7 @@ let verify_activity_json env req =
           ~path ~body:(Some body)
       with
       | Error e ->
-          Logq.err (fun m ->
+          Logs.err (fun m ->
               m "verify_activity_json failed: [%s]"
                 (headers |> Yume.Headers.to_list
                 |> List.map (fun (k, v) -> k ^ "=" ^ v)

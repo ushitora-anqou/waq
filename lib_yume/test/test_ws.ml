@@ -36,10 +36,7 @@ let test_basic () =
                 try
                   Ws.Client.connect ~sw env
                     (Printf.sprintf "http://localhost:%d/ws" listening_port)
-                with e ->
-                  Logq.err (fun m ->
-                      m "Ws.Client.connect failed: %s" (Printexc.to_string e));
-                  loop ()
+                with _ -> loop ()
               in
               loop ()
             in
@@ -52,5 +49,4 @@ let test_basic () =
 
 let () =
   let open Alcotest in
-  Logq.(add_reporter (make_stderr_reporter ~l:Debug));
   run "ws" [ ("basic", [ test_case "case1" `Quick test_basic ]) ]

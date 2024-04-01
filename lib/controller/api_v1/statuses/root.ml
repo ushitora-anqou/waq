@@ -52,7 +52,7 @@ let post env req =
            try
              Some (Activity.search_account env (`Webfinger (domain, username)))
            with _ ->
-             Logq.debug (fun m ->
+             Logs.debug (fun m ->
                  m "Couldn't find the mentioned account: %s"
                    (username
                    ^ match domain with None -> "" | Some s -> "@" ^ s));

@@ -1,5 +1,0 @@
-(library
- (name logq)
- (preprocess
-  (pps ppx_deriving.enum ppx_deriving.make))
- (libraries ptime unix))

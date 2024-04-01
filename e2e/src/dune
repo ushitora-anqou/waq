@@ -6,7 +6,8 @@
   eio
   eio_main
   lambdasoup
-  logq
+  logs
+  logs.fmt
   mirage-crypto-rng
   mirage-crypto-rng-eio
   yojson

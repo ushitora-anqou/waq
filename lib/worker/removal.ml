@@ -48,6 +48,6 @@ let kick env ~account_id ~status_id =
   Job.kick env ~name:__FUNCTION__ @@ fun () ->
   let status = Db.(e @@ Status.discard_with_reblogs status_id) in
   if account_id <> status#account_id then
-    Logq.err (fun m ->
+    Logs.err (fun m ->
         m "Worker.Removal: ignoring invalid pair of account_id and status_id")
   else aux env ~account_id ~status_id ~status

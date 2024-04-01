@@ -138,10 +138,10 @@ let kick_inbox_update_person (r : ap_person) =
 let post env req =
   match Activity.verify_activity_json env req with
   | body, Error (`AccountNotFound | `AccountIsLocal) ->
-      Logq.err (fun m -> m "account not found or account is local: %s" body);
+      Logs.err (fun m -> m "account not found or account is local: %s" body);
       Yume.Server.respond ~status:`Accepted ""
   | body, Error (`VerifFailure e) ->
-      Logq.err (fun m ->
+      Logs.err (fun m ->
           m "verification failure of activity json: %s: %s"
             (match e with
             | `AlgorithmNotImplemented -> "algorithm not implemented"
@@ -150,7 +150,7 @@ let post env req =
       Yume.Server.respond ~status:`Unauthorized ""
   | body, Ok () -> (
       try
-        (*Logq.debug (fun m -> m ">>>>>>>>\n%s" body);*)
+        (*Logs.debug (fun m -> m ">>>>>>>>\n%s" body);*)
         (match Yojson.Safe.from_string body |> of_yojson with
         | Accept r -> kick_inbox_accept env r
         | Announce r -> kick_inbox_announce env r
@@ -165,7 +165,7 @@ let post env req =
         | _ -> failwith "activity not implemented");
         Yume.Server.respond ~status:`Accepted ""
       with e ->
-        Logq.err (fun m ->
+        Logs.err (fun m ->
             m
               "Failed to handle inboxed message; the response and request will \
                be printed in log:\n\

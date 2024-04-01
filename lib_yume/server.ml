@@ -323,12 +323,12 @@ module Router = struct
         let resp =
           try handler env req with
           | ErrorResponse { status; body } ->
-              Logq.debug (fun m ->
+              Logs.debug (fun m ->
                   m "Error response raised: %s\n%s" (Status.to_string status)
                     (Printexc.get_backtrace ()));
               respond ~status ~tags:[ "log" ] body
           | e ->
-              Logq.debug (fun m ->
+              Logs.debug (fun m ->
                   m "Exception raised: %s\n%s" (Printexc.to_string e)
                     (Printexc.get_backtrace ()));
               respond ~status:`Internal_server_error ""
@@ -449,21 +449,21 @@ module Logger = struct
     let (Request { uri; meth; _ }) = req in
     let meth = Method.to_string meth in
     let uri = Uri.to_string uri in
-    Logq.debug (fun m -> m "%s %s" meth uri);
+    Logs.debug (fun m -> m "%s %s" meth uri);
 
     let resp = inner_handler env req in
 
     (match resp with
     | Response { status; _ } ->
-        Logq.info (fun m -> m "%s %s %s" (Status.to_string status) meth uri)
-    | BareResponse _ -> Logq.info (fun m -> m "[bare] %s %s" meth uri));
+        Logs.info (fun m -> m "%s %s %s" (Status.to_string status) meth uri)
+    | BareResponse _ -> Logs.info (fun m -> m "[bare] %s %s" meth uri));
 
     (match resp with
     | Response { tags; _ } when List.mem "log" tags -> (
         match dump_req_dir with
         | None ->
             let s = string_of_request_response req resp in
-            Logq.info (fun m -> m "Detail of request and response:\n%s" s)
+            Logs.info (fun m -> m "Detail of request and response:\n%s" s)
         | Some _dir -> (* FIXME: implement here *) ())
     | _ -> ());
 

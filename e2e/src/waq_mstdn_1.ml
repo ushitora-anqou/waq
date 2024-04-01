@@ -52,7 +52,7 @@ let f =
            assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
            ()
        | res ->
-           Logq.err (fun m ->
+           Logs.err (fun m ->
                m "unexpected home timeline %s"
                  (Yojson.Safe.to_string (`List res)));
            assert false);
