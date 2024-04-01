@@ -23,6 +23,7 @@ depends: [
   "cppo"
   "cstruct"
   "eio"
+  "eio-ssl"
   "eio_main"
   "dune" {>= "3.7"}
   "fpath"
@@ -78,4 +79,5 @@ pin-depends:[
   [ "websocket.2.16" "git+https://github.com/ushitora-anqou/ocaml-websocket#74988ec5ec7d7c620e7d58c5509acd003107c513" ]
   [ "multipart_form.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
   [ "multipart_form-eio.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
+  [ "eio-ssl.0.3.0" "git+https://github.com/anmonteiro/eio-ssl#5e83c3ffb2200affde9d900de02f6994dd6421da" ]
 ]

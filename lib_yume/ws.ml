@@ -56,55 +56,20 @@ module Client = struct
     in
     let req = Cohttp.Request.make ~headers url in
 
-    (* Make socket *)
-    let host = Uri.host url |> Option.get in
-    let service =
-      match Uri.port url with
-      | Some port -> string_of_int port
-      | None -> (
-          match Uri.scheme url with
-          | Some "ws" -> "http"
-          | Some "wss" -> "https"
-          | Some scheme -> scheme
-          | None -> "http")
-    in
-    let addr =
-      match Eio.Net.getaddrinfo_stream (Eio.Stdenv.net env) host ~service with
-      | [] -> failwith "getaddrinfo failed"
-      | addr :: _ -> addr
-    in
-    let socket = Eio.Net.connect ~sw (Eio.Stdenv.net env) addr in
-    let flow =
-      let tls_enabled =
-        match service with "443" | "https" -> true | _ -> false
-      in
-      if not tls_enabled then (socket :> Eio.Flow.two_way_ty Eio.Resource.t)
-      else
-        let host =
-          Result.to_option
-            (Result.bind (Domain_name.of_string host) Domain_name.host)
-        in
-        let client =
-          Tls_eio.client_of_flow
-            Tls.Config.(
-              client ~version:(`TLS_1_0, `TLS_1_3)
-                ~authenticator:Client.null_auth ~ciphers:Ciphers.supported ())
-            ?host socket
-        in
-        (client :> Eio.Flow.two_way_ty Eio.Resource.t)
-    in
+    (* Connect *)
+    let flow = Client.connect (Eio.Stdenv.net env) ~sw url in
 
     (* Drain handshake *)
     let ic = Eio.Buf_read.of_flow ~max_size:max_int flow in
     Eio.Buf_write.with_flow flow (fun oc -> drain_handshake req ic oc nonce);
 
-    (socket, flow, ic)
+    (flow, ic)
 
   let connect ?(extra_headers = Cohttp.Header.init ()) ~sw env url =
     let url = Uri.of_string url in
 
     let nonce = Base64.encode_exn (random_string 16) in
-    let socket, flow, ic = connect' env sw url nonce extra_headers in
+    let flow, ic = connect' env sw url nonce extra_headers in
 
     (* Start writer fiber. All writes must be done in this fiber,
        because Eio.Flow.write is not thread-safe.
@@ -132,7 +97,12 @@ module Client = struct
           make_read_frame ~mode:(Client random_string) ic oc ())
     in
 
-    { socket; id = random_string 10; read_frame; write_frame }
+    {
+      socket = (flow :> _ Eio.Net.stream_socket_ty Eio.Resource.t);
+      id = random_string 10;
+      read_frame;
+      write_frame;
+    }
 
   let id { id; _ } = id
   let read { read_frame; _ } = read_frame ()

@@ -1,14 +1,29 @@
-let null_auth ?ip:_ ~host:_ _ =
-  Ok None (* Warning: use a real authenticator in your code! *)
+let connect net ~sw url =
+  let service =
+    match Uri.port url with
+    | Some port -> string_of_int port
+    | None -> (
+        match Uri.scheme url with
+        | Some "ws" -> "http"
+        | Some "wss" -> "https"
+        | Some scheme -> scheme
+        | None -> "http")
+  in
+  let tls_enabled = match service with "443" | "https" -> true | _ -> false in
+  let host = Uri.host_with_default ~default:"localhost" url in
+  let addr =
+    match Eio.Net.getaddrinfo_stream net host ~service with
+    | [] -> failwith "getaddrinfo failed"
+    | addr :: _ -> addr
+  in
 
-let https ~authenticator =
-  let tls_config = Tls.Config.client ~authenticator () in
-  fun uri raw ->
-    let host =
-      Uri.host uri
-      |> Option.map (fun x -> Domain_name.(host_exn (of_string_exn x)))
-    in
-    Tls_eio.client_of_flow ?host tls_config raw
+  let socket = Eio.Net.connect ~sw net addr in
+  if not tls_enabled then socket
+  else
+    let ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Client_context in
+    let ctx = Eio_ssl.Context.create ~ctx socket in
+    let ssl = Eio_ssl.connect ctx in
+    ssl
 
 module Response = struct
   type t = { resp : Http.Response.t; body : Cohttp_eio.Body.t }
@@ -27,11 +42,7 @@ let request ?headers ?body ~meth env ~sw (url : string) =
   let body =
     body |> Option.map (function `Fixed src -> Cohttp_eio.Body.of_string src)
   in
-  let client =
-    Cohttp_eio.Client.make
-      ~https:(Some (https ~authenticator:null_auth))
-      (Eio.Stdenv.net env)
-  in
+  let client = Cohttp_eio.Client.make_generic (connect (Eio.Stdenv.net env)) in
   let resp, body =
     Cohttp_eio.Client.call ~sw ?headers ?body client meth (Uri.of_string url)
   in

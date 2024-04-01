@@ -4,9 +4,9 @@
   (pps ppx_deriving.show ppx_deriving.make))
  (libraries
   cohttp-eio
-  eio.unix
+  eio-ssl
   multipart_form
   multipart_form-eio
-  tls-eio
-  yojson
-  websocket))
+  websocket
+  x509
+  yojson))
