@@ -80,10 +80,6 @@ module Client = struct
       in
       if not tls_enabled then (socket :> Eio.Flow.two_way_ty Eio.Resource.t)
       else
-        let authenticator =
-          let null_auth ?ip:_ ~host:_ _ = Ok None in
-          null_auth
-        in
         let host =
           Result.to_option
             (Result.bind (Domain_name.of_string host) Domain_name.host)
@@ -91,8 +87,8 @@ module Client = struct
         let client =
           Tls_eio.client_of_flow
             Tls.Config.(
-              client ~version:(`TLS_1_0, `TLS_1_3) ~authenticator
-                ~ciphers:Ciphers.supported ())
+              client ~version:(`TLS_1_0, `TLS_1_3)
+                ~authenticator:Client.null_auth ~ciphers:Ciphers.supported ())
             ?host socket
         in
         (client :> Eio.Flow.two_way_ty Eio.Resource.t)
