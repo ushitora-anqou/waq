@@ -26,7 +26,7 @@ let f =
     (try
        follow env `Waq ~token user1_id;
        assert false
-     with FetchFailure (Some (`Forbidden, _, _)) -> ());
+     with Yume.Client.FetchFailure (Some (`Forbidden, _, _)) -> ());
 
     (* user1: Follow @user2 *)
     follow env `Waq ~token user2_id;

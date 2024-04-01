@@ -73,7 +73,7 @@ let expect_no_status env src id =
   try
     get_status env src id |> ignore;
     assert false
-  with FetchFailure (Some (`Not_found, _, _)) -> ()
+  with Yume.Client.FetchFailure (Some (`Not_found, _, _)) -> ()
 
 type runtime_context = {
   waq_tokens : string array;

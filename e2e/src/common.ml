@@ -260,75 +260,8 @@ module Internal = struct
 end
 
 let ( ^/ ) a b = a ^ "/" ^ b
-
-let fetch env ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) url =
-  let open Yume in
-  let uri = Uri.of_string url in
-
-  (* NOTE: Ad-hoc scheme rewriting (https -> http) for localhost
-     for better dev experience *)
-  let uri =
-    match Uri.scheme uri with
-    | Some "https"
-      when [ Some "localhost"; Some "127.0.0.1" ] |> List.mem (Uri.host uri) ->
-        Uri.with_scheme uri (Some "http")
-    | _ -> uri
-  in
-
-  let meth_s = Method.to_string meth in
-  let headers =
-    let headers =
-      let add (k, v) headers =
-        if List.mem_assoc k headers then headers else (k, v) :: headers
-      in
-      headers
-      |> add (`Content_length, body |> String.length |> string_of_int)
-      |> add (`Connection, "close")
-      |> add (`Host, Uri.http_host uri)
-      |> add (`Date, Ptime.(now () |> to_http_date))
-    in
-    let headers =
-      match sign with
-      | None -> headers
-      | Some (priv_key, key_id, signed_headers) ->
-          Signature.sign ~priv_key ~key_id ~signed_headers ~headers ~meth
-            ~path:(Uri.path_query_fragment uri)
-            ~body:(Some body)
-    in
-    Headers.to_list headers
-  in
-  try
-    Eio.Switch.run @@ fun sw ->
-    let resp =
-      match meth with
-      | `GET | `DELETE ->
-          Client.request env ~sw ~headers ~meth (Uri.to_string uri)
-      | `POST | `PATCH ->
-          Client.request env ~sw ~headers ~body:(`Fixed body) ~meth
-            (Uri.to_string uri)
-      | _ -> failwith "Not implemented method"
-    in
-    let status = Client.Response.status resp in
-    Logs.debug (fun m ->
-        m "[fetch] %s %s --> %s" meth_s url
-          (Cohttp.Code.string_of_status status));
-    let headers = Client.Response.headers resp in
-    let body = Client.Response.drain resp in
-    Ok (status, headers, body)
-  with e ->
-    let backtrace = Printexc.get_backtrace () in
-    Logs.err (fun m ->
-        m "[fetch] %s %s: %s\n%s" meth_s url (Printexc.to_string e) backtrace);
-    Error ()
-
-exception FetchFailure of (Yume.Status.t * Yume.Headers.t * string) option
-
-let fetch_exn ?(headers = []) ?(meth = `GET) ?(body = "") ?(sign = None) env
-    (url : string) : string =
-  match fetch env ~headers ~meth ~body ~sign url with
-  | Ok (`OK, _, body) -> body
-  | Ok r -> raise (FetchFailure (Some r))
-  | _ -> raise (FetchFailure None)
+let fetch = Yume.Client.fetch
+let fetch_exn = Yume.Client.fetch_exn
 
 let expect_string = function
   | `String s -> s

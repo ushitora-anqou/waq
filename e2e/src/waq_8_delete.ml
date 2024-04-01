@@ -4,7 +4,7 @@ let expect_no_status env kind id =
   try
     get_status env kind id |> ignore;
     assert false
-  with FetchFailure (Some (`Not_found, _, _)) -> ()
+  with Yume.Client.FetchFailure (Some (`Not_found, _, _)) -> ()
 
 let f =
   make_waq_scenario @@ fun env token ->
