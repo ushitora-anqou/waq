@@ -12,8 +12,6 @@ bug-reports: "https://github.com/ushitora-anqou/waq/issues"
 depends: [
   "alcotest" {with-test}
   "alcotest-lwt" {with-test}
-  "merlin" {with-dev-setup}
-  "ocamlformat" {= "0.25.1" & with-dev-setup}
   "base64"
   "blurhash"
   "camlimages"
@@ -22,40 +20,34 @@ depends: [
   "cohttp-eio"
   "cppo"
   "cstruct"
+  "dune" {>= "3.7"}
   "eio"
   "eio-ssl"
   "eio_main"
-  "dune" {>= "3.7"}
-  "fpath"
   "jingoo"
   "lambdasoup"
   "lwt"
   "lwt_eio"
   "lwt_ppx"
-  "lwt_ssl"
   "mirage-crypto-rng"
   "mirage-crypto-rng-eio"
   "multipart_form"
   "multipart_form-eio"
   "ocaml" {>= "5.1.0"}
+  "ocamlformat" {= "0.25.1" & with-dev-setup}
+  "odoc" {with-doc}
   "pcre"
   "postgresql"
-  "ppx_deriving_yaml"
   "ppx_yojson_conv" {= "v0.15.1"}
   "ptime"
   "re"
-  "result"
   "safepass"
-  "sha"
-  "tls-eio"
   "uri"
   "uuidm"
   "websocket"
   "x509"
   "xml-light"
-  "yaml"
   "yojson"
-  "odoc" {with-doc}
 ]
 build: [
   ["dune" "subst"] {dev}
