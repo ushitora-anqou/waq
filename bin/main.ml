@@ -2,6 +2,10 @@ open Waq
 open Util [@@warning "-33"]
 
 let server env =
+  Config.verify_for_server ()
+  |> Result.iter_error (fun msg ->
+         failwith (Printf.sprintf "config is invalid: %s" msg));
+
   let host, port = Config.(listen_host (), listen_port ()) in
 
   let error_handler ~req ~status ~headers ~body =

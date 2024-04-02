@@ -8,18 +8,10 @@ module Internal = struct
     | Some v -> v
     | None -> Sys.getenv_opt name |> Option.value ~default
 
-  let getenv_exn name =
-    match Hashtbl.find_opt cache.m name with
-    | Some v -> v
-    | None -> (
-        match Sys.getenv_opt name with
-        | None -> failwith ("Failed to get the environment variable: " ^ name)
-        | Some s -> s)
-
   let setenv name value = Hashtbl.replace cache.m name value
   let listen () = getenv ~default:"127.0.0.1:8000" "LISTEN"
-  let server_name () = getenv_exn "SERVER_NAME"
-  let db_url () = getenv_exn "DB_URL"
+  let server_name () = getenv ~default:"" "SERVER_NAME"
+  let db_url () = getenv ~default:"" "DB_URL"
 
   let not_found_avatar_url () =
     getenv ~default:"/avatars/original/missing.png" "NOT_FOUND_AVATAR_URL"
@@ -34,8 +26,8 @@ module Internal = struct
     getenv ~default:"/headers/original/missing.png" "DEFAULT_HEADER_URL"
 
   let static_root () = getenv ~default:"static" "STATIC_ROOT"
-  let vapid_private_key () = getenv_exn "VAPID_PRIVATE_KEY"
-  let vapid_public_key () = getenv_exn "VAPID_PUBLIC_KEY"
+  let vapid_private_key () = getenv ~default:"" "VAPID_PRIVATE_KEY"
+  let vapid_public_key () = getenv ~default:"" "VAPID_PUBLIC_KEY"
   let webpush_subscriber () = getenv ~default:"" "WEBPUSH_SUBSCRIBER"
   let log_file_path () = getenv ~default:"" "LOG_FILE_PATH"
 end
@@ -126,3 +118,10 @@ let to_list () =
       ("webpush_subscriber", webpush_subscriber ());
       ("log_file_path", log_file_path ());
     ]
+
+let verify_for_server () =
+  if server_name () = "" then Error "server_name is not set"
+  else if db_url () = "" then Error "db_url is not set"
+  else if vapid_private_key () = "" then Error "vapid_private_key is not set"
+  else if vapid_public_key () = "" then Error "vapid_public_key is not set"
+  else Ok ()
