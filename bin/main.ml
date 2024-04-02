@@ -218,7 +218,7 @@ let () =
    if file_name = "" then Logs.(add_reporter (make_stderr_reporter ~l:Debug))
    else Logs.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
    *)
-  Fmt.set_style_renderer Fmt.stdout `Ansi_tty;
+  Fmt.set_style_renderer Fmt.stderr `Ansi_tty;
   Logs.set_reporter (Logs_fmt.reporter ());
   Logs.set_level (Some Logs.Debug);
 
