@@ -21,9 +21,22 @@ let connect net ~sw url =
   if not tls_enabled then socket
   else
     let ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Client_context in
+    Ssl.set_max_protocol_version ctx Ssl.TLSv1_3;
+    Ssl.set_min_protocol_version ctx Ssl.TLSv1_2;
+    if not (Ssl.set_default_verify_paths ctx) then
+      failwith "Ssl.set_default_verify_paths failed";
+    Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
     let ctx = Eio_ssl.Context.create ~ctx socket in
-    let ssl = Eio_ssl.connect ctx in
-    ssl
+    let hostname = Uri.host url |> Option.get in
+    let ssl_sock = Eio_ssl.Context.ssl_socket ctx in
+    (match Ipaddr.of_string hostname with
+    | Ok ipaddr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipaddr)
+    | _ ->
+        Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
+        Ssl.set_host ssl_sock hostname;
+        Ssl.set_client_SNI_hostname ssl_sock hostname;
+        ());
+    Eio_ssl.connect ctx
 
 module Response = struct
   type t = { resp : Http.Response.t; body : Cohttp_eio.Body.t }
