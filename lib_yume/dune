@@ -3,10 +3,12 @@
  (preprocess
   (pps ppx_deriving.show ppx_deriving.make))
  (libraries
+  ca-certs
   cohttp-eio
-  eio-ssl
+  eio.unix
   multipart_form
   multipart_form-eio
+  tls-eio
   websocket
   x509
   yojson))

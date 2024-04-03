@@ -57,19 +57,19 @@ module Client = struct
     let req = Cohttp.Request.make ~headers url in
 
     (* Connect *)
-    let flow = Client.connect (Eio.Stdenv.net env) ~sw url in
+    let socket, flow = Client.connect (Eio.Stdenv.net env) ~sw url in
 
     (* Drain handshake *)
     let ic = Eio.Buf_read.of_flow ~max_size:max_int flow in
     Eio.Buf_write.with_flow flow (fun oc -> drain_handshake req ic oc nonce);
 
-    (flow, ic)
+    (socket, flow, ic)
 
   let connect ?(extra_headers = Cohttp.Header.init ()) ~sw env url =
     let url = Uri.of_string url in
 
     let nonce = Base64.encode_exn (random_string 16) in
-    let flow, ic = connect' env sw url nonce extra_headers in
+    let socket, flow, ic = connect' env sw url nonce extra_headers in
 
     (* Start writer fiber. All writes must be done in this fiber,
        because Eio.Flow.write is not thread-safe.
@@ -97,12 +97,7 @@ module Client = struct
           make_read_frame ~mode:(Client random_string) ic oc ())
     in
 
-    {
-      socket = (flow :> _ Eio.Net.stream_socket_ty Eio.Resource.t);
-      id = random_string 10;
-      read_frame;
-      write_frame;
-    }
+    { socket; id = random_string 10; read_frame; write_frame }
 
   let id { id; _ } = id
   let read { read_frame; _ } = read_frame ()

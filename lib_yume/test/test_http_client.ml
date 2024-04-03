@@ -1,5 +1,6 @@
 let test_get () =
   Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
   [
     "https://test-ev-rsa.ssl.com/";
     "https://test-dv-rsa.ssl.com/";

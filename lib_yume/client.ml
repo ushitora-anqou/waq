@@ -1,21 +1,12 @@
-let connect_via_ssl socket url =
-  let ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Client_context in
-  Ssl.set_max_protocol_version ctx Ssl.TLSv1_3;
-  Ssl.set_min_protocol_version ctx Ssl.TLSv1_2;
-  if not (Ssl.set_default_verify_paths ctx) then
-    failwith "Ssl.set_default_verify_paths failed";
-  Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
-  let ctx = Eio_ssl.Context.create ~ctx socket in
-  let hostname = Uri.host url |> Option.get in
-  let ssl_sock = Eio_ssl.Context.ssl_socket ctx in
-  (match Ipaddr.of_string hostname with
-  | Ok ipaddr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipaddr)
-  | _ ->
-      Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
-      Ssl.set_host ssl_sock hostname;
-      Ssl.set_client_SNI_hostname ssl_sock hostname;
-      ());
-  Eio_ssl.connect ctx
+let authenticator = Ca_certs.authenticator () |> Result.get_ok
+
+let connect_via_tls url socket =
+  let tls_config = Tls.Config.client ~authenticator () in
+  let host =
+    Uri.host url
+    |> Option.map (fun x -> Domain_name.(host_exn (of_string_exn x)))
+  in
+  Tls_eio.client_of_flow ?host tls_config socket
 
 let connect net ~sw url =
   let service =
@@ -36,7 +27,11 @@ let connect net ~sw url =
     | addr :: _ -> addr
   in
   let socket = Eio.Net.connect ~sw net addr in
-  if not tls_enabled then socket else connect_via_ssl socket url
+  let flow =
+    if not tls_enabled then (socket :> Eio.Flow.two_way_ty Eio.Resource.t)
+    else (connect_via_tls url socket :> Eio.Flow.two_way_ty Eio.Resource.t)
+  in
+  (socket, flow)
 
 module Response = struct
   type t = { resp : Http.Response.t; body : Cohttp_eio.Body.t }
@@ -55,7 +50,18 @@ let request ?headers ?body ~meth env ~sw (url : string) =
   let body =
     body |> Option.map (function `Fixed src -> Cohttp_eio.Body.of_string src)
   in
-  let client = Cohttp_eio.Client.make_generic (connect (Eio.Stdenv.net env)) in
+  let client =
+    Cohttp_eio.Client.make_generic (fun ~sw url ->
+        let _socket, flow = connect (Eio.Stdenv.net env) ~sw url in
+        (* FIXME: I use Obj.magic here, because
+           make_generic expects the argument to return (_ Eio.Net.stream_socket),
+           but Tls_eio.client_of_flow returns (Eio.Flow.two_way_ty Eio.Resource.t),
+           which is not compatible with (_ Eio.Net.stream_socket).
+           It works fine because make_generic is actually an identity function.
+           It just coerces the argument to (Eio.Flow.two_way_ty Eio.Resource.t).
+        *)
+        Obj.magic flow)
+  in
   let resp, body =
     Cohttp_eio.Client.call ~sw ?headers ?body client meth (Uri.of_string url)
   in
