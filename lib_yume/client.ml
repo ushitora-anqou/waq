@@ -51,16 +51,7 @@ let request ?headers ?body ~meth env ~sw (url : string) =
     body |> Option.map (function `Fixed src -> Cohttp_eio.Body.of_string src)
   in
   let client =
-    Cohttp_eio.Client.make_generic (fun ~sw url ->
-        let _socket, flow = connect (Eio.Stdenv.net env) ~sw url in
-        (* FIXME: I use Obj.magic here, because
-           make_generic expects the argument to return (_ Eio.Net.stream_socket),
-           but Tls_eio.client_of_flow returns (Eio.Flow.two_way_ty Eio.Resource.t),
-           which is not compatible with (_ Eio.Net.stream_socket).
-           It works fine because make_generic is actually an identity function.
-           It just coerces the argument to (Eio.Flow.two_way_ty Eio.Resource.t).
-        *)
-        Obj.magic flow)
+    Cohttp_eio.Client.make ~https:(Some connect_via_tls) (Eio.Stdenv.net env)
   in
   let resp, body =
     Cohttp_eio.Client.call ~sw ?headers ?body client meth (Uri.of_string url)
