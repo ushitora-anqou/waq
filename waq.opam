@@ -43,6 +43,7 @@ depends: [
   "re"
   "safepass"
   "tls"
+  "tls-eio"
   "uri"
   "uuidm"
   "websocket"
