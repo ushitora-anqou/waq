@@ -53,12 +53,19 @@ let execute_one_test (name, f) =
     Logs.err (fun m -> m "!!!!! !!!!! !!!!! !!!!!");
     raise e
 
-let () =
-  print_newline ();
+let setup_logs () =
   let formatter = Fmt.stdout in
   Fmt.set_style_renderer formatter `Ansi_tty;
   Logs.set_reporter (Logs_fmt.reporter ());
   Logs.set_level (Some Logs.Debug);
+  Logs.Src.list ()
+  |> List.iter (fun src ->
+         if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
+           Logs.Src.set_level src (Some Logs.Info));
+  ()
+
+let () =
+  setup_logs ();
   Random.self_init ();
 
   let shuffle d =

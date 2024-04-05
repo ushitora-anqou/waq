@@ -210,6 +210,16 @@ let webpush_deliver env username message =
       | None -> failwith "username is not local"
       | Some u -> Webpush_helper.deliver env ~user_id:u#id message)
 
+let setup_logs () =
+  Fmt.set_style_renderer Fmt.stderr `Ansi_tty;
+  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_level (Some Logs.Debug);
+  Logs.Src.list ()
+  |> List.iter (fun src ->
+         if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
+           Logs.Src.set_level src (Some Logs.Info));
+  ()
+
 let () =
   Eio_main.run @@ fun env ->
   Lwt_eio.with_event_loop ~clock:env#clock @@ fun _ ->
@@ -218,9 +228,7 @@ let () =
    if file_name = "" then Logs.(add_reporter (make_stderr_reporter ~l:Debug))
    else Logs.(add_reporter (make_file_reporter ~l:Debug ~file_name ())));
    *)
-  Fmt.set_style_renderer Fmt.stderr `Ansi_tty;
-  Logs.set_reporter (Logs_fmt.reporter ());
-  Logs.set_level (Some Logs.Debug);
+  setup_logs ();
 
   Logs.info (fun m -> m "========== Waq booted ==========");
   Config.to_list ()
