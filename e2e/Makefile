@@ -119,3 +119,7 @@ mastodon-port-forward:
 .PHONY: elk-port-forward
 elk-port-forward:
 	$(KUBECTL) port-forward -n e2e --address 0.0.0.0 svc/elk 58082:5314
+
+.PHONY: logs-deploy-waq
+logs-deploy-waq-web:
+	$(KUBECTL) logs -n e2e deploy/waq-web

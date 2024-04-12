@@ -26,3 +26,5 @@ jobs:
       - run: opam install . --deps-only --with-test
       - run: opam exec -- make -C e2e create-cluster
       - run: opam exec -- make -C e2e test
+      - run: opam exec -- make -C e2e logs-deploy-waq-web
+        if: always()
