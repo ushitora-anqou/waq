@@ -17,8 +17,6 @@ depends: [
   "ca-certs"
   "camlimages"
   "cmdliner"
-  "cohttp"
-  "cohttp-eio"
   "cppo"
   "cstruct"
   "dune" {>= "3.7"}
@@ -31,8 +29,6 @@ depends: [
   "lwt_ppx"
   "mirage-crypto-rng"
   "mirage-crypto-rng-eio"
-  "multipart_form"
-  "multipart_form-eio"
   "ocaml" {>= "5.1.0"}
   "ocamlformat" {= "0.25.1" & with-dev-setup}
   "odoc" {with-doc}
@@ -46,10 +42,10 @@ depends: [
   "tls-eio"
   "uri"
   "uuidm"
-  "websocket"
   "x509"
   "xml-light"
   "yojson"
+  "yume"
 ]
 build: [
   ["dune" "subst"] {dev}
@@ -67,10 +63,14 @@ build: [
 ]
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
 pin-depends:[
-  [ "cohttp.6.0.0~alpha2" "git+https://github.com/mirage/ocaml-cohttp.git#v6.0.0_beta2" ]
-  [ "cohttp-eio.6.0.0~alpha2" "git+https://github.com/mirage/ocaml-cohttp.git#v6.0.0_beta2" ]
   [ "camlimages.5.0.5" "git+https://github.com/ushitora-anqou/camlimages.git#90ceb604527e5e1daddc969d920ff37d118b8a60" ]
+
+  # The following 3 packages are pinned for yume.
+  # See also:
+  # - https://github.com/dinosaure/multipart_form/issues/39
+  # - https://github.com/vbmithr/ocaml-websocket/issues/136
   [ "websocket.2.16" "git+https://github.com/ushitora-anqou/ocaml-websocket#74988ec5ec7d7c620e7d58c5509acd003107c513" ]
   [ "multipart_form.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
   [ "multipart_form-eio.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
+  [ "yume.0.1.2" "git+https://github.com/ushitora-anqou/yume.git#0.1.2" ]
 ]
