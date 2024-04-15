@@ -18,6 +18,7 @@ let routes =
   Controller.
     [
       get "/" Root.get;
+      get "/health" (fun _ _ -> respond ~status:`OK "OK");
       get "/system/*" Static.get;
       get "/avatars/*" Static.get;
       get "/headers/*" Static.get;

@@ -2,6 +2,11 @@ open Common
 
 let f =
   make_waq_scenario @@ fun env _token ->
+  ( Eio.Switch.run @@ fun sw ->
+    let r = Yume.Client.head env ~sw (waq "/health") in
+    assert (Yume.Client.Response.status r = `OK);
+    () );
+
   let access_token = fetch_access_token env ~username:"user1" in
 
   let r =
