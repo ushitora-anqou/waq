@@ -32,8 +32,14 @@ let substitute (spec : subst list) text =
            else (off + len, subtext :: String.sub text cur (off - cur) :: subs))
          (0, [])
   in
-  String.(sub text cur (length text - cur)) :: subs
-  |> List.rev |> String.concat ""
+  try
+    String.(sub text cur (length text - cur)) :: subs
+    |> List.rev |> String.concat ""
+  with e ->
+    Logs.err (fun m ->
+        m "STRING SUB: %s: %s" (Printexc.to_string e)
+          (Printexc.get_backtrace ()));
+    ""
 
 let match_urls =
   (* FIXME: Use regular expressions defined in https://github.com/twitter/twitter-text/blob/30e2430d90cff3b46393ea54caf511441983c260/rb/lib/twitter-text/regex.rb *)
