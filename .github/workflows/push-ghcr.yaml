@@ -1,12 +1,7 @@
 # https://docs.github.com/en/actions/publishing-packages/publishing-docker-images
 name: Publish Docker image to ghcr.io
 
-on:
-  push:
-    tags:
-      - '*'
-    branches:
-      - master
+on: push
 
 env:
   REGISTRY: ghcr.io
