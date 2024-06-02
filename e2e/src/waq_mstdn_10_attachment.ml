@@ -7,11 +7,11 @@ let f env (a0 : agent) (a1 : agent) =
 
   (* a1: Post with attachments *)
   let ({ id = media_id; _ } : media_attachment) =
-    upload_media env a1 ~filename:"test0.png" ~data:test_image
+    upload_media env a1 ~filename:"test0.png" ~data:test_image_large
       ~content_type:"image/png"
   in
   let ({ id = media_id2; _ } : media_attachment) =
-    upload_media env a1 ~filename:"test1.png" ~data:test_image
+    upload_media env a1 ~filename:"test1.png" ~data:test_image_large
       ~content_type:"image/png"
   in
   let { uri; media_attachments; _ } =
