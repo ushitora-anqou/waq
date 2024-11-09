@@ -1,3 +1,3 @@
 (library
  (name webpush)
- (libraries uri base64 yojson mirage-crypto mirage-crypto-ec))
+ (libraries uri base64 cstruct digestif yojson mirage-crypto mirage-crypto-ec unix))
