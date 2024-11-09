@@ -11,9 +11,10 @@ let build ~aud ~exp ~sub ~priv_key =
   in
   let header_dot_payload = header ^ "." ^ payload in
   let signature =
-    header_dot_payload |> Cstruct.of_string |> Mirage_crypto.Hash.SHA256.digest
+    header_dot_payload |> Digestif.SHA256.digest_string
+    |> Digestif.SHA256.to_raw_string
     |> Mirage_crypto_ec.P256.Dsa.sign ~key:priv_key
-    |> (fun (r, s) -> Cstruct.(concat [ r; s ] |> to_string))
+    |> (fun (r, s) -> r ^ s)
     |> b64_url_encode
   in
   header_dot_payload ^ "." ^ signature

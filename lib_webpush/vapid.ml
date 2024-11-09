@@ -5,16 +5,15 @@ type t = { k : string; t : string }
 let generate_keys () =
   let open Mirage_crypto_ec.P256.Dsa in
   let priv_key, pub_key = generate () in
-  ( priv_key |> priv_to_cstruct |> Cstruct.to_string |> b64_url_encode,
-    pub_key |> pub_to_cstruct |> Cstruct.to_string |> b64_url_encode )
+  ( priv_key |> priv_to_octets |> b64_url_encode,
+    pub_key |> pub_to_octets |> b64_url_encode )
 
 let build ~endpoint ~subscriber ~priv_key =
   let ( let* ) = Result.bind in
 
   (* Decode private key *)
   let* priv_key =
-    priv_key |> b64_url_decode |> Cstruct.of_string
-    |> Mirage_crypto_ec.P256.Dsa.priv_of_cstruct
+    priv_key |> b64_url_decode |> Mirage_crypto_ec.P256.Dsa.priv_of_octets
   in
 
   (* Generate JWT token *)
@@ -35,8 +34,7 @@ let build ~endpoint ~subscriber ~priv_key =
   (* Derive public key *)
   let pub_key =
     Mirage_crypto_ec.P256.Dsa.(
-      pub_of_priv priv_key |> pub_to_cstruct |> Cstruct.to_string
-      |> b64_url_encode)
+      pub_of_priv priv_key |> pub_to_octets |> b64_url_encode)
   in
 
   Ok { t = token; k = pub_key }

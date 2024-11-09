@@ -19,6 +19,7 @@ depends: [
   "cmdliner"
   "cppo"
   "cstruct"
+  "digestif"
   "dune" {>= "3.7"}
   "eio"
   "eio_main"
@@ -64,13 +65,5 @@ build: [
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
 pin-depends:[
   [ "camlimages.5.0.5" "git+https://github.com/ushitora-anqou/camlimages.git#90ceb604527e5e1daddc969d920ff37d118b8a60" ]
-
-  # The following 3 packages are pinned for yume.
-  # See also:
-  # - https://github.com/dinosaure/multipart_form/issues/39
-  # - https://github.com/vbmithr/ocaml-websocket/issues/136
-  [ "websocket.2.16" "git+https://github.com/ushitora-anqou/ocaml-websocket#74988ec5ec7d7c620e7d58c5509acd003107c513" ]
-  [ "multipart_form.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
-  [ "multipart_form-eio.0.5.0" "git+https://github.com/dinosaure/multipart_form#a794239b8fc9601540ffea489b2c470227216c5e" ]
-  [ "yume.0.1.6" "git+https://github.com/ushitora-anqou/yume.git#0.1.6" ]
+  [ "yume.0.1.9" "git+https://github.com/ushitora-anqou/yume.git#0.1.9" ]
 ]
