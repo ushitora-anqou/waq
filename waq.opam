@@ -43,7 +43,7 @@ depends: [
   "tls"
   "tls-eio"
   "uri"
-  "uuidm"
+  "uuidm" {<= "0.9.8"}
   "x509"
   "xml-light"
   "yojson"
