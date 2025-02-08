@@ -30,7 +30,7 @@ let f =
     assert (reblogs_count = 1);
 
     ()
-    [@@warning "-8"]
+      [@@warning "-8"]
   in
 
   let ws_recv_msgs =

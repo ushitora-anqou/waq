@@ -34,7 +34,7 @@ let f env (a0 : agent) (a1 : agent) (a2 : agent) =
   assert (List.length (Option.get n.status).mentions = 2);
 
   ()
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let f_waq_mstdn_waq () =
   launch_waq_and_mstdn @@ fun env ctxt ->

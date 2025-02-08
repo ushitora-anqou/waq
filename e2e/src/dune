@@ -11,4 +11,5 @@
   mirage-crypto-rng
   mirage-crypto-rng-eio
   yojson
-  yume))
+  yume)
+ (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives))

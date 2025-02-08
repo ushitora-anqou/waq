@@ -8,29 +8,27 @@ open Lwt.Infix
 module rec Account = struct
   name "accounts"
 
-  class type t =
-    object
-      (* Table `accounts` has 3 columns ... *)
-      val username : string
-      val domain : string option
-      val display_name : string
+  class type t = object
+    (* Table `accounts` has 3 columns ... *)
+    val username : string
+    val domain : string option
+    val display_name : string
 
-      (* ... and also has many `statuses` thorugh foreign key *)
-      val statuses : Status.t list [@@foreign_key `account_id]
-    end
+    (* ... and also has many `statuses` thorugh foreign key *)
+    val statuses : Status.t list [@@foreign_key `account_id]
+  end
 end
 
 and Status = struct
   name "statuses"
 
-  class type t =
-    object
-      (* Table `statuses` has 4 columns *)
-      val text : string
-      val in_reply_to_id : ID.t option
-      val reblog_of_id : ID.t option
-      val account_id : Account.ID.t
-    end
+  class type t = object
+    (* Table `statuses` has 4 columns *)
+    val text : string
+    val in_reply_to_id : ID.t option
+    val reblog_of_id : ID.t option
+    val account_id : Account.ID.t
+  end
 end]
 
 module Db = struct
@@ -62,7 +60,7 @@ let insert_some_statuses () : unit Lwt.t =
         |> save_one)
   in
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 (* Select all statuses that `username` has replied *)
 let statuses_replied_by ~(username : string) : Status.t list Lwt.t =

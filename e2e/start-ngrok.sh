@@ -1,5 +1,6 @@
-#!/usr/bin/bash -ux
+#!/usr/bin/env bash
 
+set -ux
 set -o pipefail
 
 NAME=$1

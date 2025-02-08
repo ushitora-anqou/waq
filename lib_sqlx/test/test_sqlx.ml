@@ -9,57 +9,52 @@ open Util
 module rec TestBool = struct
   name "test_bool"
 
-  class type t =
-    object
-      val x : bool
-    end
+  class type t = object
+    val x : bool
+  end
 end
 
 and Account = struct
   name "accounts"
 
-  class type t =
-    object
-      val username : string
-      val domain : string option
-      val display_name : string
-      val stat : AccountStat.t option [@@foreign_key `account_id]
-    end
+  class type t = object
+    val username : string
+    val domain : string option
+    val display_name : string
+    val stat : AccountStat.t option [@@foreign_key `account_id]
+  end
 end
 
 and AccountStat = struct
   name "account_stats"
 
-  class type t =
-    object
-      val account_id : Account.ID.t
-      val statuses_count : int
-      val following_count : int
-      val followers_count : int
-      val last_status_at : Ptime.t option
-    end
+  class type t = object
+    val account_id : Account.ID.t
+    val statuses_count : int
+    val following_count : int
+    val followers_count : int
+    val last_status_at : Ptime.t option
+  end
 end
 
 and Status = struct
   name "statuses"
 
-  class type t =
-    object
-      val text : string
-      val in_reply_to_id : ID.t option
-      val reblog_of_id : ID.t option
-      val account_id : Account.ID.t
-    end
+  class type t = object
+    val text : string
+    val in_reply_to_id : ID.t option
+    val reblog_of_id : ID.t option
+    val account_id : Account.ID.t
+  end
 end
 
 and Favourite = struct
   name "favourites"
 
-  class type t =
-    object
-      val account_id : Account.ID.t
-      val status_id : Status.ID.t
-    end
+  class type t = object
+    val account_id : Account.ID.t
+    val status_id : Status.ID.t
+  end
 end
 
 and Notification = struct
@@ -91,17 +86,16 @@ and Notification = struct
     | "follow" -> `follow
     | _ -> failwith "type_t_of_string: invalid input"
 
-  class type t =
-    object
-      val activity_id : int
-      val activity_type : activity_type_t
-      val account_id : Account.ID.t
-      val from_account_id : Account.ID.t
-      val typ : typ_t option [@@column "type"]
+  class type t = object
+    val activity_id : int
+    val activity_type : activity_type_t
+    val account_id : Account.ID.t
+    val from_account_id : Account.ID.t
+    val typ : typ_t option [@@column "type"]
 
-      val target_status : Status.t
-      [@@not_column] [@@preload_spec: Status.preload_spec]
-    end
+    val target_status : Status.t
+    [@@not_column] [@@preload_spec: Status.preload_spec]
+  end
 end]
 
 module Notification = struct
@@ -251,7 +245,7 @@ let test_bool _ _ =
   assert r1'#x;
   assert (not r2'#x);
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_account_basic_ops_case1 _ _ =
   setup1 ();%lwt
@@ -337,7 +331,7 @@ let test_account_basic_ops_case1 _ _ =
   (Db.e Account.(select ~id:(`Eq a1#id)) >|= fun r -> assert (r = []));%lwt
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_account_preload _ _ =
   setup1 ();%lwt
@@ -364,7 +358,7 @@ let test_account_preload _ _ =
   let%lwt [ a ] = Db.e Account.(select ~id:(`Eq a1#id) ~preload:[ `stat [] ]) in
   assert (Option.is_some a#stat);
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_status_preload _ _ =
   setup1 ();%lwt
@@ -437,7 +431,7 @@ let test_status_preload _ _ =
   assert (Ptime.is_earlier s1#updated_at ~than:s1'#updated_at);
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_notification_target_status _ _ =
   setup1 ();%lwt
@@ -467,7 +461,7 @@ let test_notification_target_status _ _ =
               ~account_id:a1#id ~from_account_id:a2#id ~typ:`reblog ();
           ]
           ~preload:[ `target_status [ `reblog_of [] ] ])
-    [@@warning "-8"]
+      [@@warning "-8"]
   in
   assert (n1#target_status#id = s2#id);
   assert ((Option.get n1#target_status#reblog_of)#id = s1#id);
@@ -491,7 +485,7 @@ let test_notification_target_status _ _ =
   assert (n2#target_status#id = s1#id);
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_transaction_case1 _ _ =
   let hook_called = ref false in
@@ -522,7 +516,7 @@ let test_transaction_case1 _ _ =
   assert (not !hook_called);
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_count_status _ _ =
   setup1 ();%lwt
@@ -564,7 +558,7 @@ let test_count_status _ _ =
   assert (replies_count = 0);
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let test_account_derived_ops _ _ =
   setup1 ();%lwt
@@ -598,7 +592,7 @@ let test_account_derived_ops _ _ =
   in
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 module M1 : Migration.S = struct
   let change =
@@ -664,7 +658,7 @@ let test_migration _ _ =
   Db.e (rollback ~n:1 ~config ~migrations);%lwt
 
   Lwt.return_unit
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let () =
   Logs.set_reporter (Logs_fmt.reporter ());

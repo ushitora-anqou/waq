@@ -11,7 +11,7 @@ let get_preview_card_from_a1 env (a0 : agent) (a1 : agent) content =
   (* a1: Check the post. The post should have been fetched in advance because a1 follows a0. *)
   let _, [ s ], _ = search env a1 uri in
   s
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let f_case1 env (a0 : agent) (a1 : agent) =
   let url = "https://www.youtube.com/watch?v=OMv_EPMED8Y" in

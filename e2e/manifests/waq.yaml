@@ -27,12 +27,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: waq:dev
-          command:
-            - bash
-            - -ce
-            - |
-              /waq/waq
+          image: ghcr.io/ushitora-anqou/waq:dev
           envFrom:
             - secretRef:
                 name: waq-secret-env
