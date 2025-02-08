@@ -6,6 +6,6 @@ build:
 test:
 	dune runtest
 
-.PHONY: setup
-setup:
-	opam install . --deps-only --with-test --with-dev-setup
+.PHONY: flake-update
+flake-update:
+	nix flake update opam-nix waq-external-repo
