@@ -15,4 +15,4 @@ let f =
     get_markers env ~token `Waq [ "home"; "notifications" ]
   in
   ()
-  [@@warning "-8"]
+[@@warning "-8"]

@@ -105,3 +105,7 @@ end
 let int_to_3digits i =
   let s = Printf.sprintf "%012d" i in
   String.[ sub s 0 3; sub s 3 3; sub s 6 3; sub s 9 3 ]
+
+let generate_uuid_v4 =
+  let generator = Random.State.make_self_init () |> Uuidm.v4_gen in
+  generator *> Uuidm.to_string

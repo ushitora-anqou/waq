@@ -157,8 +157,16 @@ module Internal = struct
         Unix.sleep 5;
         let token =
           kubectl
-            (["exec"; "-n"; "e2e"; "deploy/waq-web"; "--"; "bash"; "-ce";
-            "/waq/waq oauth:generate_access_token " ^ username ^ " 2> /dev/null"] [@ocamlformat "disable"])
+            [
+              "exec";
+              "-n";
+              "e2e";
+              "deploy/waq-web";
+              "--";
+              "sh";
+              "-c";
+              "waq oauth:generate_access_token " ^ username ^ " 2> /dev/null";
+            ]
             (fun ic -> In_channel.input_line ic |> Option.value ~default:"")
           |> snd
         in
@@ -327,7 +335,7 @@ let url = function `Waq -> waq | `Mstdn -> mstdn
 
 let pp_json (s : string) =
   Logs.debug (fun m -> m "%s" Yojson.Safe.(from_string s |> pretty_to_string))
-  [@@warning "-32"]
+[@@warning "-32"]
 
 let do_fetch env ?token ?(meth = `GET) ?(body = "") kind target =
   let headers = [ (`Accept, "application/json") ] in

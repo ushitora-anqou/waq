@@ -34,3 +34,6 @@ e2e/_test*
 e2e/_bin
 e2e/.kubeconfig
 e2e/.env
+.direnv
+result
+.envrc

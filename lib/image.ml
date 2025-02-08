@@ -2,7 +2,9 @@ open Util
 open Lwt.Infix
 
 module Magick = struct
-  let convert_exe = "/usr/bin/convert"
+  let convert_exe =
+    Sys.getenv_opt "IMAGEMAGICK_CONVERT_PATH"
+    |> Option.value ~default:"/usr/bin/convert"
 
   let convert' ~(input_file_name : string) ~(output_file_name : string)
       ~(options : string array) =
@@ -43,8 +45,7 @@ let parse_content_type = function
   | _ -> Error "Invalid content type"
 
 let generate_unique_filename img_type =
-  Uuidm.(v `V4 |> to_string)
-  ^ match img_type with `PNG -> ".png" | `JPEG -> ".jpeg"
+  generate_uuid_v4 () ^ match img_type with `PNG -> ".png" | `JPEG -> ".jpeg"
 
 let save_formdata ~outdir (formdata : Yume.Server.formdata_t) =
   let fdata = formdata in

@@ -60,7 +60,7 @@ let service env ~(src : Db.Account.t) ~(dst : Db.Account.t) : unit =
   else if already_followed ~src ~dst then ()
   else if already_follow_requested ~src ~dst then ()
   else
-    let uri = src#uri ^/ Uuidm.(v `V4 |> to_string) in
+    let uri = src#uri ^/ generate_uuid_v4 () in
     match dst#domain with
     | None (* local *) -> direct_follow env ~uri src dst
     | Some _ (* remote *) -> request_follow env ~uri src dst

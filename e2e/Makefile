@@ -1,13 +1,12 @@
-KIND_VERSION:=0.25.0
 KUBERNETES_VERSION:=1.31.0
-HELM_VERSION:=3.16.2
 WD:=$(dir $(lastword $(MAKEFILE_LIST)))
-BIN:=$(WD)/_bin
-KIND:=$(BIN)/kind-$(KIND_VERSION)
 KIND_CLUSTER_NAME=waq-test-cluster
-KUBECTL:=$(BIN)/kubectl-$(KUBERNETES_VERSION)
-HELM:=$(BIN)/helm-$(HELM_VERSION)
-IMAGE=waq:dev
+KIND:=kind
+KUBECTL:=kubectl
+HELM:=helm
+
+# IMAGE should be equal to the name in flake.nix.
+IMAGE=ghcr.io/ushitora-anqou/waq:dev
 
 .PHONY: build
 build:
@@ -33,30 +32,15 @@ test:
 $(BIN):
 	mkdir -p $(BIN)
 
-$(KIND): | $(BIN)
-	wget -O $(KIND) https://github.com/kubernetes-sigs/kind/releases/download/v$(KIND_VERSION)/kind-linux-amd64
-	chmod a+x $(KIND)
-
-$(KUBECTL): | $(BIN)
-	wget -O $(KUBECTL) https://storage.googleapis.com/kubernetes-release/release/v$(KUBERNETES_VERSION)/bin/linux/amd64/kubectl
-	chmod a+x $(KUBECTL)
-
-$(HELM): | $(BIN)
-	curl -sSLf https://get.helm.sh/helm-v$(HELM_VERSION)-linux-amd64.tar.gz \
-		| tar xvz -C $(BIN) --strip-components 1 linux-amd64/helm
-	mv $(BIN)/helm $@
-
 KUBECONFIG := $(shell pwd)/.kubeconfig
 .PHONY: $(KUBECONFIG)
-$(KUBECONFIG): | $(KIND)
+$(KUBECONFIG):
 	$(KIND) export kubeconfig --name $(KIND_CLUSTER_NAME) --kubeconfig=$@
-
-.PHONY: setup
-setup: $(KIND) $(KUBECTL) $(HELM)
 
 .PHONY: build-image
 build-image:
-	cd $(WD)/.. && docker build . -t $(IMAGE)
+	nix build ..#docker
+	docker load -i result
 
 .PHONY: clean-cluster
 clean-cluster:
@@ -82,7 +66,6 @@ stop-ngrok:
 
 .PHONY: create-cluster
 create-cluster:
-	$(MAKE) setup
 	$(MAKE) clean-cluster
 	$(KIND) create cluster -n $(KIND_CLUSTER_NAME) --image kindest/node:v$(KUBERNETES_VERSION)
 	$(MAKE) $(KUBECONFIG)

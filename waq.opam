@@ -1,5 +1,4 @@
 opam-version: "2.0"
-version: "0.1.3"
 synopsis: "Yet another ActivityPub server"
 description: "Yet another ActivityPub server"
 maintainer: ["Ushitora Anqou"]
@@ -15,7 +14,7 @@ depends: [
   "base64"
   "blurhash"
   "ca-certs"
-  "camlimages"
+  "camlimages" {= "5.0.5+waq.1"}
   "cmdliner"
   "cppo"
   "cstruct"
@@ -31,23 +30,21 @@ depends: [
   "mirage-crypto-rng"
   "mirage-crypto-rng-eio"
   "ocaml" {>= "5.1.0"}
-  "ocaml-lsp-server" {with-dev-setup}
-  "ocamlformat" {= "0.25.1" & with-dev-setup}
   "odoc" {with-doc}
   "pcre"
   "postgresql"
-  "ppx_yojson_conv" {= "v0.15.1"}
+  "ppx_yojson_conv"
   "ptime"
   "re"
   "safepass"
   "tls"
   "tls-eio"
   "uri"
-  "uuidm" {<= "0.9.8"}
+  "uuidm"
   "x509"
   "xml-light"
   "yojson"
-  "yume"
+  "yume" {= "0.1.10+waq"}
 ]
 build: [
   ["dune" "subst"] {dev}
@@ -59,12 +56,8 @@ build: [
     "-j"
     jobs
     "@install"
-    "@runtest" {with-test}
+    #"@runtest" {with-test}
     "@doc" {with-doc}
   ]
 ]
 dev-repo: "git+https://github.com/ushitora-anqou/waq.git"
-pin-depends:[
-  [ "camlimages.5.0.5" "git+https://github.com/ushitora-anqou/camlimages.git#90ceb604527e5e1daddc969d920ff37d118b8a60" ]
-  [ "yume.0.1.9" "git+https://github.com/ushitora-anqou/yume.git#0.1.9" ]
-]

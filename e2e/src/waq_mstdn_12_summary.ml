@@ -11,7 +11,7 @@ let f env (a0 : agent) (a1 : agent) =
   assert (s.spoiler_text = spoiler_text);
 
   ()
-  [@@warning "-8"]
+[@@warning "-8"]
 
 let f_mstdn_waq =
   make_waq_and_mstdn_scenario @@ fun env waq_token mstdn_token ->

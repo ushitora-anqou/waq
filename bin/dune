@@ -3,4 +3,5 @@
  (name main)
  (preprocess
   (pps lwt_ppx))
- (libraries cmdliner lwt lwt.unix waq))
+ (libraries cmdliner lwt lwt.unix waq)
+ (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives))

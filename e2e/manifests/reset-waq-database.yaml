@@ -10,12 +10,9 @@ spec:
       restartPolicy: Never
       containers:
         - name: reset-waq-database
-          image: waq:dev
-          command:
-            - bash
-            - -ce
-            - |
-              /waq/waq db:reset
+          image: ghcr.io/ushitora-anqou/waq:dev
+          args:
+            - db:reset
           envFrom:
             - secretRef:
                 name: waq-secret-env
