@@ -14,11 +14,12 @@ jobs:
     steps:
       - name: Checkout tree
         uses: actions/checkout@v4
-#     - name: Setup tmate session
-#       uses: mxschmitt/action-tmate@v3
-      - name: Set-up OCaml
-        uses: ocaml/setup-ocaml@v2
+      - uses: cachix/install-nix-action@v27
         with:
-          ocaml-compiler: "5.1.1"
-      - run: opam install . --deps-only --with-test
-      - run: opam exec -- make test
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@v14
+        with:
+          name: waq
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - uses: nicknovitski/nix-develop@v1
+      - run: make test
