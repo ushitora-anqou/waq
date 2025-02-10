@@ -51,6 +51,12 @@
             ## - or force ocamlfind to be a certain version:
             # ocamlfind = "1.9.2";
           };
+        src = with builtins;
+          filterSource (
+            path: type:
+              !(type == "directory" && elem (baseNameOf path) [".github"])
+          )
+          ./.;
         scope =
           on.buildOpamProject' {
             repos = [on.opamRepository waq-external-repo];
@@ -59,7 +65,7 @@
               with-doc = true;
             };
           }
-          ./.
+          src
           query;
         overlay = final: prev:
           (
@@ -129,10 +135,12 @@
             tag = "dev";
             created = "now";
             extraCommands = "mkdir -m 1777 tmp";
-            contents = (with pkgs; [
-              busybox
-              iana-etc
-            ]) ++ [ main ];
+            contents =
+              (with pkgs; [
+                busybox
+                iana-etc
+              ])
+              ++ [main];
             config = {
               Entrypoint = ["waq"];
               Env = [
