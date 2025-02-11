@@ -18,12 +18,18 @@ let search env src = search env src.kind ~token:src.token
 let reblog env src = reblog env src.kind ~token:src.token
 let unreblog env src = unreblog env src.kind ~token:src.token
 
+let lookup_via_v1_accounts_lookup env src =
+  lookup_via_v1_accounts_lookup env src.kind ~token:src.token
+
 let home_timeline env src =
   home_timeline env src.kind ~token:src.token |> List.map status_of_yojson
 
 let delete_status env src = delete_status env src.kind ~token:src.token
 let get_status env src = get_status env src.kind ~token:src.token
 let get_notifications env src = get_notifications env src.kind ~token:src.token
+
+let get_account_statuses env src =
+  get_account_statuses env src.kind ~token:src.token
 
 let update_credentials env src =
   update_credentials env src.kind ~token:src.token

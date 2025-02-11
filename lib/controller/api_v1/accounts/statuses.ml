@@ -7,6 +7,7 @@ type params = {
   max_id : Model.Status.ID.t option;
   since_id : Model.Status.ID.t option;
   exclude_replies : bool;
+  pinned : bool;
 }
 
 let parse_req req =
@@ -31,16 +32,22 @@ let parse_req req =
     |> Option.map bool_of_string
     |> Option.value ~default:false
   in
-  { id; self_id; max_id; since_id; limit; exclude_replies }
+  let pinned =
+    req |> query_opt "pinned" |> Option.map bool_of_string
+    |> Option.value ~default:false
+  in
+  { id; self_id; max_id; since_id; limit; exclude_replies; pinned }
 
 let get _ req =
-  let { self_id; id; limit; max_id; since_id; exclude_replies } =
+  let { self_id; id; limit; max_id; since_id; exclude_replies; pinned } =
     parse_req req
   in
   let result =
-    Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
-    |> List.map (fun (s : Db.Status.t) -> s#id)
-    |> Entity.load_statuses_from_db ?self_id
+    if pinned then []
+    else
+      Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
+      |> List.map (fun (s : Db.Status.t) -> s#id)
+      |> Entity.load_statuses_from_db ?self_id
   in
   let headers =
     match result with

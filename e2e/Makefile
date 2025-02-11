@@ -20,7 +20,7 @@ run-test:
 		OCAMLRUNPARAM=b \
 		E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) \
 		E2E_TEST_MASTODON_SERVER_NAME=https://$(shell cat $(WD)/_test_mastodon_domain) \
-		dune exec src/main.exe
+		dune exec src/main.exe $(TESTCASES)
 	#env KUBECTL=$(KUBECTL) MANIFESTS=$(WD)/manifests OCAMLRUNPARAM=b E2E_TEST_WAQ_SERVER_NAME=http://localhost:58080 dune exec src/main.exe
 
 .PHONY: test

@@ -633,10 +633,12 @@ let get_status env kind ?token status_id =
   do_fetch env ?token kind ("/api/v1/statuses/" ^ status_id)
   |> Yojson.Safe.from_string |> status_of_yojson
 
-let get_account_statuses env kind ?token ?(exclude_replies = false) account_id =
+let get_account_statuses env kind ?token ?(exclude_replies = false)
+    ?(pinned = false) account_id =
   do_fetch env ?token kind
     ("/api/v1/accounts/" ^ account_id ^ "/statuses?exclude_replies="
-    ^ string_of_bool exclude_replies)
+    ^ string_of_bool exclude_replies
+    ^ "&pinned=" ^ string_of_bool pinned)
   |> Yojson.Safe.from_string |> expect_list |> List.map status_of_yojson
 
 let get_status_context env kind status_id =
