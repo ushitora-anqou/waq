@@ -325,6 +325,15 @@ let make_waq_scenario ?(timeout = 30.0) handler () : unit =
   Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
   Eio.Time.with_timeout_exn env#clock timeout (fun () -> handler env waq_token)
 
+let make_mstdn_scenario ?(timeout = 30.0) handler () : unit =
+  new_mastodon_session @@ fun mstdn_token ->
+  Logs.debug (fun m -> m "Access token for Mastodon: %s" mstdn_token);
+  Unix.sleep 10;
+  Eio_main.run @@ fun env ->
+  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env @@ fun () ->
+  Eio.Time.with_timeout_exn env#clock timeout (fun () ->
+      handler env mstdn_token)
+
 let waq_server_name = Sys.getenv "E2E_TEST_WAQ_SERVER_NAME"
 let waq_server_domain = Uri.(of_string waq_server_name |> domain)
 let waq url = waq_server_name ^ url
@@ -399,6 +408,10 @@ type status = {
   mentions : status_mention list;
   card : preview_card option;
   content : string option; [@yojson.option]
+  muted : bool option; [@yojson.option]
+  bookmarked : bool option; [@yojson.option]
+  pinned : bool option; [@yojson.option]
+  filtered : string (* FIXME: dummy *) list option; [@yojson.option]
 }
 [@@deriving yojson] [@@yojson.allow_extra_fields]
 

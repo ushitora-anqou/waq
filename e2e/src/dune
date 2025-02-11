@@ -10,6 +10,7 @@
   logs.fmt
   mirage-crypto-rng
   mirage-crypto-rng-eio
+  pcre
   yojson
   yume)
  (flags :standard -open Ppx_yojson_conv_lib.Yojson_conv.Primitives))

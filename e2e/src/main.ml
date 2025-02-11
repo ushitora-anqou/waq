@@ -42,6 +42,8 @@ let all_tests =
     ("06-cred-waq-waq", Waq_mstdn_16_cred.f_waq_waq);
     ("06-cred-waq-mstdn", Waq_mstdn_16_cred.f_waq_mstdn);
     ("06-cred-mstdn-waq", Waq_mstdn_16_cred.f_mstdn_waq);
+    ("07-status-waq", Waq_mstdn_17_status.f_waq);
+    ("07-status-mstdn", Waq_mstdn_17_status.f_mstdn);
   ]
 
 let execute_one_test (name, f) =

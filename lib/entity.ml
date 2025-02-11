@@ -281,14 +281,18 @@ type status = {
   media_attachments : media_attachment list;
   spoiler_text : string;
   card : preview_card option;
+  muted : bool option; [@yojson.option]
+  bookmarked : bool option; [@yojson.option]
+  pinned : bool option; [@yojson.option]
+  filtered : string (* FIXME: dummy *) list option; [@yojson.option]
 }
 [@@deriving make, yojson_of]
 
 let status_list_to_hash (statuses : status list) =
   statuses |> List.map (fun s -> (s.id, s)) |> List.to_seq |> Hashtbl.of_seq
 
-let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
-    =
+let rec serialize_status ?(visibility = "public")
+    ?(self_id : Model.Account.ID.t option) (s : Model.Status.t) : status =
   let id_to_string x = x |> Model.Status.ID.to_int |> string_of_int in
   let stat =
     let default =
@@ -310,7 +314,7 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
       (s#in_reply_to
       |> Option.map @@ fun x ->
          x#account_id |> Model.Account.ID.to_int |> string_of_int)
-    ?reblog:(s#reblog_of |> Option.map serialize_status)
+    ?reblog:(s#reblog_of |> Option.map (serialize_status ?self_id))
     ~reblogs_count:stat#reblogs_count ~favourites_count:stat#favourites_count
     ~reblogged:s#reblogged ~favourited:s#favourited
     ~media_attachments:
@@ -321,6 +325,10 @@ let rec serialize_status ?(visibility = "public") (s : Model.Status.t) : status
       (match s#preview_cards with
       | [] -> None
       | x :: _ -> Some (serialize_preview_card x))
+    ?muted:(self_id |> Option.map (Fun.const false))
+    ?bookmarked:(self_id |> Option.map (Fun.const false))
+    ?pinned:(self_id |> Option.map (Fun.const false))
+    ?filtered:(self_id |> Option.map (Fun.const []))
     ()
 
 let status_preload_spec self_id : Model.Status.preload_spec =
@@ -358,7 +366,7 @@ let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
   let statuses = statuses |> index_by (fun x -> x#id) in
   status_ids
   |> List.map (fun id ->
-         Hashtbl.find statuses id |> serialize_status ?visibility)
+         Hashtbl.find statuses id |> serialize_status ?visibility ?self_id)
 
 let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
     status =
@@ -465,13 +473,14 @@ let notification_model_list_to_hash (notis : Db.Notification.t list) =
   |> List.map (fun (n : Db.Notification.t) -> (n#id, n))
   |> List.to_seq |> Hashtbl.of_seq
 
-let serialize_notification (n : Model.Notification.t) : notification =
+let serialize_notification ?(self_id : Model.Account.ID.t option)
+    (n : Model.Notification.t) : notification =
   make_notification
     ~id:(n#id |> Model.Notification.ID.to_int |> string_of_int)
     ~typ:(Option.get n#typ |> Model.Notification.typ_t_to_string)
     ~created_at:(Ptime.to_rfc3339 n#created_at)
     ~account:(serialize_account n#from_account)
-    ?status:(n#target_status |> Option.map serialize_status)
+    ?status:(n#target_status |> Option.map (serialize_status ?self_id))
     ()
 
 let load_notifications_from_db ?self_id
@@ -493,7 +502,7 @@ let load_notifications_from_db ?self_id
          let n = Hashtbl.find notis id in
          match (n#typ, n#target_status) with
          | Some (`reblog | `favourite | `mention), Some _ | Some `follow, _ ->
-             Some (serialize_notification n)
+             Some (serialize_notification ?self_id n)
          | _ -> None)
 
 (* Entity marker *)
