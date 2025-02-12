@@ -398,9 +398,9 @@ type status = {
   id : string;
   uri : string;
   reblog : status option;
-  reblogged : bool;
+  reblogged : bool option; [@yojson.option]
   reblogs_count : int;
-  favourited : bool;
+  favourited : bool option; [@yojson.option]
   account : account;
   favourites_count : int;
   media_attachments : media_attachment list;

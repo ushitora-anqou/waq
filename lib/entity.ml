@@ -275,8 +275,8 @@ type status = {
   mentions : status_mention list;
   reblog : status option;
   reblogs_count : int;
-  reblogged : bool;
-  favourited : bool;
+  reblogged : bool option; [@yojson.option]
+  favourited : bool option; [@yojson.option]
   favourites_count : int;
   media_attachments : media_attachment list;
   spoiler_text : string;
@@ -316,7 +316,8 @@ let rec serialize_status ?(visibility = "public")
          x#account_id |> Model.Account.ID.to_int |> string_of_int)
     ?reblog:(s#reblog_of |> Option.map (serialize_status ?self_id))
     ~reblogs_count:stat#reblogs_count ~favourites_count:stat#favourites_count
-    ~reblogged:s#reblogged ~favourited:s#favourited
+    ?reblogged:(self_id |> Option.map (Fun.const s#reblogged))
+    ?favourited:(self_id |> Option.map (Fun.const s#favourited))
     ~media_attachments:
       (Model.Status.sorted_attachments s |> List.map serialize_media_attachment)
     ~mentions:(s#mentions |> List.map serialize_mention)

@@ -19,7 +19,7 @@ let post env req =
     let entity =
       {
         entity with
-        reblogged = false;
+        reblogged = Some false;
         reblogs_count = entity.reblogs_count - 1;
       }
     in

@@ -3,8 +3,8 @@ open Common2
 let f env (a0 : agent) =
   let check (s : status) =
     assert (s.reblog = None);
-    assert (not s.reblogged);
-    assert (not s.favourited);
+    assert (s.reblogged = Some false);
+    assert (s.favourited = Some false);
     assert (s.pinned = Some false);
     assert (s.bookmarked = Some false);
     assert (s.muted = Some false);
