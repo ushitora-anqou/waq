@@ -112,6 +112,20 @@ module Status = struct
   let get_replies_count id c : int Lwt.t =
     count ~deleted_at:`EqNone ~in_reply_to_id:(`Eq id) c
 
+  (* sort_statuses_by_dfs is a utility function for get_ancestors and get_descendants *)
+  let sort_statuses_by_dfs root_status_id statuses =
+    let rec dfs (id : ID.t) =
+      statuses
+      |> List.filter (fun s -> s#in_reply_to_id = Some id)
+      |> List.sort (fun x y -> Int.compare (ID.to_int x#id) (ID.to_int y#id))
+      |> List.map (fun s -> s :: dfs s#id)
+      |> List.flatten
+    in
+    let sorted = dfs root_status_id in
+    match statuses |> List.find_opt (fun s -> root_status_id = s#id) with
+    | None -> sorted
+    | Some s -> s :: sorted
+
   let get_ancestors (id : ID.t) (c : Sqlx.Connection.t) : t list Lwt.t =
     c#query
       ~p:[ `Int (ID.to_int id) ]
@@ -123,6 +137,11 @@ WITH RECURSIVE t(id) AS (
 )
 SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
     >|= List.map pack
+    >|= fun statuses ->
+    let root =
+      statuses |> List.find (fun (s : t) -> Option.is_none s#in_reply_to_id)
+    in
+    sort_statuses_by_dfs root#id statuses
 
   let get_descendants (id : ID.t) (c : Sqlx.Connection.t) : t list Lwt.t =
     c#query
@@ -134,7 +153,7 @@ WITH RECURSIVE t(id) AS (
   SELECT s.id FROM statuses s, t WHERE deleted_at IS NULL AND s.in_reply_to_id = t.id
 )
 SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
-    >|= List.map pack
+    >|= List.map pack >|= sort_statuses_by_dfs id
 
   let after_discard_with_reblogs_callbacks :
       (t -> Sqlx.Connection.t -> unit Lwt.t) list ref =
