@@ -1,5 +1,5 @@
 (tests
- (names test_util test_text_helper test_regex test_ogp)
+ (names test_util test_text_helper test_regex test_ogp test_model)
  (preprocess
   (pps lwt_ppx))
  (libraries alcotest alcotest-lwt waq))

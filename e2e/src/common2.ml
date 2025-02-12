@@ -31,6 +31,8 @@ let get_notifications env src = get_notifications env src.kind ~token:src.token
 let get_account_statuses env src =
   get_account_statuses env src.kind ~token:src.token
 
+let get_status_context env src = get_status_context env src.kind
+
 let update_credentials env src =
   update_credentials env src.kind ~token:src.token
 
