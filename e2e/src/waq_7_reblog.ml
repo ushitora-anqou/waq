@@ -36,12 +36,12 @@ let f =
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 1);
-  assert (not reblogged);
+  assert (reblogged = Some false);
   let { id = unreblog_id; reblogs_count; reblogged; _ } =
     unreblog env `Waq ~token ~id
   in
   assert (unreblog_id = id);
   assert (reblogs_count = 0);
-  assert (not reblogged);
+  assert (reblogged = Some false);
 
   ()

@@ -5,13 +5,19 @@ let f =
   let expected_ids = ref [] in
   let ws_recv_msgs =
     websocket_stack env `Waq ~token @@ fun _pushf ->
-    let { id = id1; reblog = None; reblogged = false; reblogs_count = 0; _ } =
+    let {
+      id = id1;
+      reblog = None;
+      reblogged = Some false;
+      reblogs_count = 0;
+      _;
+    } =
       post env `Waq ~token ~content:"Hello world" ()
     in
     let {
       id = id2;
-      reblogged = true;
-      reblog = Some { id = id1'; reblogged = true; reblog = None; _ };
+      reblogged = Some true;
+      reblog = Some { id = id1'; reblogged = Some true; reblog = None; _ };
       _;
     } =
       reblog env `Waq ~token ~id:id1

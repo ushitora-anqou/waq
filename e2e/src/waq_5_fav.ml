@@ -10,11 +10,11 @@ let f =
 
   let ({ id; _ } : status) = post env `Waq ~token () in
   let { favourited; _ } = fav env `Waq ~token ~id in
-  assert favourited;
+  assert (favourited = Some true);
   let { favourited; _ } = fav env `Waq ~token:token2 ~id in
-  assert favourited;
+  assert (favourited = Some true);
   let { favourited; favourites_count; _ } = fav env `Waq ~token:token3 ~id in
-  assert favourited;
+  assert (favourited = Some true);
   assert (favourites_count = 3);
 
   let l = get_favourited_by env `Waq ~token ~id in
@@ -48,11 +48,11 @@ let f =
   | _ -> assert false);
 
   let { favourited; _ } = unfav env `Waq ~token ~id in
-  assert (not favourited);
+  assert (favourited = Some false);
   let { favourited; _ } = unfav env `Waq ~token:token2 ~id in
-  assert (not favourited);
+  assert (favourited = Some false);
   let { favourited; favourites_count; _ } = unfav env `Waq ~token:token3 ~id in
-  assert (not favourited);
+  assert (favourited = Some false);
   assert (favourites_count = 0);
 
   (match get_favourited_by env `Waq ~token ~id with

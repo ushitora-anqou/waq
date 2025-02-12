@@ -32,9 +32,9 @@ let f =
   (* Favourite the post by me *)
   let s = fav env `Waq ~token:waq_token ~id in
   Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
-  assert s.favourited;
+  assert (s.favourited = Some true);
   let s = get_status env `Waq ~token:waq_token id in
-  assert s.favourited;
+  assert (s.favourited = Some true);
 
   (* Check if the post is favourited in mstdn_server_domain *)
   (match get_favourited_by env `Mstdn ~token:mstdn_token ~id:mstdn_post_id with
@@ -46,9 +46,9 @@ let f =
   (* Unfavourite the post *)
   let s = unfav env `Waq ~token:waq_token ~id in
   Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
-  assert (not s.favourited);
+  assert (s.favourited = Some false);
   let s = get_status env `Waq ~token:waq_token id in
-  assert (not s.favourited);
+  assert (s.favourited = Some false);
 
   (* Check if the post is unfavourited *)
   (match get_favourited_by env `Mstdn ~token:mstdn_token ~id:mstdn_post_id with
