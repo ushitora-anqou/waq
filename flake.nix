@@ -102,32 +102,6 @@
         main = scope'.${package};
         # Packages from devPackagesQuery
         devPackages = builtins.attrValues (pkgs.lib.getAttrs (builtins.attrNames devPackagesQuery) scope');
-
-        customImagemagick = pkgs.imagemagick_light.override {
-          # cf. https://github.com/NixOS/nixpkgs/blob/a79cfe0ebd24952b580b1cf08cd906354996d547/pkgs/applications/graphics/ImageMagick/default.nix
-          #bzip2Support = true;
-          #zlibSupport = true;
-          #libX11Support = true;
-          #libXtSupport = true;
-          #fontconfigSupport = true;
-          #freetypeSupport = true;
-          #ghostscriptSupport = true;
-          libjpegSupport = true;
-          #djvulibreSupport = true;
-          #lcms2Support = true;
-          #openexrSupport = true;
-          #libjxlSupport = true;
-          libpngSupport = true;
-          #liblqr1Support = true;
-          #librawSupport = true;
-          #librsvgSupport = true;
-          libtiffSupport = true;
-          #libxml2Support = true;
-          #openjpegSupport = true;
-          libwebpSupport = true;
-          libheifSupport = true;
-          #fftwSupport = true;
-        };
       in {
         formatter = pkgs.alejandra;
 
@@ -136,24 +110,8 @@
         packages = {
           default = main;
 
-          docker = pkgs.dockerTools.buildLayeredImage {
-            name = "ghcr.io/ushitora-anqou/waq";
-            tag = "dev";
-            created = "now";
-            extraCommands = "mkdir -m 1777 tmp";
-            contents =
-              (with pkgs; [
-                busybox
-                iana-etc
-              ])
-              ++ [main];
-            config = {
-              Entrypoint = ["waq"];
-              Env = [
-                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-                "IMAGEMAGICK_CONVERT_PATH=${customImagemagick}/bin/convert"
-              ];
-            };
+          docker = pkgs.callPackage nix/docker.nix {
+            waq = main;
           };
         };
 
