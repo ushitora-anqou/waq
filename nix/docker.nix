@@ -6,6 +6,7 @@
   imagemagick_light,
   lib,
   waq,
+  runtimeShell,
 }: let
   customImagemagick = imagemagick_light.override {
     # cf. https://github.com/NixOS/nixpkgs/blob/a79cfe0ebd24952b580b1cf08cd906354996d547/pkgs/applications/graphics/ImageMagick/default.nix
@@ -43,9 +44,16 @@ in
       iana-etc
       waq
     ];
+    fakeRootCommands = ''
+      #!${runtimeShell}
+      ${dockerTools.shadowSetup}
+      groupadd waq
+      useradd -g waq waq
+    '';
+    enableFakechroot = true;
     config = {
       Entrypoint = ["waq"];
-      #User = "waq:waq";
+      User = "waq:waq";
       Env = [
         "SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt"
         "IMAGEMAGICK_CONVERT_PATH=${customImagemagick}/bin/convert"
