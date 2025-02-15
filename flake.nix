@@ -53,13 +53,14 @@
           };
         src = with builtins;
           filterSource (
-            path: type: !((type == "directory")
-              && elem (baseNameOf path) [
-                ".github"
-                "e2e"
-                "test"
-                "Makefile"
-              ])
+            path: type:
+              !((type == "directory")
+                && elem (baseNameOf path) [
+                  ".github"
+                  "e2e"
+                  "test"
+                  "Makefile"
+                ])
           )
           ./.;
         scope =
