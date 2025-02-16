@@ -46,6 +46,7 @@ in
     ];
     fakeRootCommands = ''
       #!${runtimeShell}
+      set -eux
       ${dockerTools.shadowSetup}
       groupadd waq
       useradd -g waq waq
