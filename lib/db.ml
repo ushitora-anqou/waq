@@ -59,3 +59,14 @@ let register_user ~username ~display_name ~email ~password =
 let initialize () = initialize (Config.db_url ())
 let transaction f = e (fun c -> c#transaction f)
 let e x = Lwt_eio.run_lwt @@ fun () -> e x
+
+(* utility functions *)
+
+let is_following ~(account_id : Account.ID.t)
+    ~(target_account_id : Account.ID.t) : bool =
+  e @@ Follow.get_many ~account_id ~target_account_id <> []
+
+let has_mention ~(status_id : Status.ID.t) ~(account_id : Account.ID.t) : bool =
+  e
+  @@ Mention.get_many ~status_id:(Some status_id) ~account_id:(Some account_id)
+  <> []

@@ -27,7 +27,8 @@ let post env req =
           e
           @@ Status.(
                make ~text:"" ~created_at:now ~updated_at:now ~uri:""
-                 ~account_id:self#id ~reblog_of_id:status#id ~spoiler_text:"" ()
+                 ~account_id:self#id ~reblog_of_id:status#id ~spoiler_text:""
+                 ~visibility:`Public ()
                |> save_one_with_uri_and_url))
       in
       Worker.Distribute.kick env s;

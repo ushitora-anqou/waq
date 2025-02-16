@@ -31,6 +31,8 @@ module rec Account = struct
     val actor_type : actor_type_t option
     val stat : AccountStat.t option [@@foreign_key `account_id]
     val user : User.t option [@@foreign_key `account_id]
+    val following : Follow.t list [@@foreign_key `account_id]
+    val followed : Follow.t list [@@foreign_key `target_account_id]
   end
 end
 
@@ -49,6 +51,24 @@ end
 and Status = struct
   name "statuses"
 
+  type visibility_type_t =
+    [ `Public | `Unlisted | `Private | `Direct | `Limited ]
+
+  let visibility_type_t_to_int : visibility_type_t -> int = function
+    | `Public -> 0
+    | `Unlisted -> 1
+    | `Private -> 2
+    | `Direct -> 3
+    | `Limited -> 4
+
+  let visibility_type_t_of_int : int -> visibility_type_t = function
+    | 0 -> `Public
+    | 1 -> `Unlisted
+    | 2 -> `Private
+    | 3 -> `Direct
+    | 4 -> `Limited
+    | _ -> failwith "visibility_type_t_of_int: invalid input"
+
   class type t = object
     val uri : string
     val url : string option
@@ -58,6 +78,7 @@ and Status = struct
     val reblog_of_id : ID.t option
     val account_id : Account.ID.t
     val spoiler_text : string
+    val visibility : visibility_type_t [@@underlying_type: int]
     val stat : StatusStat.t option [@@foreign_key `status_id]
     val reblogged : bool [@@not_column] [@@preload_spec: Account.ID.t option]
     val favourited : bool [@@not_column] [@@preload_spec: Account.ID.t option]

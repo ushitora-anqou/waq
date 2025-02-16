@@ -853,7 +853,7 @@ let rec status_of_note' env (note : ap_note) : Db.Status.t =
         Status.(
           make ~uri:note.id ~text:note.content ~created_at:published
             ~updated_at:published ~account_id:attributedTo#id ?in_reply_to_id
-            ~spoiler_text:note.summary ?url:note.url ()
+            ~spoiler_text:note.summary ?url:note.url ~visibility:`Public ()
           |> save_one))
   in
 
@@ -902,7 +902,8 @@ and status_of_announce' env (ann : ap_announce) : Db.Status.t =
     e
       Status.(
         make ~uri:ann.id ~text:"" ~created_at:published ~updated_at:published
-          ~account_id:account#id ~reblog_of_id:reblogee#id ~spoiler_text:"" ()
+          ~account_id:account#id ~reblog_of_id:reblogee#id ~spoiler_text:""
+          ~visibility:`Public ()
         |> save_one))
 
 and status_of_announce env (ann : ap_announce) : Db.Status.t =

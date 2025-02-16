@@ -653,7 +653,7 @@ let get_status_context env kind status_id =
   | _ -> assert false
 
 let post env ~token kind ?spoiler_text ?content ?in_reply_to_id
-    ?(media_ids = []) () =
+    ?(media_ids = []) ?visibility () =
   let content = content |> Option.value ~default:"こんにちは、世界！" in
   let body =
     let l =
@@ -670,6 +670,10 @@ let post env ~token kind ?spoiler_text ?content ?in_reply_to_id
     let l =
       spoiler_text
       |> Option.fold ~none:l ~some:(fun s -> ("spoiler_text", `String s) :: l)
+    in
+    let l =
+      visibility
+      |> Option.fold ~none:l ~some:(fun v -> ("visibility", `String v) :: l)
     in
     `Assoc l |> Yojson.Safe.to_string
   in

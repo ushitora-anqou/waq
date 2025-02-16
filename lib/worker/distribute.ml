@@ -33,35 +33,37 @@ let kick env (s : Db.Status.t) =
            match acct#user with None -> Right x | Some _ -> Left x)
   in
 
-  (* Deliver to self *)
-  (if is_status_from_remote then () (* Just ignore *)
-   else
-     let u = Db.(e @@ User.get_one ~account_id:a#id) in
-     (* Local: Send the status to self *)
-     Insert_to_feed.kick env ~account_id:a#id ~status_id:s#id ~user_id:u#id
-       ~stream:`User);
+  if not is_status_from_remote then (
+    (* Deliver to self *)
+    let u = Db.(e @@ User.get_one ~account_id:a#id) in
+    (* Local: Send the status to self *)
+    Insert_to_feed.kick env ~account_id:a#id ~status_id:s#id ~user_id:u#id
+      ~stream:`User;
 
-  (* Deliver to remote followers *)
-  (if not is_status_from_remote then
-     let targets = remote_followers in
-     let targets =
-       targets @ (remote_mentions |> List.map (fun x -> Option.get x#account))
-     in
-     let targets =
-       match s#reblog_of_id with
-       | None -> targets
-       | Some id ->
-           (* Deliver Announce activity to the original author *)
-           let s = Db.(e Status.(get_one ~id ~preload:[ `account [] ])) in
-           if Model.Account.is_remote s#account then s#account :: targets
-           else targets
-     in
-     deliver_to_remote env ~targets ~status:s);
+    (* Deliver to remote followers *)
+    let targets =
+      match s#visibility with `Direct -> [] | _ -> remote_followers
+    in
+    let targets =
+      targets @ (remote_mentions |> List.map (fun x -> Option.get x#account))
+    in
+    let targets =
+      match s#reblog_of_id with
+      | None -> targets
+      | Some id ->
+          (* Deliver Announce activity to the original author *)
+          let s = Db.(e Status.(get_one ~id ~preload:[ `account [] ])) in
+          if Model.Account.is_remote s#account then s#account :: targets
+          else targets
+    in
+    deliver_to_remote env ~targets ~status:s;
+
+    ());
 
   (* Deliver to local followers *)
   deliver_to_local env
     ~targets:
-      (local_followers
+      ((match s#visibility with `Direct -> [] | _ -> local_followers)
       @ (local_mentions
         |> List.map (fun x -> Option.get (Option.get x#account)#user)))
     ~status:s;

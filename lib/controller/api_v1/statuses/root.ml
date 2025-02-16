@@ -9,9 +9,23 @@ let get _ req =
   in
   let self_id = may_authenticate_account req |> Option.map (fun x -> x#id) in
   let s =
-    try Db.(e @@ Status.get_one ~id:status_id)
-    with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found
+    try
+      Db.(
+        e
+        @@ Status.get_one ~id:status_id
+             ~preload:[ `mentions [] (* visibility *) ])
+    with Sqlx.Error.NoRowFound -> raise_error_response `Not_found
   in
+
+  let self =
+    self_id
+    |> Option.map (fun id ->
+           Db.(
+             e (Account.get_one ~id ~preload:[ `following [] (* visibility *) ])))
+  in
+  if Visibility.is_visible ?account:self s then ()
+  else raise_error_response `Not_found;
+
   let s = make_status_from_model ?self_id s in
   s |> yojson_of_status |> Yojson.Safe.to_string
   |> Yume.Server.respond ~headers:[ content_type_app_json ]
@@ -29,11 +43,22 @@ let post env req =
     |> Option.map (fun s -> s |> int_of_string |> Model.Status.ID.of_int)
   in
   let media_ids = req |> Yume.Server.query_many "media_ids" in
+  let visibility = req |> Yume.Server.query_opt "visibility" in
 
   (* Sanity check *)
   (match (status = "", media_ids) with
   | false, _ | true, _ :: _ -> ()
   | _ -> raise_error_response `Unprocessable_entity);
+
+  (* Handle visibility *)
+  let visibility =
+    match visibility with
+    | None -> `Public
+    | Some v -> (
+        match Visibility.of_string_opt v with
+        | Some v -> v
+        | None -> raise_error_response `Bad_request)
+  in
 
   (* Handle media attachments *)
   let attachments =
@@ -66,7 +91,7 @@ let post env req =
         Status.(
           save_one_with_uri_and_url
             (make ~text:status ~uri:"" ~account_id:self#id ?in_reply_to_id
-               ~spoiler_text ())))
+               ~spoiler_text ~visibility ())))
   in
   (mentioned_accts
   |> List.iter @@ fun acct ->
