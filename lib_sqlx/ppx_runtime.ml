@@ -28,9 +28,11 @@ struct
     | Some ptn -> (
         match ptn with
         | `Eq (x : M.ID.t) ->
-            Sql.where_int name (Some (`Eq (M.ID.to_int x))) cond
+            Sql.where_int ~encode:Fun.id name (Some (`Eq (M.ID.to_int x))) cond
         | `In (vals : M.ID.t list) ->
-            Sql.where_int name (Some (`In (vals |> List.map M.ID.to_int))) cond)
+            Sql.where_int ~encode:Fun.id name
+              (Some (`In (vals |> List.map M.ID.to_int)))
+              cond)
 
   let where_id_opt name ptn cond =
     match ptn with
