@@ -85,23 +85,23 @@ let where_nullable name ptn (where, param) =
       let where = `IsNotNull name :: where in
       (where, param)
 
-let where_int name ptn ((where, param) as cond) =
+let where_int ~encode name ptn ((where, param) as cond) =
   let rec f = function
-    | `Eq (x : int) ->
+    | `Eq x ->
         let where = `Eq (`C name, `M name) :: where in
-        let param = (`M name, `Int x) :: param in
+        let param = (`M name, `Int (encode x)) :: param in
         (where, param)
     | `In [ v ] -> f (`Eq v)
     | `In vs ->
-        let where = `InInts (`C name, vs) :: where in
+        let where = `InInts (`C name, List.map encode vs) :: where in
         (where, param)
   in
   match ptn with None -> cond | Some ptn -> f ptn
 
-let where_int_opt name
+let where_int_opt ~encode name
     (ptn : [ `Eq of int | `EqNone | `NeqNone | `In of int list ] option) cond =
   let f = function
-    | (`Eq _ | `In _) as ptn -> where_int name (Some ptn) cond
+    | (`Eq _ | `In _) as ptn -> where_int ~encode name (Some ptn) cond
     | (`EqNone | `NeqNone) as ptn -> where_nullable name ptn cond
   in
   match ptn with None -> cond | Some ptn -> f ptn

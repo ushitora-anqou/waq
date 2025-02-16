@@ -71,7 +71,7 @@ type typ =
   | `Ptime
   | `Bool
   | `ID of id_ident
-  | `User of longident
+  | `User of [ `Int | `String ] (* underlying_type *) * longident (* type *)
   | `Option of typ ]
 
 let rec core_type_of_type loc : typ -> core_type = function
@@ -83,7 +83,7 @@ let rec core_type_of_type loc : typ -> core_type = function
       ptyp_constr ~loc { loc; txt = Ldot (Lident "ID", "t") } []
   | `ID { mod_ident = Some m; _ } ->
       ptyp_constr ~loc { loc; txt = Ldot (Ldot (m, "ID"), "t") } []
-  | `User l -> ptyp_constr ~loc { loc; txt = l } []
+  | `User (_, l) -> ptyp_constr ~loc { loc; txt = l } []
   | `Option t ->
       ptyp_constr ~loc
         { loc; txt = lident "option" }
@@ -172,6 +172,8 @@ let parse_item (x : structure_item) =
           (fun v -> `Foreign_key v)
     | "preload_spec" ->
         parse (ptyp __) x.attr_loc x.attr_payload @@ fun l -> `Preload_spec l
+    | "underlying_type" ->
+        parse (ptyp __) x.attr_loc x.attr_payload @@ fun l -> `Underlying_type l
     | "column" -> (
         parse
           (pstr (pstr_eval (pexp_constant __) drop ^:: nil))
@@ -181,7 +183,7 @@ let parse_item (x : structure_item) =
         | _ -> assert false)
     | _ -> assert false
   in
-  let parse_type x =
+  let parse_type (underlying_type : core_type option) x =
     let aux : longident -> typ = function
       | Lident "int" -> `Int
       | Lident "string" -> `String
@@ -189,7 +191,16 @@ let parse_item (x : structure_item) =
       | Ldot (Lident "Ptime", "t") -> `Ptime
       | Ldot (Lident "ID", "t") -> `ID { mod_ident = None }
       | Ldot (Ldot (l, "ID"), "t") -> `ID { mod_ident = Some l }
-      | s -> `User s
+      | id ->
+          let underlying_type =
+            underlying_type
+            |> Option.fold ~none:`String ~some:(fun ty ->
+                   match ty.ptyp_desc with
+                   | Ptyp_constr ({ txt = Lident "int"; _ }, []) -> `Int
+                   | Ptyp_constr ({ txt = Lident "string"; _ }, []) -> `String
+                   | _ -> assert false)
+          in
+          `User (underlying_type, id)
     in
     match x.ptyp_desc with
     | Ptyp_constr ({ txt; _ }, []) -> aux txt
@@ -257,10 +268,16 @@ let parse_item (x : structure_item) =
                  r_is_foregin_key_opt = false (* dummy *);
                }
          | None ->
+             let underlying_type =
+               attrs
+               |> List.find_map (function
+                    | `Underlying_type s -> Some s
+                    | _ -> None)
+             in
              `Column
                {
                  c_ocaml_name = name;
-                 c_type = parse_type typ;
+                 c_type = parse_type underlying_type typ;
                  c_sql_name =
                    attrs
                    |> List.find_map (function `Column s -> Some s | _ -> None)
@@ -495,8 +512,9 @@ let expand_class_t_fields env loc schema a replace_rec_type =
     (schema.s_derived
     |> List.map (fun { d_name; d_opt; d_id_ident } ->
            let d_type =
-             if d_opt then `Option (`User (in_mod_ident d_id_ident "t"))
-             else `User (in_mod_ident d_id_ident "t")
+             if d_opt then
+               `Option (`User (`String, in_mod_ident d_id_ident "t"))
+             else `User (`String, in_mod_ident d_id_ident "t")
            in
            let core_type = core_type_of_type loc d_type in
            (d_name, core_type)))
@@ -627,7 +645,10 @@ let expand_let_pack env loc schema =
            |> wloc |> pexp_ident ~loc
          in
          let decode_user = function
-           | Lident s ->
+           | `Int, Lident s ->
+               env_open_mod_in_expr env loc schema.s_ocaml_mod_name
+                 (pexp_ident ~loc (wloc (Lident (s ^ "_of_int"))))
+           | `String, Lident s ->
                env_open_mod_in_expr env loc schema.s_ocaml_mod_name
                  (pexp_ident ~loc (wloc (Lident (s ^ "_of_string"))))
            | _ -> assert false
@@ -646,9 +667,15 @@ let expand_let_pack env loc schema =
              | `Ptime -> [%expr fun x -> x |> Sqlx.Value.expect_timestmap]
              | `ID l ->
                  [%expr fun x -> x |> Sqlx.Value.expect_int |> [%e decode_id l]]
-             | `User l ->
+             | `User (`Int, l) ->
                  [%expr
-                   fun x -> x |> Sqlx.Value.expect_string |> [%e decode_user l]]
+                   fun x ->
+                     x |> Sqlx.Value.expect_int |> [%e decode_user (`Int, l)]]
+             | `User (`String, l) ->
+                 [%expr
+                   fun x ->
+                     x |> Sqlx.Value.expect_string
+                     |> [%e decode_user (`String, l)]]
              | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.expect_int_opt]
              | `Option `Bool -> [%expr fun x -> x |> Sqlx.Value.expect_bool_opt]
              | `Option `String ->
@@ -660,11 +687,16 @@ let expand_let_pack env loc schema =
                    fun x ->
                      x |> Sqlx.Value.expect_int_opt
                      |> Option.map [%e decode_id l]]
-             | `Option (`User l) ->
+             | `Option (`User (`Int, l)) ->
+                 [%expr
+                   fun x ->
+                     x |> Sqlx.Value.expect_int_opt
+                     |> Option.map [%e decode_user (`Int, l)]]
+             | `Option (`User (`String, l)) ->
                  [%expr
                    fun x ->
                      x |> Sqlx.Value.expect_string_opt
-                     |> Option.map [%e decode_user l]]
+                     |> Option.map [%e decode_user (`String, l)]]
              | `Option (`Option _) -> assert false)
        in
        let ocaml_name = ocaml_name_of_column c in
@@ -710,7 +742,10 @@ let expand_let_unpack env loc schema =
                |> wloc |> pexp_ident ~loc
              in
              let encode_user = function
-               | Lident s ->
+               | `Int, Lident s ->
+                   env_open_mod_in_expr env loc schema.s_ocaml_mod_name
+                     (pexp_ident ~loc (wloc (Lident (s ^ "_to_int"))))
+               | `String, Lident s ->
                    env_open_mod_in_expr env loc schema.s_ocaml_mod_name
                      (pexp_ident ~loc (wloc (Lident (s ^ "_to_string"))))
                | _ -> assert false
@@ -722,9 +757,13 @@ let expand_let_unpack env loc schema =
              | `Ptime -> [%expr fun x -> x |> Sqlx.Value.of_timestamp]
              | `ID l ->
                  [%expr fun x -> x |> [%e encode_id l] |> Sqlx.Value.of_int]
-             | `User l ->
+             | `User (`Int, l) ->
                  [%expr
-                   fun x -> x |> [%e encode_user l] |> Sqlx.Value.of_string]
+                   fun x -> x |> [%e encode_user (`Int, l)] |> Sqlx.Value.of_int]
+             | `User (`String, l) ->
+                 [%expr
+                   fun x ->
+                     x |> [%e encode_user (`String, l)] |> Sqlx.Value.of_string]
              | `Option `Int -> [%expr fun x -> x |> Sqlx.Value.of_int_opt]
              | `Option `Bool -> [%expr fun x -> x |> Sqlx.Value.of_bool_opt]
              | `Option `String -> [%expr fun x -> x |> Sqlx.Value.of_string_opt]
@@ -734,11 +773,17 @@ let expand_let_unpack env loc schema =
                  [%expr
                    fun x ->
                      x |> Option.map [%e encode_id l] |> Sqlx.Value.of_int_opt]
-             | `Option (`User l) ->
+             | `Option (`User (`Int, l)) ->
                  [%expr
                    fun x ->
                      x
-                     |> Option.map [%e encode_user l]
+                     |> Option.map [%e encode_user (`Int, l)]
+                     |> Sqlx.Value.of_int_opt]
+             | `Option (`User (`String, l)) ->
+                 [%expr
+                   fun x ->
+                     x
+                     |> Option.map [%e encode_user (`String, l)]
                      |> Sqlx.Value.of_string_opt]
              | `Option (`Option _) -> assert false
            in
@@ -975,28 +1020,39 @@ let expand_where env loc schema where p =
                pexp_ident ~loc { loc; txt = Ldot (mod_name, "where_id_opt") }
              in
              let encode_user = function
-               | Lident s ->
+               | `Int, Lident s ->
+                   env_open_mod_in_expr env loc schema.s_ocaml_mod_name
+                     (pexp_ident ~loc (wloc (Lident (s ^ "_to_int"))))
+               | `String, Lident s ->
                    env_open_mod_in_expr env loc schema.s_ocaml_mod_name
                      (pexp_ident ~loc (wloc (Lident (s ^ "_to_string"))))
                | _ -> assert false
              in
              let where =
                match c_type with
-               | `Int -> [%expr Sqlx.Sql.where_int]
+               | `Int -> [%expr Sqlx.Sql.where_int ~encode:Fun.id]
                | `Bool -> [%expr Sqlx.Sql.where_bool]
                | `String -> [%expr Sqlx.Sql.where_string ~encode:Fun.id]
                | `Ptime -> [%expr Sqlx.Sql.where_timestamp]
                | `ID l -> where_id l
-               | `User l ->
-                   [%expr Sqlx.Sql.where_string ~encode:[%e encode_user l]]
-               | `Option `Int -> [%expr Sqlx.Sql.where_int_opt]
+               | `User (`Int, l) ->
+                   [%expr Sqlx.Sql.where_int ~encode:[%e encode_user (`Int, l)]]
+               | `User (`String, l) ->
+                   [%expr
+                     Sqlx.Sql.where_string ~encode:[%e encode_user (`String, l)]]
+               | `Option `Int -> [%expr Sqlx.Sql.where_int_opt ~encode:Fun.id]
                | `Option `Bool -> [%expr Sqlx.Sql.where_bool_opt]
                | `Option `String ->
                    [%expr Sqlx.Sql.where_string_opt ~encode:Fun.id]
                | `Option `Ptime -> [%expr Sqlx.Sql.where_timestamp_opt]
                | `Option (`ID l) -> where_id_opt l
-               | `Option (`User l) ->
-                   [%expr Sqlx.Sql.where_string_opt ~encode:[%e encode_user l]]
+               | `Option (`User (`Int, l)) ->
+                   [%expr
+                     Sqlx.Sql.where_int_opt ~encode:[%e encode_user (`Int, l)]]
+               | `Option (`User (`String, l)) ->
+                   [%expr
+                     Sqlx.Sql.where_string_opt
+                       ~encode:[%e encode_user (`String, l)]]
                | _ -> assert false
              in
              [%expr [%e where] [%e estr] [%e ident] [%e body]])
