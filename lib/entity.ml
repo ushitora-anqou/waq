@@ -291,8 +291,8 @@ type status = {
 let status_list_to_hash (statuses : status list) =
   statuses |> List.map (fun s -> (s.id, s)) |> List.to_seq |> Hashtbl.of_seq
 
-let rec serialize_status ?(visibility = "public")
-    ?(self_id : Model.Account.ID.t option) (s : Model.Status.t) : status =
+let rec serialize_status ?(self_id : Model.Account.ID.t option)
+    (s : Model.Status.t) : status =
   let id_to_string x = x |> Model.Status.ID.to_int |> string_of_int in
   let stat =
     let default =
@@ -306,7 +306,8 @@ let rec serialize_status ?(visibility = "public")
   let content = Text_helper.format_status_text s in
   make_status ~id:(s#id |> id_to_string)
     ~created_at:(Ptime.to_rfc3339 s#created_at)
-    ~visibility ~uri:s#uri ?url:s#url ~content
+    ~visibility:(Visibility.to_string s#visibility)
+    ~uri:s#uri ?url:s#url ~content
     ~account:(serialize_account s#account)
     ~replies_count:stat#replies_count
     ?in_reply_to_id:(s#in_reply_to_id |> Option.map id_to_string)
@@ -356,7 +357,7 @@ let status_preload_spec self_id : Model.Status.preload_spec =
       ];
   ]
 
-let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
+let load_statuses_from_db ?(self_id : Model.Account.ID.t option)
     (status_ids : Model.Status.ID.t list) : status list =
   let statuses =
     Db.(
@@ -366,12 +367,10 @@ let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
   in
   let statuses = statuses |> index_by (fun x -> x#id) in
   status_ids
-  |> List.map (fun id ->
-         Hashtbl.find statuses id |> serialize_status ?visibility ?self_id)
+  |> List.map (fun id -> Hashtbl.find statuses id |> serialize_status ?self_id)
 
-let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
-    status =
-  load_statuses_from_db ~visibility ?self_id [ s#id ] |> List.hd
+let make_status_from_model ?self_id (s : Db.Status.t) : status =
+  load_statuses_from_db ?self_id [ s#id ] |> List.hd
 
 (* Entity relationship *)
 type relationship = {

@@ -42,11 +42,27 @@ let get _ req =
   let { self_id; id; limit; max_id; since_id; exclude_replies; pinned } =
     parse_req req
   in
+
+  let self =
+    self_id
+    |> Option.map (fun id ->
+           Db.(
+             e (Account.get_one ~id ~preload:[ `following [] (* visibility *) ])))
+  in
+
   let result =
     if pinned then []
     else
-      Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
-      |> List.map (fun (s : Db.Status.t) -> s#id)
+      let ids =
+        Db.(e @@ account_statuses ~id ~limit ~max_id ~since_id ~exclude_replies)
+        |> List.map (fun (s : Db.Status.t) -> s#id)
+      in
+      Db.(
+        e
+        @@ Db.Status.select ~id:(`In ids)
+             ~preload:[ `mentions [] (* visibility *) ])
+      |> List.filter_map (fun s ->
+             if Visibility.is_visible ?account:self s then Some s#id else None)
       |> Entity.load_statuses_from_db ?self_id
   in
   let headers =

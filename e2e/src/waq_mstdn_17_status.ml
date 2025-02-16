@@ -45,6 +45,15 @@ let f env (a0 : agent) =
     List.map (fun (s : status) -> s.id) descendants
     = [ s04.id; s05.id; s06.id; s14.id; s15.id; s16.id ]);
 
+  (* check status visibility *)
+  let s = post env a0 ~visibility:"public" ~content:"てすと public" () in
+  let _ = get_status env a0 s.id in
+  let s = post env a0 ~visibility:"unlisted" ~content:"てすと unlisted" () in
+  let _ = get_status env a0 s.id in
+  let s = post env a0 ~visibility:"private" ~content:"てすと private" () in
+  let _ = get_status env a0 s.id in
+  let s = post env a0 ~visibility:"direct" ~content:"てすと direct" () in
+  let _ = get_status env a0 s.id in
   ()
 
 let f_waq =

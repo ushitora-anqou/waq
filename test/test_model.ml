@@ -5,7 +5,7 @@ let test_sort_statuses_by_dfs () =
     Status.make ~spoiler_text:"" ~account_id:(Account.ID.of_int 0) ~text:""
       ~uri:"" ~id:(Status.ID.of_int id)
       ?in_reply_to_id:(in_reply_to_id |> Option.map Status.ID.of_int)
-      ()
+      ~visibility:`Public ()
   in
   let s0 = make_status ~id:0 () in
   let s1 = make_status ~id:1 ~in_reply_to_id:0 () in
