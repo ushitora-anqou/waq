@@ -14,7 +14,7 @@ let of_string_opt = function
   | "direct" -> Some `Direct
   | _ -> None
 
-let is_visible ?(account : Db.Account.t option (* preload: following *))
+let can_see ?(account : Db.Account.t option (* preload: following *))
     (status : Db.Status.t (* preload: mentions *)) =
   match status#visibility with
   | `Public | `Unlisted -> true

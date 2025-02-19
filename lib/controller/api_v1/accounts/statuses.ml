@@ -61,8 +61,9 @@ let get _ req =
         e
         @@ Db.Status.select ~id:(`In ids)
              ~preload:[ `mentions [] (* visibility *) ])
-      |> List.filter_map (fun s ->
-             if Visibility.is_visible ?account:self s then Some s#id else None)
+      |> List.filter_map (fun status ->
+             if Visibility.can_see ?account:self status then Some status#id
+             else None)
       |> Entity.load_statuses_from_db ?self_id
   in
   let headers =

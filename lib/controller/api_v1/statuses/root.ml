@@ -23,7 +23,7 @@ let get _ req =
            Db.(
              e (Account.get_one ~id ~preload:[ `following [] (* visibility *) ])))
   in
-  if Visibility.is_visible ?account:self s then ()
+  if Visibility.can_see ?account:self s then ()
   else raise_error_response `Not_found;
 
   let s = make_status_from_model ?self_id s in
