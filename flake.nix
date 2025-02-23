@@ -122,9 +122,11 @@
             ++ (with pkgs; [
               # For e2e tests
               docker
+              jq
               kind
               kubectl
               kubernetes-helm
+              (callPackage ./nix/kneesocks.nix {})
             ]);
         };
       }

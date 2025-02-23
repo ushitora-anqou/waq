@@ -1,0 +1,48 @@
+fullnameOverride: mastodon
+
+serverName: mastodon.waq-e2e.anqou.net
+
+mastodonVersion:
+  image: ghcr.io/mastodon/mastodon:v4.2.0
+  streamingImage: ghcr.io/mastodon/mastodon:v4.2.0
+
+mastodonServer:
+  web:
+    envFrom:
+      - secretRef:
+          name: mastodon-secret-env
+    env:
+      - name: SSL_CERT_FILE
+        value: /cert/root-certs.pem
+    volumeMounts:
+      - name: ca-bundle
+        mountPath: /cert
+    volumes:
+      - name: ca-bundle
+        configMap:
+          name: ca-bundle
+  sidekiq:
+    envFrom:
+      - secretRef:
+          name: mastodon-secret-env
+    env:
+      - name: SSL_CERT_FILE
+        value: /cert/root-certs.pem
+    volumeMounts:
+      - name: ca-bundle
+        mountPath: /cert
+    volumes:
+      - name: ca-bundle
+        configMap:
+          name: ca-bundle
+  streaming:
+    envFrom:
+      - secretRef:
+          name: mastodon-secret-env
+    volumeMounts:
+      - name: ca-bundle
+        mountPath: /cert
+    volumes:
+      - name: ca-bundle
+        configMap:
+          name: ca-bundle
