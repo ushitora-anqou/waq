@@ -9,6 +9,7 @@ spec:
     app: waq-web
   ports:
     - port: 8000
+      name: http
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -38,9 +39,14 @@ spec:
           volumeMounts:
             - mountPath: /static
               name: static
+            - mountPath: /cert
+              name: ca-bundle
       volumes:
         - name: static
           emptyDir: {}
+        - name: ca-bundle
+          configMap:
+            name: ca-bundle
 ---
 apiVersion: v1
 kind: Secret
@@ -58,3 +64,94 @@ stringData:
   OCAMLRUNPARAM: "b"
   WAQ_GENERATE_TEST_USERS: "true"
   WAQ_DEBUG_JOB_KICK_BLOCK: "true"
+  SSL_CERT_FILE: /cert/root-certs.pem
+  LISTEN: "0.0.0.0:8000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waq-gateway-tls
+  namespace: e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: waq-gateway-tls
+  template:
+    metadata:
+      labels:
+        app: waq-gateway-tls
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: cert
+              mountPath: /cert
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: waq-gateway-tls-nginx-conf
+            items:
+              - key: nginx.conf
+                path: waq-gateway-tls.conf
+        - name: cert
+          secret:
+            secretName: cert-waq
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waq-gateway-tls-nginx-conf
+  namespace: e2e
+data:
+  nginx.conf: |
+    upstream backend {
+      server waq-web.e2e.svc.cluster.local:8000;
+    }
+
+    server {
+      listen 80;
+      listen [::]:80;
+      server_name waq.waq-e2e.anqou.net;
+      location / { return 301 https://$host$request_uri; }
+    }
+
+    server {
+      listen 443 ssl http2;
+      listen [::]:443 ssl http2;
+      server_name waq.waq-e2e.anqou.net;
+
+      ssl_certificate     /cert/tls.crt;
+      ssl_certificate_key /cert/tls.key;
+
+      location / { try_files $uri @proxy; }
+
+      location @proxy {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Proxy "";
+        proxy_pass_header Server;
+
+        proxy_pass http://backend;
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waq-gateway-tls
+  namespace: e2e
+spec:
+  ports:
+    - port: 80
+      name: http
+    - port: 443
+      name: https
+  selector:
+    app: waq-gateway-tls

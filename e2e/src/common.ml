@@ -84,14 +84,6 @@ module Internal = struct
       close_process_in ic |> ignore;
       raise e
 
-  let port_forward ~ns ~svc ~ports f =
-    kubectl
-      [ "port-forward"; "-n"; ns; "--address"; "0.0.0.0"; "svc/" ^ svc; ports ]
-      (fun ic ->
-        let pid = Unix.process_in_pid ic in
-        Fun.protect ~finally:(fun () -> Unix.kill pid Sys.sigint) f)
-    |> ignore
-
   let wait ?(num_retries = 5) ?(timeout = "5m") ~for_condition target =
     let rec loop i =
       if i >= num_retries then assert false
@@ -178,7 +170,6 @@ module Internal = struct
     let token2 = generate_token "user2" in
     let token3 = generate_token "user3" in
 
-    port_forward ~ns:"e2e" ~svc:"waq-web" ~ports:"58080:8000" @@ fun () ->
     f [| token1; token2; token3 |];
     ()
 
@@ -235,9 +226,7 @@ module Internal = struct
     in
     let () =
       kubectl
-        [
-          "rollout"; "restart"; "-n"; "e2e"; "deploy"; "mastodon-gateway-nginx";
-        ]
+        [ "rollout"; "restart"; "-n"; "e2e"; "deploy"; "mastodon-gateway" ]
         ignore
       |> fst |> expect_wexited_0
     in
@@ -261,8 +250,6 @@ module Internal = struct
       loop 0
     in
 
-    port_forward ~ns:"e2e" ~svc:"mastodon-gateway" ~ports:"58081:80"
-    @@ fun () ->
     f [| token1; token2; token3 |];
     ()
 end
