@@ -14,9 +14,6 @@ jobs:
     steps:
       - name: Checkout tree
         uses: actions/checkout@v4
-      - run: echo "NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}" > e2e/.env && make -C e2e start-ngrok
-        env:
-          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
       - uses: cachix/install-nix-action@v27
         with:
           nix_path: nixpkgs=channel:nixos-unstable
