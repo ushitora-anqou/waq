@@ -39,9 +39,6 @@ test:
 	$(MAKE) start-mastodon
 	$(MAKE) run-test
 
-$(BIN):
-	mkdir -p $(BIN)
-
 KUBECONFIG := $(shell pwd)/.kubeconfig
 .PHONY: $(KUBECONFIG)
 $(KUBECONFIG):
