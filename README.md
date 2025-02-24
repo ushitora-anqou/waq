@@ -2,7 +2,7 @@
 
 Waq is yet another ActivityPub server implementation written in OCaml.
 
-- Waq provides a microblogging service and has some basic functionality such as posting, reblogging, favourites, mentions, notifications, and so on. 
+- Waq provides a microblogging service and has some basic functionality such as posting, reblogging, favourites, mentions, notifications, and so on.
 - Waq provides REST and Websocket streaming APIs that are compatible with Mastodon. You can use your favourite Mastodon client such as [Elk](https://elk.zone).
 - Waq acts as an ActivityPub server and can interact with other servers like Mastodon and Pleroma to share posts and favourites.
 
@@ -13,6 +13,10 @@ A blog post about Waq is [here](https://hackmd.io/@anqou/H1qRfp_Fn). Its origina
 Although Waq can be deployed and used well for your daily microblogging, it currently lacks many of the features you would expect from a standard SNS, such as post privacy, custom emojis, profile editing, and so on. At the moment, I would not recommend using Waq as your primary SNS.
 
 ## Quick start
+
+(FIXME)
+
+<!--
 
 Install docker beforehand. Then:
 ```
@@ -41,11 +45,13 @@ make clean-cluster
 make stop-ngrok
 ```
 
+-->
+
 ## How to run E2E tests
 
 ```
 cd e2e
-make start-ngrok && make create-cluster && make test
+make create-cluster && make test
 ```
 
 ## Technology stack
@@ -54,7 +60,7 @@ The OCaml libraries that Waq depends on (The full list is [here](https://github.
 
 - RDBMS: PostgreSQL
 - HTTP server: [ocaml-cohttp](https://github.com/mirage/ocaml-cohttp)
-  - [Original Web framework](https://github.com/ushitora-anqou/waq/tree/master/lib_httpq) (strongly inspired by [Dream](https://github.com/aantron/dream)) is written on top of this library.
+  - [Original Web framework](https://github.com/ushitora-anqou/yume) (strongly inspired by [Dream](https://github.com/aantron/dream)) is written on top of this library.
 - Websocket: [ocaml-websocket](https://github.com/vbmithr/ocaml-websocket)
 - RDBMS driver: [postgresql-ocaml](https://github.com/mmottl/postgresql-ocaml)
   - [Original O/R mapper](https://github.com/ushitora-anqou/waq/tree/master/lib_sqlx) is written on top of this library.
@@ -72,7 +78,6 @@ An example usage of `lib_sqlx` (working code is [here](https://github.com/ushito
 ```ocaml
 open Sqlx
 
-[%%sqlx.schemas
 (* Define two RDB schemas (accounts and statuses) *)
 [%%sqlx.schemas
 module rec Account = struct
@@ -144,4 +149,4 @@ let statuses_replied_by ~(username : string) : Status.t list Lwt.t =
 
 ## License
 
-MIT
+MIT.
