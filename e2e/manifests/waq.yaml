@@ -55,7 +55,7 @@ metadata:
   namespace: e2e
 type: Opaque
 stringData:
-  SERVER_NAME: "E2E_TEST_WAQ_SERVER_NAME"
+  SERVER_NAME: waq.waq-e2e.anqou.net
   DB_URL: "postgresql://waq:password@postgres.e2e.svc:5432/waq_prod"
   STATIC_ROOT: "/static"
   VAPID_PRIVATE_KEY: "lr6m1ywLiy6OTSbp0lPKJD7RGuHcvFF7R8s4c0OrOEU"

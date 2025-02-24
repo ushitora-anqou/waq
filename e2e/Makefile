@@ -30,8 +30,8 @@ run-test:
 		KUBECTL=$(KUBECTL) \
 		MANIFESTS=$(WD)/manifests \
 		OCAMLRUNPARAM=b \
-		E2E_TEST_WAQ_SERVER_NAME=https://$(shell cat $(WD)/_test_waq_domain) \
-		E2E_TEST_MASTODON_SERVER_NAME=https://$(shell cat $(WD)/_test_mastodon_domain) \
+		E2E_TEST_WAQ_SERVER_NAME=https://waq.waq-e2e.anqou.net \
+		E2E_TEST_MASTODON_SERVER_NAME=https://mastodon.waq-e2e.anqou.net \
 		SSL_CERT_FILE=_test.pem \
 		EIO_BACKEND=posix \
 		kneesocks dune exec src/main.exe $(TESTCASES)
@@ -79,7 +79,6 @@ start-elk:
 
 .PHONY: start-mastodon
 start-mastodon:
-	cat $(WD)/manifests/mastodon.yaml | sed "s/E2E_TEST_MASTODON_SERVER_NAME/$(shell cat $(WD)/_test_mastodon_domain)/" | $(KUBECTL) apply -f -
 	KUBECONFIG=$(KUBECONFIG) $(HELM) upgrade --install --namespace e2e --repo https://ushitora-anqou.github.io/magout magout magout --wait --values manifests/magout-values.yaml
 
 .PHONY: start-waq
@@ -88,7 +87,6 @@ start-waq:
 	$(KIND) load docker-image $(IMAGE) -n $(KIND_CLUSTER_NAME)
 	$(KUBECTL) delete -f $(WD)/manifests/waq.yaml || true
 	$(KUBECTL) delete -f $(WD)/manifests/reset-waq-database.yaml || true
-	cat $(WD)/manifests/waq.yaml | sed "s/E2E_TEST_WAQ_SERVER_NAME/$(shell cat $(WD)/_test_waq_domain)/" | $(KUBECTL) apply -f -
 	$(KUBECTL) apply -f $(WD)/manifests/reset-waq-database.yaml
 	$(KUBECTL) wait --for=condition=available deploy/waq-web -n e2e --timeout=5m
 
@@ -98,8 +96,6 @@ logs-deploy-waq-web:
 
 .PHONY: setup-selfsigned-certs
 setup-selfsigned-certs:
-	echo "mastodon.waq-e2e.anqou.net" > $(WD)/_test_mastodon_domain
-	echo "waq.waq-e2e.anqou.net" > $(WD)/_test_waq_domain
 	$(KUBECTL) apply -f manifests/certificate.yaml
 	until $(KUBECTL) get cm -n e2e ca-bundle > /dev/null ; do sleep 1 ; done
 	$(KUBECTL) get cm -n e2e ca-bundle -o json | jq -r '.data."root-certs.pem"' > _test.pem
