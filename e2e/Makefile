@@ -73,6 +73,7 @@ start-elk:
 
 .PHONY: start-mastodon
 start-mastodon:
+	kubectl apply -f $(WD)/manifests/mastodon.yaml
 	KUBECONFIG=$(KUBECONFIG) helm upgrade --install --namespace e2e --repo https://ushitora-anqou.github.io/magout magout magout --wait --values manifests/magout-values.yaml
 
 .PHONY: start-waq
@@ -81,6 +82,7 @@ start-waq:
 	kind load docker-image $(IMAGE) -n $(KIND_CLUSTER_NAME)
 	kubectl delete -f $(WD)/manifests/waq.yaml || true
 	kubectl delete -f $(WD)/manifests/reset-waq-database.yaml || true
+	kubectl apply -f $(WD)/manifests/waq.yaml
 	kubectl apply -f $(WD)/manifests/reset-waq-database.yaml
 	kubectl wait --for=condition=available deploy/waq-web -n e2e --timeout=5m
 
