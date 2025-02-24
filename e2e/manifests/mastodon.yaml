@@ -45,7 +45,7 @@ metadata:
   namespace: e2e
 type: Opaque
 stringData:
-  LOCAL_DOMAIN: "E2E_TEST_MASTODON_SERVER_NAME"
+  LOCAL_DOMAIN: mastodon.waq-e2e.anqou.net
   REDIS_HOST: redis.e2e.svc
   REDIS_PORT: "6379"
   DB_HOST: postgres.e2e.svc
