@@ -30,6 +30,7 @@ module Internal = struct
   let vapid_public_key () = getenv ~default:"" "VAPID_PUBLIC_KEY"
   let webpush_subscriber () = getenv ~default:"" "WEBPUSH_SUBSCRIBER"
   let log_file_path () = getenv ~default:"" "LOG_FILE_PATH"
+  let log_level () = getenv ~default:"DEBUG" "LOG_LEVEL"
 end
 
 let listen_host () =
@@ -82,6 +83,7 @@ let vapid_private_key () = Internal.vapid_private_key ()
 let vapid_public_key () = Internal.vapid_public_key ()
 let webpush_subscriber () = Internal.webpush_subscriber ()
 let log_file_path () = Internal.log_file_path ()
+let log_level () = Internal.log_level ()
 
 let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
@@ -117,6 +119,7 @@ let to_list () =
       ("vapid_public_key", vapid_public_key ());
       ("webpush_subscriber", webpush_subscriber ());
       ("log_file_path", log_file_path ());
+      ("log_level", log_level ());
     ]
 
 let verify_for_server () =

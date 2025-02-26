@@ -213,7 +213,14 @@ let webpush_deliver env username message =
 let setup_logs () =
   Fmt.set_style_renderer Fmt.stderr `Ansi_tty;
   Logs.set_reporter (Logs_fmt.reporter ());
-  Logs.set_level (Some Logs.Debug);
+  Logs.set_level
+    (Some
+       (match Config.log_level () with
+       | "DEBUG" -> Logs.Debug
+       | "INFO" -> Logs.Info
+       | "WARN" -> Logs.Warning
+       | "ERROR" -> Logs.Error
+       | _ -> failwith "invalid log level"));
   Logs.Src.list ()
   |> List.iter (fun src ->
          if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
