@@ -16,6 +16,7 @@ let raise_error_response = Yume.Server.raise_error_response
 
 let authenticate_bearer = function
   | Yume.Server.Request r -> (
+      Otel.with_span ~__FUNCTION__ @@ fun _ ->
       try
         let header = r.headers |> List.assoc `Authorization in
         assert (String.starts_with ~prefix:"Bearer " header);
@@ -24,12 +25,14 @@ let authenticate_bearer = function
       with _ -> raise_error_response `Unauthorized)
 
 let authenticate_user (r : Yume.Server.request) : Model.User.t =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
   try
     let token = authenticate_bearer r in
     Db.(e User.(get_one ~id:(Option.get token#resource_owner_id)))
   with _ -> raise_error_response `Unauthorized
 
 let authenticate_account (r : Yume.Server.request) : Model.Account.t =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
   try
     let user = authenticate_user r in
     Db.(e Account.(get_one ~id:user#account_id))

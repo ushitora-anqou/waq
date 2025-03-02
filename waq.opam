@@ -31,6 +31,8 @@ depends: [
   "mirage-crypto-rng-eio" {< "1.2.0"}
   "ocaml" {>= "5.1.0"}
   "odoc" {with-doc}
+  "opentelemetry" {>= "0.11"}
+  "opentelemetry-client-ocurl" {>= "0.11"}
   "pcre"
   "postgresql"
   "ppx_yojson_conv"
