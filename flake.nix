@@ -25,7 +25,7 @@
         on = opam-nix.lib.${system};
         devPackagesQuery = {
           ocaml-lsp-server = "*";
-          utop = "*";
+          #utop = "*";
           ocamlformat = let
             # read .ocamlformat
             # cf. https://nymphium.github.io/2023/05/06/purely-functioinal-ocaml-development.html
@@ -49,7 +49,7 @@
             ## - or force the compiler to be taken from nixpkgs and be a certain version:
             ocaml-system = "*";
             ## - or force ocamlfind to be a certain version:
-            # ocamlfind = "1.9.2";
+            ocamlfind = "1.9.6";
           };
         src = with builtins;
           filterSource (
