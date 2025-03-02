@@ -17,6 +17,7 @@ spec:
       containers:
         - name: socks5-proxy
           image: serjs/go-socks5-proxy
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1080
               name: socks

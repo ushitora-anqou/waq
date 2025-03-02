@@ -11,6 +11,7 @@ spec:
       containers:
         - name: reset-waq-database
           image: ghcr.io/ushitora-anqou/waq:dev
+          imagePullPolicy: IfNotPresent
           args:
             - db:reset
           envFrom:

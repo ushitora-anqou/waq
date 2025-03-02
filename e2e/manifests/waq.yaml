@@ -29,6 +29,7 @@ spec:
       containers:
         - name: web
           image: ghcr.io/ushitora-anqou/waq:dev
+          imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
                 name: waq-secret-env
@@ -85,6 +86,7 @@ spec:
       containers:
         - name: nginx
           image: nginx:1
+          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d
