@@ -31,7 +31,10 @@ module Internal = struct
   let webpush_subscriber () = getenv ~default:"" "WEBPUSH_SUBSCRIBER"
   let log_file_path () = getenv ~default:"" "LOG_FILE_PATH"
   let log_level () = getenv ~default:"DEBUG" "LOG_LEVEL"
+  let enable_otel () = getenv ~default:"" "ENABLE_OTEL"
 end
+
+let is_enabled = function "1" | "true" | "on" -> true | _ -> false
 
 let listen_host () =
   Uri.of_string ("//" ^ Internal.listen ()) |> Uri.host |> Option.get
@@ -84,6 +87,7 @@ let vapid_public_key () = Internal.vapid_public_key ()
 let webpush_subscriber () = Internal.webpush_subscriber ()
 let log_file_path () = Internal.log_file_path ()
 let log_level () = Internal.log_level ()
+let enable_otel () = Internal.enable_otel ()
 
 let debug_job_kick_block () =
   Sys.getenv_opt "WAQ_DEBUG_JOB_KICK_BLOCK"
@@ -101,7 +105,7 @@ let debug_no_throttle_fetch () =
   match
     Sys.getenv_opt "WAQ_NO_THROTTLE_FETCH" |> Option.map String.lowercase_ascii
   with
-  | Some ("true" | "1") -> true
+  | Some x -> is_enabled x
   | _ -> false
 
 let to_list () =
@@ -120,6 +124,7 @@ let to_list () =
       ("webpush_subscriber", webpush_subscriber ());
       ("log_file_path", log_file_path ());
       ("log_level", log_level ());
+      ("enable_otel", enable_otel ());
     ]
 
 let verify_for_server () =

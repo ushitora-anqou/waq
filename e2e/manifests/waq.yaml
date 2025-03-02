@@ -69,6 +69,7 @@ stringData:
   LISTEN: "0.0.0.0:8000"
   OTEL_EXPORTER_OTLP_ENDPOINT: jaeger.jaeger.svc:4318
   OTEL_OCAML_DEBUG: "1"
+  ENABLE_OTEL: "1"
 ---
 apiVersion: apps/v1
 kind: Deployment
