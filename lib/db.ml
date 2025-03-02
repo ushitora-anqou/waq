@@ -58,4 +58,7 @@ let register_user ~username ~display_name ~email ~password =
 
 let initialize () = initialize (Config.db_url ())
 let transaction f = e (fun c -> c#transaction f)
-let e x = Lwt_eio.run_lwt @@ fun () -> e x
+
+let e x =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
+  Lwt_eio.run_lwt @@ fun () -> e x

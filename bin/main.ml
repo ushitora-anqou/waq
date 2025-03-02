@@ -241,6 +241,7 @@ let () =
   Config.to_list ()
   |> List.iter (fun (k, v) -> Logs.debug (fun m -> m "Config %s = %s" k v));
 
+  Otel.with_setup @@ fun () ->
   Crypto.initialize env @@ fun () ->
   Db.initialize ();
 

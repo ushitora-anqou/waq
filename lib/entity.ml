@@ -358,6 +358,7 @@ let status_preload_spec self_id : Model.Status.preload_spec =
 
 let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
     (status_ids : Model.Status.ID.t list) : status list =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
   let statuses =
     Db.(
       e
@@ -371,6 +372,7 @@ let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
 
 let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
     status =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
   load_statuses_from_db ~visibility ?self_id [ s#id ] |> List.hd
 
 (* Entity relationship *)

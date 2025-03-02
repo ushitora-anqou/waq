@@ -37,6 +37,10 @@
   lwt.unix
   mirage-crypto-rng
   mirage-crypto-rng-eio
+  opentelemetry
+  opentelemetry-client-ocurl
+  opentelemetry.ambient-context
+  opentelemetry.ambient-context.eio
   pcre
   postgresql
   ptime

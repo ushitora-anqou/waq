@@ -124,31 +124,39 @@ module Make (D : Driver) = struct
 
       method query ?(p = []) (sql : string) : (string * Value.t) list list Lwt.t
           =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.query c sql ~p
 
       method query_row ?(p = []) (sql : string) : (string * Value.t) list Lwt.t
           =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.query_row c sql ~p
 
       method execute ?(p = []) (sql : string) : unit Lwt.t =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.execute c sql ~p
 
       method named_query ?(p = []) (sql : string)
           : (string * Value.t) list list Lwt.t =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.named_query c sql ~p
 
       method named_query_row ?(p = []) (sql : string)
           : (string * Value.t) list Lwt.t =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.named_query_row c sql ~p
 
       method named_execute ?(p = []) (sql : string) : unit Lwt.t =
+        Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.named_execute c sql ~p
 
       method enqueue_task_after_commit (f : 'a -> unit Lwt.t) : unit Lwt.t =
+        Otel.with_span ~__FUNCTION__ @@ fun _ ->
         if in_transaction then Lwt.return (enqueued <- f :: enqueued)
         else f self
 
       method transaction (f : 'a -> unit Lwt.t) : bool Lwt.t =
+        Otel.with_span ~__FUNCTION__ @@ fun _ ->
         if in_transaction then failwith "Detected nested transaction";
         in_transaction <- true;
         let%lwt res = Internal.transaction c (fun () -> f self) in

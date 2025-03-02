@@ -18,6 +18,7 @@ let get _ req =
 
 (* Recv POST /api/v1/statuses *)
 let post env req =
+  Otel.with_span ~__FUNCTION__ @@ fun _ ->
   let self = authenticate_account req in
   let status = req |> Yume.Server.query ~default:"" "status" |> String.trim in
   let spoiler_text =
