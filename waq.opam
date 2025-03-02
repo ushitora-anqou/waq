@@ -27,8 +27,8 @@ depends: [
   "lwt"
   "lwt_eio"
   "lwt_ppx"
-  "mirage-crypto-rng"
-  "mirage-crypto-rng-eio"
+  "mirage-crypto-rng" {< "1.2.0"}
+  "mirage-crypto-rng-eio" {< "1.2.0"}
   "ocaml" {>= "5.1.0"}
   "odoc" {with-doc}
   "pcre"
