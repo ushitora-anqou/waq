@@ -1,6 +1,7 @@
 KUBERNETES_VERSION:=1.31.0
 CERT_MANAGER_CHART_VERSION:=v1.17.1
 TRUST_MANAGER_CHART_VERSION:=v0.16.0
+JAEGER_CHART_VERSION:=3.4.0
 WD:=$(dir $(lastword $(MAKEFILE_LIST)))
 KIND_CLUSTER_NAME=waq-test-cluster
 
@@ -13,6 +14,7 @@ build:
 
 .PHONY: port-forward-socks5-proxy
 port-forward-socks5-proxy:
+# kill $(lsof -i:1080 | grep LISTEN | awk '{ print $2 }' | head -1)
 	{ \
 		if lsof -i:1080 > /dev/null; then : ; else \
 			kubectl port-forward deploy/socks5-proxy 1080:1080 -n e2e & \
@@ -70,6 +72,10 @@ create-cluster:
 .PHONY: start-elk
 start-elk:
 	kubectl apply -f $(WD)/manifests/elk.yaml
+
+.PHONY: start-jaeger
+start-jaeger:
+	kubectl apply -f $(WD)/manifests/jaeger.yaml
 
 .PHONY: start-mastodon
 start-mastodon:
