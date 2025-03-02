@@ -67,6 +67,8 @@ stringData:
   WAQ_DEBUG_JOB_KICK_BLOCK: "true"
   SSL_CERT_FILE: /cert/root-certs.pem
   LISTEN: "0.0.0.0:8000"
+  OTEL_EXPORTER_OTLP_ENDPOINT: jaeger.jaeger.svc:4318
+  OTEL_OCAML_DEBUG: "1"
 ---
 apiVersion: apps/v1
 kind: Deployment
