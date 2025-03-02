@@ -41,6 +41,7 @@ spec:
       containers:
         - name: reset-mastodon-database
           image: ghcr.io/mastodon/mastodon:v4.2.0
+          imagePullPolicy: IfNotPresent
           command:
             - bash
             - -ceu

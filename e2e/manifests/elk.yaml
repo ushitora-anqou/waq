@@ -28,6 +28,7 @@ spec:
       containers:
         - name: elk
           image: ghcr.io/elk-zone/elk:v0.12.1
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 5314
