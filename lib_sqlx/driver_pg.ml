@@ -209,8 +209,8 @@ let disconnect (c : connection) : unit Lwt.t =
 let validate (c : connection) : bool Lwt.t =
   c.c#consume_input;
   match c.c#status with
-  | (exception Pg.Error _) | Pg.Ok -> Lwt.return_false
-  | _ -> Lwt.return_true
+  | Pg.Ok -> Lwt.return_true
+  | (exception Pg.Error _) | _ -> Lwt.return_false
 
 let check (c : connection) f =
   f
