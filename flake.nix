@@ -39,7 +39,7 @@
         on = opam-nix.lib.${system};
         devPackagesQuery = {
           ocaml-lsp-server = "*";
-          #utop = "*";
+          utop = "*";
           ocamlformat = let
             # read .ocamlformat
             # cf. https://nymphium.github.io/2023/05/06/purely-functioinal-ocaml-development.html
@@ -109,6 +109,11 @@
               # Prevent the ocaml dependencies from leaking into dependent environments
               doNixSupport = false;
               removeOcamlReferences = true;
+            });
+
+            utop = prev.utop.overrideAttrs (previousAttrs: {
+              # cf. https://github.com/tweag/opam-nix/issues/112#issuecomment-2693392340
+              sourceRoot = ".";
             });
           };
         scope' = scope.overrideScope overlay;
