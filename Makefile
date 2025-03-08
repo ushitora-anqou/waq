@@ -6,6 +6,6 @@ build:
 test:
 	dune runtest
 
-.PHONY: flake-update
-flake-update:
-	nix flake update opam-nix waq-external-repo
+.PHONY: fmt
+fmt:
+	dune fmt
