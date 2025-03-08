@@ -1,8 +1,21 @@
 {
   inputs = {
-    opam-nix.url = "github:tweag/opam-nix";
-    flake-utils.follows = "opam-nix/flake-utils";
-    nixpkgs.follows = "opam-nix/nixpkgs";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+
+    opam-nix = {
+      url = "github:tweag/opam-nix";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+        opam-repository.follows = "opam-repository";
+      };
+    };
+
+    opam-repository = {
+      url = "github:ocaml/opam-repository";
+      flake = false;
+    };
 
     waq-external-repo = {
       url = "github:ushitora-anqou/waq-external-repo";
@@ -16,6 +29,7 @@
     flake-utils,
     opam-nix,
     waq-external-repo,
+    opam-repository,
   } @ inputs:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -65,7 +79,7 @@
           ./.;
         scope =
           on.buildOpamProject' {
-            repos = [on.opamRepository waq-external-repo];
+            repos = [opam-repository waq-external-repo];
             resolveArgs = {
               with-test = true;
               with-doc = true;
