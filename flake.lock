@@ -176,11 +176,11 @@
     "waq-external-repo": {
       "flake": false,
       "locked": {
-        "lastModified": 1739007661,
-        "narHash": "sha256-HvCog+goAxc3yJhlHlqkcesOlogJ+aTSQAu+BU265+A=",
+        "lastModified": 1741435048,
+        "narHash": "sha256-snZnr6lbWOeFgVRa85V2hMhowq63KM1XKOieR9pPNdw=",
         "owner": "ushitora-anqou",
         "repo": "waq-external-repo",
-        "rev": "1de607a66a402b179b187396949c2ad977c49e81",
+        "rev": "1347586773309a074906668e775b6cd41ec7832f",
         "type": "github"
       },
       "original": {
