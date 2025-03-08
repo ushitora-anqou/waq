@@ -49,7 +49,7 @@
             ## - or force the compiler to be taken from nixpkgs and be a certain version:
             ocaml-system = "*";
             ## - or force ocamlfind to be a certain version:
-            ocamlfind = "1.9.6";
+            #ocamlfind = "1.9.6";
           };
         src = with builtins;
           filterSource (
