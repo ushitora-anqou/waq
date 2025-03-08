@@ -24,29 +24,29 @@ let f =
   Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Check home timeline *)
-  (home_timeline env `Waq ~token:waq_token |> function
-   | [ `Assoc l1; `Assoc l2 ] ->
-       (* Check if the timeline is correct *)
-       assert (uri = (l2 |> List.assoc "uri" |> expect_string));
-       assert (
-         uri
-         = (l1 |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
-          |> expect_string));
-       ()
-   | _ -> assert false);
+  ( home_timeline env `Waq ~token:waq_token |> function
+    | [ `Assoc l1; `Assoc l2 ] ->
+        (* Check if the timeline is correct *)
+        assert (uri = (l2 |> List.assoc "uri" |> expect_string));
+        assert (
+          uri
+          = (l1 |> List.assoc "reblog" |> expect_assoc |> List.assoc "uri"
+           |> expect_string));
+        ()
+    | _ -> assert false );
 
   (* Check notifications *)
-  (get_notifications env `Waq ~token:waq_token |> function
-   | [
-       {
-         typ = "reblog";
-         account = { id = account_id; _ };
-         status = Some { id = status_id; _ };
-         _;
-       };
-     ] ->
-       assert (account_id = mstdn1_id);
-       assert (status_id = post_id)
-   | _ -> assert false);
+  ( get_notifications env `Waq ~token:waq_token |> function
+    | [
+        {
+          typ = "reblog";
+          account = { id = account_id; _ };
+          status = Some { id = status_id; _ };
+          _;
+        };
+      ] ->
+        assert (account_id = mstdn1_id);
+        assert (status_id = post_id)
+    | _ -> assert false );
 
   ()

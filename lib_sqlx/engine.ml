@@ -136,13 +136,13 @@ module Make (D : Driver) = struct
         Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.execute c sql ~p
 
-      method named_query ?(p = []) (sql : string)
-          : (string * Value.t) list list Lwt.t =
+      method named_query ?(p = []) (sql : string) :
+          (string * Value.t) list list Lwt.t =
         Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.named_query c sql ~p
 
-      method named_query_row ?(p = []) (sql : string)
-          : (string * Value.t) list Lwt.t =
+      method named_query_row ?(p = []) (sql : string) :
+          (string * Value.t) list Lwt.t =
         Otel.with_span ~__FUNCTION__ ~attrs:[ ("sql", `String sql) ] @@ fun _ ->
         Internal.named_query_row c sql ~p
 

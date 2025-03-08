@@ -693,16 +693,16 @@ let expand_let_unpack env loc schema =
        | CID ->
            [%expr
              "id",
-               [%e evar ~loc x]#id_opt |> Option.map ID.to_int
-               |> Sqlx.Value.of_int_opt]
+             [%e evar ~loc x]#id_opt |> Option.map ID.to_int
+             |> Sqlx.Value.of_int_opt]
        | CCreatedAt ->
            [%expr
              "created_at",
-               [%e evar ~loc x]#created_at_opt |> Sqlx.Value.of_timestamp_opt]
+             [%e evar ~loc x]#created_at_opt |> Sqlx.Value.of_timestamp_opt]
        | CUpdatedAt ->
            [%expr
              "updated_at",
-               [%e evar ~loc x]#updated_at_opt |> Sqlx.Value.of_timestamp_opt]
+             [%e evar ~loc x]#updated_at_opt |> Sqlx.Value.of_timestamp_opt]
        | CNormal { c_type; _ } ->
            let encode =
              let encode_id l =

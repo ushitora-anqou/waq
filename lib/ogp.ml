@@ -62,7 +62,10 @@ let parse_json_oembed ~url src =
   | "video" ->
       let width = int "width" in
       let height = int "height" in
-      let html = string "html" (* FIXME: Sanitize *) in
+      let html =
+        string "html"
+        (* FIXME: Sanitize *)
+      in
       let image = string "thumbnail_url" in
       make ~width ~height ~html ~image ()
   | "photo" ->

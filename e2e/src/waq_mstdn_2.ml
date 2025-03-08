@@ -32,24 +32,24 @@ let f =
   Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Get home timeline of @mstdn1@mstdn_server_domain and check *)
-  (home_timeline env `Mstdn ~token:mstdn_token |> function
-   | [ `Assoc l2; `Assoc l ] ->
-       (* Check if the timeline is correct *)
-       assert (uri = (List.assoc "uri" l |> expect_string));
-       assert (uri2 = (List.assoc "uri" l2 |> expect_string));
-       ()
-   | _ -> assert false);
+  ( home_timeline env `Mstdn ~token:mstdn_token |> function
+    | [ `Assoc l2; `Assoc l ] ->
+        (* Check if the timeline is correct *)
+        assert (uri = (List.assoc "uri" l |> expect_string));
+        assert (uri2 = (List.assoc "uri" l2 |> expect_string));
+        ()
+    | _ -> assert false );
 
   (* Unfollow me from @mstdn1@mstdn_server_domain *)
   unfollow env `Mstdn ~token:mstdn_token aid;
   Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
   (* Get home timeline of @mstdn1@mstdn_server_domain and check again *)
-  (home_timeline env `Mstdn ~token:mstdn_token |> function
-   | [ `Assoc l ] ->
-       (* Check if the timeline is correct *)
-       assert (uri = (List.assoc "uri" l |> expect_string));
-       ()
-   | _ -> assert false);
+  ( home_timeline env `Mstdn ~token:mstdn_token |> function
+    | [ `Assoc l ] ->
+        (* Check if the timeline is correct *)
+        assert (uri = (List.assoc "uri" l |> expect_string));
+        ()
+    | _ -> assert false );
 
   ()

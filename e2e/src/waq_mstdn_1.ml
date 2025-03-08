@@ -45,29 +45,29 @@ let f =
       Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
       (* Get my home timeline and check *)
-      (home_timeline env `Waq ~token:waq_token |> function
-       | [ `Assoc l2; `Assoc l ] ->
-           (* Check if the timeline is correct *)
-           assert (uri = (l |> List.assoc "uri" |> expect_string));
-           assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-           ()
-       | res ->
-           Logs.err (fun m ->
-               m "unexpected home timeline %s"
-                 (Yojson.Safe.to_string (`List res)));
-           assert false);
+      ( home_timeline env `Waq ~token:waq_token |> function
+        | [ `Assoc l2; `Assoc l ] ->
+            (* Check if the timeline is correct *)
+            assert (uri = (l |> List.assoc "uri" |> expect_string));
+            assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+            ()
+        | res ->
+            Logs.err (fun m ->
+                m "unexpected home timeline %s"
+                  (Yojson.Safe.to_string (`List res)));
+            assert false );
 
       (* Unfollow @mstdn1@mstdn_server_domain *)
       unfollow env `Waq ~token:waq_token mstdn1_id;
       Eio.Time.sleep (Eio.Stdenv.clock env) 1.0;
 
       (* Get my home timeline and check again *)
-      (home_timeline env `Waq ~token:waq_token |> function
-       | [ `Assoc l2 ] ->
-           (* Check if the timeline is correct *)
-           assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
-           ()
-       | _ -> assert false);
+      ( home_timeline env `Waq ~token:waq_token |> function
+        | [ `Assoc l2 ] ->
+            (* Check if the timeline is correct *)
+            assert (uri2 = (l2 |> List.assoc "uri" |> expect_string));
+            ()
+        | _ -> assert false );
 
       pushf None);
 

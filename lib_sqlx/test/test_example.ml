@@ -115,9 +115,9 @@ CREATE TABLE statuses (
 let test_statuses_replied_by _ _ =
   setup ();%lwt
   insert_some_statuses ();%lwt
-  (statuses_replied_by ~username:"user2" >|= function
-   | [ s ] when s#text = "Hello" -> ()
-   | _ -> assert false);%lwt
+  ( statuses_replied_by ~username:"user2" >|= function
+    | [ s ] when s#text = "Hello" -> ()
+    | _ -> assert false );%lwt
   Lwt.return_unit
 
 open Common

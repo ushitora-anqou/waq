@@ -52,6 +52,11 @@
   xml-light
   yojson
   yume)
- (flags :standard -warn-error -33 -open Ppx_yojson_conv_lib.Yojson_conv.Primitives))
+ (flags
+  :standard
+  -warn-error
+  -33
+  -open
+  Ppx_yojson_conv_lib.Yojson_conv.Primitives))
 
 (include_subdirs qualified)
