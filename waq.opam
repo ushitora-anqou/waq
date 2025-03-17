@@ -27,8 +27,7 @@ depends: [
   "lwt"
   "lwt_eio"
   "lwt_ppx"
-  "mirage-crypto-rng" {< "1.2.0"}
-  "mirage-crypto-rng-eio" {< "1.2.0"}
+  "mirage-crypto-rng" {>= "2.0.0"}
   "ocaml" {>= "5.1.0"}
   "odoc" {with-doc}
   "opentelemetry" {>= "0.11"}
@@ -46,7 +45,7 @@ depends: [
   "x509"
   "xml-light"
   "yojson"
-  "yume" {= "0.1.11+waq"}
+  "yume" {= "0.1.12+waq"}
 ]
 build: [
   ["dune" "subst"] {dev}

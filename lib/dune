@@ -36,7 +36,7 @@
   lwt_eio
   lwt.unix
   mirage-crypto-rng
-  mirage-crypto-rng-eio
+  mirage-crypto-rng.unix
   opentelemetry
   opentelemetry-client-ocurl
   opentelemetry.ambient-context
