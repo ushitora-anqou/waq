@@ -1,0 +1,4 @@
+(executable
+ (name simple_http_server)
+ (libraries oroutine)
+)

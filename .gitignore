@@ -37,3 +37,4 @@ e2e/.env
 .direnv
 result
 .envrc
+perf.data
