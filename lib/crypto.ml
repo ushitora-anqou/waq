@@ -1,5 +1,6 @@
-let initialize env f =
-  Mirage_crypto_rng_eio.run (module Mirage_crypto_rng.Fortuna) env f
+let initialize _env f =
+  Mirage_crypto_rng_unix.use_default ();
+  f ()
 
 module SecureRandom = struct
   let generate len = Mirage_crypto_rng.generate len

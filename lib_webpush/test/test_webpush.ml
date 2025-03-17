@@ -18,5 +18,5 @@ let test_main_case1 () =
 
 let () =
   let open Alcotest in
-  Mirage_crypto_rng_unix.initialize (module Mirage_crypto_rng.Fortuna);
+  Mirage_crypto_rng_unix.use_default ();
   run "webpush" [ ("main", [ test_case "case1" `Quick test_main_case1 ]) ]

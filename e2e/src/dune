@@ -9,7 +9,7 @@
   logs
   logs.fmt
   mirage-crypto-rng
-  mirage-crypto-rng-eio
+  mirage-crypto-rng.unix
   pcre
   yojson
   yume)
