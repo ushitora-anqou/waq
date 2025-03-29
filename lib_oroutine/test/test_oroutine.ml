@@ -11,6 +11,8 @@ let write fd buf =
   in
   loop 0
 
+let sleep_short_time () = sleep_s 0.01
+
 let test_select_case1 () =
   initialize @@ fun () ->
   let ch = Chan.make 2 in
@@ -44,7 +46,7 @@ let test_select_case3 () =
   let ch1 = Chan.make 1 in
   let ch2 = Chan.make 1 in
   go (fun () ->
-      sleep_s 0.01;
+      sleep_short_time ();
       Chan.send 1 ch1);
   let v =
     Chan.select
@@ -63,7 +65,7 @@ let test_select_case4 () =
   Chan.send 101 ch1;
   Chan.send 102 ch2;
   go (fun () ->
-      sleep_s 0.01;
+      sleep_short_time ();
       Chan.recv ch1 |> ignore);
   Chan.select [ Send (ch1, 1, Fun.const ()); Send (ch2, 2, Fun.const ()) ];
   assert (Chan.recv ch1 |> Result.get_ok = 1);
@@ -78,7 +80,7 @@ let test_select_case5 () =
       sleep_s 0.02;
       Chan.send 1 ch_i);
   go (fun () ->
-      sleep_s 0.01;
+      sleep_short_time ();
       Chan.send "a" ch_s);
   let s =
     Chan.select
@@ -191,6 +193,17 @@ let test_channel_close_case2 () =
   assert (v = 1);
   ()
 
+let test_channel_close_case3 () =
+  initialize @@ fun () ->
+  let ch1 = Chan.make 1 in
+  let ch2 = Chan.make 1 in
+  go (fun () ->
+      sleep_short_time ();
+      Chan.close ch1);
+  let v = Chan.select [ Recv (ch1, fun _ -> 1); Recv (ch2, fun _ -> 2) ] in
+  assert (v = 1);
+  ()
+
 let () =
   let open Alcotest in
   run "oroutine"
@@ -218,5 +231,6 @@ let () =
         [
           test_case "case 1" `Quick test_channel_close_case1;
           test_case "case 2" `Quick test_channel_close_case2;
+          test_case "case 3" `Quick test_channel_close_case3;
         ] );
     ]

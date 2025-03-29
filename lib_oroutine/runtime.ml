@@ -47,19 +47,20 @@ end
 
 module Make (Scheduler : Scheduler.S) : S = struct
   module Channel = struct
+    type recv_error = [ `Closed ]
+    type 'a recv_result = ('a, recv_error) result
+
     type 'a t = {
       mutex : Mutex.t;
       mutable closed : bool;
       queued_items : 'a Queue.t;
       pending_recv :
-        (bool Atomic.t (* canceled? *) * ('a -> Scheduler.Task.t)) Queue.t;
+        (bool Atomic.t (* canceled? *) * ('a recv_result -> Scheduler.Task.t))
+        Queue.t;
       pending_send :
         (bool Atomic.t (* canceled? *) * 'a * Scheduler.Task.t) Queue.t;
       bound_size : int;
     }
-
-    type recv_error = [ `Closed ]
-    type 'a recv_result = ('a, recv_error) result
 
     let make size =
       assert (size > 0);
@@ -72,10 +73,21 @@ module Make (Scheduler : Scheduler.S) : S = struct
         bound_size = size;
       }
 
-    let close ch =
+    let close k scheduler ch =
+      (* FIXME: make pending_send panic? *)
       Mutex.lock ch.mutex;
       ch.closed <- true;
-      Mutex.unlock ch.mutex
+      let rec loop () =
+        match Queue.take_opt ch.pending_recv with
+        | None -> ()
+        | Some (canceled, gen_task) ->
+            if Atomic.compare_and_set canceled false true then
+              scheduler |> Scheduler.enqueue_runnable (gen_task (Error `Closed));
+            loop ()
+      in
+      loop ();
+      Mutex.unlock ch.mutex;
+      Effect.Deep.continue k ()
 
     let check_invariant ch =
       if Queue.length ch.queued_items = 0 then
@@ -130,7 +142,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
                       | false -> resolve_pending_recv ()
                       | true ->
                           scheduler
-                          |> Scheduler.enqueue_runnable (gen_task item))
+                          |> Scheduler.enqueue_runnable (gen_task (Ok item)))
                 in
                 resolve_pending_recv ();
                 Mutex.unlock ch.mutex;
@@ -148,7 +160,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
               (* Note that ch.mutex isn't necessarily locked in this function. *)
               task
               |> Scheduler.Task.with_k (fun () ->
-                     Effect.Deep.continue k (handler (Ok item)))
+                     Effect.Deep.continue k (handler item))
             in
             ch.pending_recv |> Queue.add (canceled, task);
             Mutex.unlock ch.mutex;
@@ -224,6 +236,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
     | Select :
         ((unit -> 'b) option * ('ty, 'v, 'b) Channel.Select.t)
         -> 'b Effect.t
+    | Close_channel : 'a Channel.t -> unit Effect.t
 
   module Io_waiter = struct
     type time = float
@@ -377,7 +390,8 @@ module Make (Scheduler : Scheduler.S) : S = struct
             | effect Recv_from_channel ch, k ->
                 Channel.Select.(f None [ Recv (ch, Fun.id) ]) k task scheduler
             | effect Select (default, specs), k ->
-                Channel.Select.f default specs k task scheduler);
+                Channel.Select.f default specs k task scheduler
+            | effect Close_channel ch, k -> Channel.close k scheduler ch);
             loop ()
       in
       Util.expect_no_exn loop
@@ -442,6 +456,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
     let send v ch = Effect.perform (Send_to_channel (v, ch))
     let recv ch = Effect.perform (Recv_from_channel ch)
     let select ?default specs = Effect.perform (Select (default, specs))
+    let close ch = Effect.perform (Close_channel ch)
   end
 
   let global_instance = ref None
