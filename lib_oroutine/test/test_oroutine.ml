@@ -1,5 +1,7 @@
 open Oroutine
 
+let ( *> ) f g a = g (f a)
+
 let write fd buf =
   let rec loop i =
     if i = Bytes.length buf then ()
@@ -14,12 +16,12 @@ let test_select_case1 () =
   let ch = Chan.make 2 in
   Chan.send 42 ch;
   Chan.send 10 ch;
-  assert (Chan.recv ch = 42);
-  assert (Chan.recv ch = 10);
+  assert (Chan.recv ch |> Result.get_ok = 42);
+  assert (Chan.recv ch |> Result.get_ok = 10);
   Chan.send 42 ch;
-  assert (Chan.recv ch = 42);
+  assert (Chan.recv ch |> Result.get_ok = 42);
   Chan.send 10 ch;
-  assert (Chan.recv ch = 10);
+  assert (Chan.recv ch |> Result.get_ok = 10);
   ()
 
 let test_select_case2 () =
@@ -27,14 +29,14 @@ let test_select_case2 () =
   let ch1 = Chan.make 1 in
   let ch2 = Chan.make 1 in
   go (fun () ->
-      assert (Chan.recv ch1 = 1);
+      assert (Chan.recv ch1 |> Result.get_ok = 1);
       Chan.send 2 ch2;
-      assert (Chan.recv ch1 = 3);
+      assert (Chan.recv ch1 |> Result.get_ok = 3);
       Chan.send 4 ch2);
   Chan.send 1 ch1;
-  assert (Chan.recv ch2 = 2);
+  assert (Chan.recv ch2 |> Result.get_ok = 2);
   Chan.send 3 ch1;
-  assert (Chan.recv ch2 = 4);
+  assert (Chan.recv ch2 |> Result.get_ok = 4);
   ()
 
 let test_select_case3 () =
@@ -45,7 +47,11 @@ let test_select_case3 () =
       sleep_s 0.01;
       Chan.send 1 ch1);
   let v =
-    Chan.select [ Recv (ch1, fun i -> 10 + i); Recv (ch2, fun i -> 20 + i) ]
+    Chan.select
+      [
+        Recv (ch1, fun i -> 10 + Result.get_ok i);
+        Recv (ch2, fun i -> 20 + Result.get_ok i);
+      ]
   in
   assert (v = 11);
   ()
@@ -60,8 +66,8 @@ let test_select_case4 () =
       sleep_s 0.01;
       Chan.recv ch1 |> ignore);
   Chan.select [ Send (ch1, 1, Fun.const ()); Send (ch2, 2, Fun.const ()) ];
-  assert (Chan.recv ch1 = 1);
-  assert (Chan.recv ch2 = 102);
+  assert (Chan.recv ch1 |> Result.get_ok = 1);
+  assert (Chan.recv ch2 |> Result.get_ok = 102);
   ()
 
 let test_select_case5 () =
@@ -74,9 +80,21 @@ let test_select_case5 () =
   go (fun () ->
       sleep_s 0.01;
       Chan.send "a" ch_s);
-  let s = Chan.select [ Recv (ch_i, string_of_int); Recv (ch_s, Fun.id) ] in
+  let s =
+    Chan.select
+      [
+        Recv (ch_i, Result.get_ok *> string_of_int);
+        Recv (ch_s, Result.get_ok *> Fun.id);
+      ]
+  in
   assert (s = "a");
-  let s = Chan.select [ Recv (ch_i, string_of_int); Recv (ch_s, Fun.id) ] in
+  let s =
+    Chan.select
+      [
+        Recv (ch_i, Result.get_ok *> string_of_int);
+        Recv (ch_s, Result.get_ok *> Fun.id);
+      ]
+  in
   assert (s = "1");
   ()
 
@@ -146,6 +164,22 @@ let test_net_case1 () =
   assert (s = s1 && s = s2 && s = s3);
   ()
 
+let test_channel_close_case1 () =
+  initialize @@ fun () ->
+  let ch = Chan.make 1 in
+  Chan.close ch;
+  assert (Chan.recv ch = Error `Closed);
+  ()
+
+let test_channel_close_case2 () =
+  initialize @@ fun () ->
+  let ch1 = Chan.make 1 in
+  let ch2 = Chan.make 1 in
+  Chan.close ch1;
+  let v = Chan.select [ Recv (ch1, fun _ -> 1); Recv (ch2, fun _ -> 2) ] in
+  assert (v = 1);
+  ()
+
 let () =
   let open Alcotest in
   run "oroutine"
@@ -168,4 +202,9 @@ let () =
           test_case "case 2" `Quick test_basics_case2;
         ] );
       ("net", [ test_case "case 1" `Quick test_net_case1 ]);
+      ( "channel close",
+        [
+          test_case "case 1" `Quick test_channel_close_case1;
+          test_case "case 2" `Quick test_channel_close_case2;
+        ] );
     ]

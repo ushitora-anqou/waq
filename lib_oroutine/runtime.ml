@@ -22,11 +22,13 @@ module type S = sig
 
   module Chan : sig
     type 'a t
+    type recv_error = [ `Closed ]
+    type 'a recv_result = ('a, recv_error) result
 
     module Select : sig
       type ('a, 'b) spec =
         | Send of ('a t * 'a * (unit -> 'b))
-        | Recv of ('a t * ('a -> 'b))
+        | Recv of ('a t * ('a recv_result -> 'b))
 
       type ('ty, 'v, 'b) t =
         | [] : ('v, 'v, 'b) t
@@ -36,8 +38,9 @@ module type S = sig
     end
 
     val make : int -> 'a t
+    val close : 'a t -> unit
     val send : 'a -> 'a t -> unit
-    val recv : 'a t -> 'a
+    val recv : 'a t -> 'a recv_result
     val select : ('a, 'b, 'c) Select.t -> 'c
   end
 end
@@ -46,6 +49,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
   module Channel = struct
     type 'a t = {
       mutex : Mutex.t;
+      mutable closed : bool;
       queued_items : 'a Queue.t;
       pending_recv :
         (bool Atomic.t (* canceled? *) * ('a -> Scheduler.Task.t)) Queue.t;
@@ -54,15 +58,24 @@ module Make (Scheduler : Scheduler.S) : S = struct
       bound_size : int;
     }
 
+    type recv_error = [ `Closed ]
+    type 'a recv_result = ('a, recv_error) result
+
     let make size =
       assert (size > 0);
       {
         mutex = Mutex.create ();
+        closed = false;
         queued_items = Queue.create ();
         pending_recv = Queue.create ();
         pending_send = Queue.create ();
         bound_size = size;
       }
+
+    let close ch =
+      Mutex.lock ch.mutex;
+      ch.closed <- true;
+      Mutex.unlock ch.mutex
 
     let check_invariant ch =
       if Queue.length ch.queued_items = 0 then
@@ -72,7 +85,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
     module Select = struct
       type ('a, 'b) spec =
         | Send of ('a t * 'a * (unit -> 'b))
-        | Recv of ('a t * ('a -> 'b))
+        | Recv of ('a t * ('a recv_result -> 'b))
 
       type ('ty, 'v, 'b) t =
         | [] : ('v, 'v, 'b) t
@@ -82,75 +95,84 @@ module Make (Scheduler : Scheduler.S) : S = struct
 
       let select_send_spec k task scheduler canceled ch item handler =
         Mutex.lock ch.mutex;
-        check_invariant ch;
-        if Queue.length ch.queued_items >= ch.bound_size then (
-          (* If the queue is full, add k and handler to ch.pending_send
-             to block their process. Then, continue to iterate other specs. *)
-          let task =
-            task
-            |> Scheduler.Task.with_k (fun () ->
-                   Effect.Deep.continue k (handler ()))
-          in
-          ch.pending_send |> Queue.add (canceled, item, task);
+        if ch.closed then (
           Mutex.unlock ch.mutex;
-          `Loop)
-        else
-          (* If the queue has some space, accept the item. If ch.pending_recv
+          failwith "Channel.Select.select_send_spec: closed channel")
+        else (
+          check_invariant ch;
+          if Queue.length ch.queued_items >= ch.bound_size then (
+            (* If the queue is full, add k and handler to ch.pending_send
+             to block their process. Then, continue to iterate other specs. *)
+            let task =
+              task
+              |> Scheduler.Task.with_k (fun () ->
+                     Effect.Deep.continue k (handler ()))
+            in
+            ch.pending_send |> Queue.add (canceled, item, task);
+            Mutex.unlock ch.mutex;
+            `Loop)
+          else
+            (* If the queue has some space, accept the item. If ch.pending_recv
              is not empty, hand over the item directly to the waiter.
              After that, continue k. Note that
              in this branch we don't have to continue to iterate other specs
              because it's obvious that other specs won't be selected anymore. *)
-          match Atomic.compare_and_set canceled false true with
-          | false ->
-              Mutex.unlock ch.mutex;
-              `Finish
-          | true ->
-              let rec resolve_pending_recv () =
-                match Queue.take_opt ch.pending_recv with
-                | None -> Queue.add item ch.queued_items
-                | Some (canceled, gen_task) -> (
-                    match Atomic.compare_and_set canceled false true with
-                    | false -> resolve_pending_recv ()
-                    | true ->
-                        scheduler |> Scheduler.enqueue_runnable (gen_task item))
-              in
-              resolve_pending_recv ();
-              Mutex.unlock ch.mutex;
-              `Continue (handler ())
+            match Atomic.compare_and_set canceled false true with
+            | false ->
+                Mutex.unlock ch.mutex;
+                `Finish
+            | true ->
+                let rec resolve_pending_recv () =
+                  match Queue.take_opt ch.pending_recv with
+                  | None -> Queue.add item ch.queued_items
+                  | Some (canceled, gen_task) -> (
+                      match Atomic.compare_and_set canceled false true with
+                      | false -> resolve_pending_recv ()
+                      | true ->
+                          scheduler
+                          |> Scheduler.enqueue_runnable (gen_task item))
+                in
+                resolve_pending_recv ();
+                Mutex.unlock ch.mutex;
+                `Continue (handler ()))
 
       let select_recv_spec k task scheduler canceled ch handler =
         Mutex.lock ch.mutex;
-        check_invariant ch;
-        if Queue.length ch.queued_items = 0 then (
-          let task item =
-            (* Note that ch.mutex isn't necessarily locked in this function. *)
-            task
-            |> Scheduler.Task.with_k (fun () ->
-                   Effect.Deep.continue k (handler item))
-          in
-          ch.pending_recv |> Queue.add (canceled, task);
+        if ch.closed then (
           Mutex.unlock ch.mutex;
-          `Loop)
-        else
-          match Atomic.compare_and_set canceled false true with
-          | false ->
-              Mutex.unlock ch.mutex;
-              `Finish
-          | true ->
-              let rec resolve_pending_send () =
-                match Queue.take_opt ch.pending_send with
-                | None -> ()
-                | Some (canceled, item, task) -> (
-                    match Atomic.compare_and_set canceled false true with
-                    | false -> resolve_pending_send ()
-                    | true ->
-                        ch.queued_items |> Queue.push item;
-                        scheduler |> Scheduler.enqueue_runnable task)
-              in
-              resolve_pending_send ();
-              let item = Queue.pop ch.queued_items in
-              Mutex.unlock ch.mutex;
-              `Continue (handler item)
+          `Continue (handler (Error `Closed)))
+        else (
+          check_invariant ch;
+          if Queue.length ch.queued_items = 0 then (
+            let task item =
+              (* Note that ch.mutex isn't necessarily locked in this function. *)
+              task
+              |> Scheduler.Task.with_k (fun () ->
+                     Effect.Deep.continue k (handler (Ok item)))
+            in
+            ch.pending_recv |> Queue.add (canceled, task);
+            Mutex.unlock ch.mutex;
+            `Loop)
+          else
+            match Atomic.compare_and_set canceled false true with
+            | false ->
+                Mutex.unlock ch.mutex;
+                `Finish
+            | true ->
+                let rec resolve_pending_send () =
+                  match Queue.take_opt ch.pending_send with
+                  | None -> ()
+                  | Some (canceled, item, task) -> (
+                      match Atomic.compare_and_set canceled false true with
+                      | false -> resolve_pending_send ()
+                      | true ->
+                          ch.queued_items |> Queue.push item;
+                          scheduler |> Scheduler.enqueue_runnable task)
+                in
+                resolve_pending_send ();
+                let item = Queue.pop ch.queued_items in
+                Mutex.unlock ch.mutex;
+                `Continue (handler (Ok item)))
 
       let rec loop : type ty v b.
           (b, unit) continuation ->
@@ -193,7 +215,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
     | Wait_write : Unix.file_descr -> unit Effect.t
     | Wait_read : Unix.file_descr -> unit Effect.t
     | Send_to_channel : ('a * 'a Channel.t) -> unit Effect.t
-    | Recv_from_channel : 'a Channel.t -> 'a Effect.t
+    | Recv_from_channel : 'a Channel.t -> 'a Channel.recv_result Effect.t
     | Select : ('ty, 'v, 'b) Channel.Select.t -> 'b Effect.t
 
   module Io_waiter = struct
@@ -401,8 +423,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
     Option.get !final_result
 
   module Chan = struct
-    type 'a t = 'a Channel.t
-
+    include Channel
     module Select = Channel.Select
 
     let make size =
