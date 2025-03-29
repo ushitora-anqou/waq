@@ -98,6 +98,17 @@ let test_select_case5 () =
   assert (s = "1");
   ()
 
+let test_select_default () =
+  initialize @@ fun () ->
+  let ch = Chan.make 1 in
+  let v = Chan.select ~default:(fun () -> 0) [ Recv (ch, fun _ -> 1) ] in
+  assert (v = 0);
+  Chan.send 1 ch;
+  let v1 = Chan.select ~default:(fun () -> 0) [ Recv (ch, fun _ -> 1) ] in
+  let v2 = Chan.select ~default:(fun () -> 0) [ Recv (ch, fun _ -> 1) ] in
+  assert ((v1 = 0 && v2 = 1) || (v1 = 1 && v2 = 0));
+  ()
+
 let test_basics_case1 () =
   assert (initialize (fun () -> 10) = 10);
   ()
@@ -195,6 +206,7 @@ let () =
           test_case "case 3" `Quick test_select_case3;
           test_case "case 4" `Quick test_select_case4;
           test_case "case 5" `Quick test_select_case5;
+          test_case "default" `Quick test_select_default;
         ] );
       ( "basics",
         [

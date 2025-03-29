@@ -41,7 +41,7 @@ module type S = sig
     val close : 'a t -> unit
     val send : 'a -> 'a t -> unit
     val recv : 'a t -> 'a recv_result
-    val select : ('a, 'b, 'c) Select.t -> 'c
+    val select : ?default:(unit -> 'b) -> ('ty, 'v, 'b) Select.t -> 'b
   end
 end
 
@@ -179,32 +179,37 @@ module Make (Scheduler : Scheduler.S) : S = struct
           Scheduler.Task.t ->
           Scheduler.t ->
           bool Atomic.t ->
+          (unit -> b) option ->
           (ty, v, b) t ->
           unit =
-       fun k task scheduler canceled -> function
+       fun k task scheduler canceled default -> function
+        | [] when Option.is_some default ->
+            if Atomic.compare_and_set canceled false true then
+              Effect.Deep.continue k (Option.get default ())
         | [] -> ()
         | Send (ch, item, handler) :: rest -> (
             match
               select_send_spec k task scheduler canceled ch item handler
             with
-            | `Loop -> loop k task scheduler canceled rest
+            | `Loop -> loop k task scheduler canceled default rest
             | `Finish -> ()
             | `Continue k_arg -> Effect.Deep.continue k k_arg)
         | Recv (ch, handler) :: rest -> (
             match select_recv_spec k task scheduler canceled ch handler with
-            | `Loop -> loop k task scheduler canceled rest
+            | `Loop -> loop k task scheduler canceled default rest
             | `Finish -> ()
             | `Continue k_arg -> Effect.Deep.continue k k_arg)
 
       let f : type ty v b.
+          (unit -> b) option ->
           (ty, v, b) t ->
           (b, unit) continuation ->
           Scheduler.Task.t ->
           Scheduler.t ->
           unit =
-       fun specs k task scheduler ->
+       fun default specs k task scheduler ->
         let canceled = Atomic.make false in
-        loop k task scheduler canceled specs
+        loop k task scheduler canceled default specs
     end
   end
 
@@ -216,7 +221,9 @@ module Make (Scheduler : Scheduler.S) : S = struct
     | Wait_read : Unix.file_descr -> unit Effect.t
     | Send_to_channel : ('a * 'a Channel.t) -> unit Effect.t
     | Recv_from_channel : 'a Channel.t -> 'a Channel.recv_result Effect.t
-    | Select : ('ty, 'v, 'b) Channel.Select.t -> 'b Effect.t
+    | Select :
+        ((unit -> 'b) option * ('ty, 'v, 'b) Channel.Select.t)
+        -> 'b Effect.t
 
   module Io_waiter = struct
     type time = float
@@ -365,10 +372,12 @@ module Make (Scheduler : Scheduler.S) : S = struct
             | effect Wait_read fd, k ->
                 Io_waiter.enqueue_reading (upd_k task k ()) fd io_waiter
             | effect Send_to_channel (item, ch), k ->
-                Channel.Select.(f [ Send (ch, item, Fun.id) ]) k task scheduler
+                Channel.Select.(f None [ Send (ch, item, Fun.id) ])
+                  k task scheduler
             | effect Recv_from_channel ch, k ->
-                Channel.Select.(f [ Recv (ch, Fun.id) ]) k task scheduler
-            | effect Select specs, k -> Channel.Select.f specs k task scheduler);
+                Channel.Select.(f None [ Recv (ch, Fun.id) ]) k task scheduler
+            | effect Select (default, specs), k ->
+                Channel.Select.f default specs k task scheduler);
             loop ()
       in
       Util.expect_no_exn loop
@@ -432,7 +441,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
 
     let send v ch = Effect.perform (Send_to_channel (v, ch))
     let recv ch = Effect.perform (Recv_from_channel ch)
-    let select specs = Effect.perform (Select specs)
+    let select ?default specs = Effect.perform (Select (default, specs))
   end
 
   let global_instance = ref None
