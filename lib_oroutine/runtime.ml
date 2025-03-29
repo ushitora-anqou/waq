@@ -378,7 +378,11 @@ module Make (Scheduler : Scheduler.S) : S = struct
   end
 
   module Worker = struct
-    type t = { id : int; mutable dom : unit Domain.t option }
+    type t = {
+      id : int;
+      mutable dom : unit Domain.t option;
+      mutable last_exc : string option;
+    }
 
     let upd_k task k a =
       Scheduler.Task.with_k (fun () -> Effect.Deep.continue k a) task
@@ -390,6 +394,11 @@ module Make (Scheduler : Scheduler.S) : S = struct
         | `Ok task ->
             (match Scheduler.Task.k task () with
             | () -> ()
+            | exception e ->
+                Printf.eprintf "Exception not handled: %s\n%s%!"
+                  (Printexc.to_string e)
+                  (Printexc.get_backtrace ());
+                w.last_exc <- Some (Printexc.to_string e)
             | effect Get_worker_id, k -> Effect.Deep.continue k w.id
             | effect Yield, k ->
                 Scheduler.enqueue_runnable ~worker_id:w.id (upd_k task k ())
@@ -412,7 +421,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
       in
       Util.expect_no_exn loop
 
-    let make ~id = { id; dom = None }
+    let make ~id = { id; dom = None; last_exc = None }
 
     let spawn scheduler io_waiter w =
       match w.dom with
@@ -420,9 +429,10 @@ module Make (Scheduler : Scheduler.S) : S = struct
       | None -> w.dom <- Some (Domain.spawn (main scheduler io_waiter w))
 
     let join w =
-      match w.dom with
+      (match w.dom with
       | None -> failwith "worker is not started"
-      | Some dom -> Domain.join dom
+      | Some dom -> Domain.join dom);
+      w.last_exc |> Option.iter failwith
   end
 
   type t = { scheduler : Scheduler.t; workers : Worker.t list }
@@ -441,16 +451,22 @@ module Make (Scheduler : Scheduler.S) : S = struct
     r.workers |> List.iter (Worker.spawn r.scheduler io_waiter);
     let mutex = Mutex.create () in
     let cond = Condition.create () in
+    let finished = ref false in
     let final_result = ref None in
     r
     |> enqueue_task (fun () ->
+           Fun.protect ~finally:(fun () ->
+               Mutex.lock mutex;
+               finished := true;
+               Condition.signal cond;
+               Mutex.unlock mutex)
+           @@ fun () ->
            let result = f () in
            Mutex.lock mutex;
            final_result := Some result;
-           Condition.signal cond;
            Mutex.unlock mutex);
     Mutex.lock mutex;
-    while !final_result = None do
+    while not !finished do
       Condition.wait cond mutex
     done;
 
