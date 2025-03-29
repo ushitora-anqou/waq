@@ -58,7 +58,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
         (bool Atomic.t (* canceled? *) * ('a recv_result -> Scheduler.Task.t))
         Queue.t;
       pending_send :
-        (bool Atomic.t (* canceled? *) * 'a * Scheduler.Task.t) Queue.t;
+        (bool Atomic.t (* canceled? *) * ('a * Scheduler.Task.t)) Queue.t;
       bound_size : int;
     }
 
@@ -105,6 +105,18 @@ module Make (Scheduler : Scheduler.S) : S = struct
             ('a, 'b) spec * ('ty, 'v, 'b) t
             -> (('a, 'b) spec -> 'ty, 'v, 'b) t
 
+      let remove_canceled_tasks tasks =
+        let new_q = Queue.create () in
+        let rec loop () =
+          match Queue.take_opt tasks with
+          | None -> Queue.transfer new_q tasks
+          | Some (canceled, _) when Atomic.get canceled -> loop ()
+          | Some tupl ->
+              Queue.add tupl new_q;
+              loop ()
+        in
+        loop ()
+
       let select_send_spec k task scheduler canceled ch item handler =
         Mutex.lock ch.mutex;
         if ch.closed then (
@@ -113,6 +125,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
         else (
           check_invariant ch;
           if Queue.length ch.queued_items >= ch.bound_size then (
+            remove_canceled_tasks ch.pending_send;
             (* If the queue is full, add k and handler to ch.pending_send
              to block their process. Then, continue to iterate other specs. *)
             let task =
@@ -120,7 +133,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
               |> Scheduler.Task.with_k (fun () ->
                      Effect.Deep.continue k (handler ()))
             in
-            ch.pending_send |> Queue.add (canceled, item, task);
+            ch.pending_send |> Queue.add (canceled, (item, task));
             Mutex.unlock ch.mutex;
             `Loop)
           else
@@ -158,6 +171,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
         else (
           check_invariant ch;
           if Queue.length ch.queued_items = 0 then (
+            remove_canceled_tasks ch.pending_recv;
             let task item =
               (* Note that ch.mutex isn't necessarily locked in this function. *)
               task
@@ -176,7 +190,7 @@ module Make (Scheduler : Scheduler.S) : S = struct
                 let rec resolve_pending_send () =
                   match Queue.take_opt ch.pending_send with
                   | None -> ()
-                  | Some (canceled, item, task) -> (
+                  | Some (canceled, (item, task)) -> (
                       match Atomic.compare_and_set canceled false true with
                       | false -> resolve_pending_send ()
                       | true ->
