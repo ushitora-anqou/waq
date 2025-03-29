@@ -152,7 +152,9 @@ module Make (Scheduler : Scheduler.S) : S = struct
         Mutex.lock ch.mutex;
         if ch.closed then (
           Mutex.unlock ch.mutex;
-          `Continue (handler (Error `Closed)))
+          if Atomic.compare_and_set canceled false true then
+            `Continue (handler (Error `Closed))
+          else `Finish)
         else (
           check_invariant ch;
           if Queue.length ch.queued_items = 0 then (

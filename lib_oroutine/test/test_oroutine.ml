@@ -188,9 +188,11 @@ let test_channel_close_case2 () =
   initialize @@ fun () ->
   let ch1 = Chan.make 1 in
   let ch2 = Chan.make 1 in
-  Chan.close ch1;
+  Chan.close ch2;
   let v = Chan.select [ Recv (ch1, fun _ -> 1); Recv (ch2, fun _ -> 2) ] in
-  assert (v = 1);
+  Chan.send 1 ch1;
+  assert (v = 2);
+  sleep_short_time ();
   ()
 
 let test_channel_close_case3 () =
@@ -212,6 +214,11 @@ let () =
       ( "entrypoint",
         [ test_case "entrypoint" `Quick (fun () -> Oroutine.entrypoint ()) ] );
         *)
+      ( "basics",
+        [
+          test_case "case 1" `Quick test_basics_case1;
+          test_case "case 2" `Quick test_basics_case2;
+        ] );
       ( "select",
         [
           test_case "case 1" `Quick test_select_case1;
@@ -220,11 +227,6 @@ let () =
           test_case "case 4" `Quick test_select_case4;
           test_case "case 5" `Quick test_select_case5;
           test_case "default" `Quick test_select_default;
-        ] );
-      ( "basics",
-        [
-          test_case "case 1" `Quick test_basics_case1;
-          test_case "case 2" `Quick test_basics_case2;
         ] );
       ("net", [ test_case "case 1" `Quick test_net_case1 ]);
       ( "channel close",
