@@ -10,3 +10,7 @@ let genid =
   fun () -> Atomic.fetch_and_add next_id 1
 
 let traceln fmt = Printf.ksprintf (fun s -> Printf.eprintf "%s\n%!" s) fmt
+
+exception Unreachable of string
+
+let unreachable ~__FUNCTION__:msg = raise (Unreachable msg)

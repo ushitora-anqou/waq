@@ -1,5 +1,7 @@
 open Oroutine
 
+[@@@warning "-32"]
+
 let ( *> ) f g a = g (f a)
 
 let write fd buf =
@@ -13,7 +15,7 @@ let write fd buf =
 
 let sleep_short_time () = sleep_s 0.01
 
-let test_select_case1 () =
+let test_channel_case1 () =
   initialize @@ fun () ->
   let ch = Chan.make 2 in
   Chan.send 42 ch;
@@ -26,7 +28,7 @@ let test_select_case1 () =
   assert (Chan.recv ch |> Result.get_ok = 10);
   ()
 
-let test_select_case2 () =
+let test_channel_case2 () =
   initialize @@ fun () ->
   let ch1 = Chan.make 1 in
   let ch2 = Chan.make 1 in
@@ -39,6 +41,22 @@ let test_select_case2 () =
   assert (Chan.recv ch2 |> Result.get_ok = 2);
   Chan.send 3 ch1;
   assert (Chan.recv ch2 |> Result.get_ok = 4);
+  ()
+
+let test_channel_size_zero () =
+  initialize @@ fun () ->
+  let ch = Chan.make 0 in
+  go (fun () -> Chan.send "a" ch);
+  assert (Chan.recv ch = Ok "a");
+  go (fun () -> Chan.recv ch |> Result.get_ok |> fun x -> Chan.send x ch);
+  Chan.send "b" ch;
+  assert (Chan.recv ch = Ok "b");
+
+  let ch' = Chan.make 0 in
+  go (fun () -> Chan.recv ch |> Result.get_error |> fun x -> Chan.send x ch');
+  Chan.close ch;
+  assert (Chan.recv ch' = Ok `Closed);
+  assert (Chan.recv ch = Error `Closed);
   ()
 
 let test_select_case3 () =
@@ -215,10 +233,14 @@ let () =
           test_case "case 1" `Quick test_basics_case1;
           test_case "case 2" `Quick test_basics_case2;
         ] );
+      ( "channel",
+        [
+          test_case "case 1" `Quick test_channel_case1;
+          test_case "case 2" `Quick test_channel_case2;
+          test_case "size zero" `Quick test_channel_size_zero;
+        ] );
       ( "select",
         [
-          test_case "case 1" `Quick test_select_case1;
-          test_case "case 2" `Quick test_select_case2;
           test_case "case 3" `Quick test_select_case3;
           test_case "case 4" `Quick test_select_case4;
           test_case "case 5" `Quick test_select_case5;
