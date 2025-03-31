@@ -210,10 +210,6 @@ let () =
   let open Alcotest in
   run "oroutine"
     [
-      (*
-      ( "entrypoint",
-        [ test_case "entrypoint" `Quick (fun () -> Oroutine.entrypoint ()) ] );
-        *)
       ( "basics",
         [
           test_case "case 1" `Quick test_basics_case1;
