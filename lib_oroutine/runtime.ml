@@ -89,8 +89,7 @@ module Channel = struct
       loop ()
 
     let select_send_spec k task scheduler canceled ch item handler =
-      Mutex.lock ch.mutex;
-      Fun.protect ~finally:(fun () -> Mutex.unlock ch.mutex) @@ fun () ->
+      Mutex.protect ch.mutex @@ fun () ->
       if ch.closed then
         failwith "Channel.Select.select_send_spec: closed channel"
       else (
@@ -164,8 +163,7 @@ module Channel = struct
         | _ -> Util.unreachable ~__FUNCTION__)
 
     let select_recv_spec k task scheduler canceled ch handler =
-      Mutex.lock ch.mutex;
-      Fun.protect ~finally:(fun () -> Mutex.unlock ch.mutex) @@ fun () ->
+      Mutex.protect ch.mutex @@ fun () ->
       if ch.closed then
         if Atomic.compare_and_set canceled false true then
           `Continue (handler (Error `Closed))
