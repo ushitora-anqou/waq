@@ -224,6 +224,19 @@ let test_channel_close_case3 () =
   assert (v = 1);
   ()
 
+let test_mtx_basics () =
+  initialize @@ fun () ->
+  let mtx = Mtx.create () in
+  Mtx.lock mtx;
+  assert (not (Mtx.try_lock mtx));
+  Mtx.unlock mtx;
+  assert (Mtx.try_lock mtx);
+  Mtx.unlock mtx;
+  (try Mtx.protect mtx (fun () -> failwith "test") with Failure _ -> ());
+  assert (Mtx.try_lock mtx);
+  Mtx.unlock mtx;
+  ()
+
 let () =
   let open Alcotest in
   run "oroutine"
@@ -253,4 +266,5 @@ let () =
           test_case "case 2" `Quick test_channel_close_case2;
           test_case "case 3" `Quick test_channel_close_case3;
         ] );
+      ("mtx", [ test_case "basics" `Quick test_mtx_basics ]);
     ]
