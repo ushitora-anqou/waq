@@ -237,6 +237,25 @@ let test_mtx_basics () =
   Mtx.unlock mtx;
   ()
 
+let test_context_basics () =
+  initialize @@ fun () ->
+  let ctxt = Context.background () in
+  Context.with_cancel ctxt @@ fun (ctxt', cancel) ->
+  Context.with_cancel ctxt' @@ fun (ctxt'', _cancel') ->
+  assert (
+    Chan.select ~default:(Fun.const true)
+      [ Recv (Context.done_ ctxt', Fun.const false) ]);
+  go (fun () -> cancel ());
+  assert (Chan.recv (Context.done_ ctxt') = Error `Closed);
+  assert (Chan.recv (Context.done_ ctxt'') = Error `Closed);
+  assert (
+    Chan.select ~default:(Fun.const false)
+      [ Recv (Context.done_ ctxt', Fun.const true) ]);
+  assert (
+    Chan.select ~default:(Fun.const true)
+      [ Recv (Context.done_ ctxt, Fun.const false) ]);
+  ()
+
 let () =
   let open Alcotest in
   run "oroutine"
@@ -267,4 +286,5 @@ let () =
           test_case "case 3" `Quick test_channel_close_case3;
         ] );
       ("mtx", [ test_case "basics" `Quick test_mtx_basics ]);
+      ("context", [ test_case "basics" `Quick test_context_basics ]);
     ]
