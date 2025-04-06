@@ -12,6 +12,7 @@ module Internal = struct
   let listen () = getenv ~default:"127.0.0.1:8000" "LISTEN"
   let server_name () = getenv ~default:"" "SERVER_NAME"
   let db_url () = getenv ~default:"" "DB_URL"
+  let db_pool_size () = getenv ~default:"10" "DB_POOL_SIZE"
 
   let not_found_avatar_url () =
     getenv ~default:"/avatars/original/missing.png" "NOT_FOUND_AVATAR_URL"
@@ -49,6 +50,7 @@ let is_my_domain s =
   s = server_name ()
 
 let db_url () = Internal.db_url ()
+let db_pool_size () = Internal.db_pool_size () |> int_of_string
 let static_root () = Internal.static_root ()
 
 let url (l : string list) =
@@ -114,6 +116,7 @@ let to_list () =
       ("listen", listen ());
       ("server_name", server_name ());
       ("db_url", db_url ());
+      ("db_pool_size", db_pool_size ());
       ("not_found_avatar_url", not_found_avatar_url ());
       ("not_found_header_url", not_found_header_url ());
       ("default_avatar_url", default_avatar_url ());
