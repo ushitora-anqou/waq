@@ -28,14 +28,20 @@ end
 
 module Make (D : Driver) = struct
   module Internal = struct
-    type connection = D.connection
+    type connection = { conn : D.connection; started_at : float }
     type connection_pool = connection Lwt_pool.t
 
     let connect_pool n uri =
-      let validate = D.validate in
-      let check = D.check in
-      let dispose = D.disconnect in
-      Lwt_pool.create n ~validate ~check ~dispose (fun () -> D.connect uri)
+      let validate c =
+        let d = Unix.gettimeofday () -. c.started_at in
+        if d >= 500.0 (* don't use old connections *) then Lwt.return_false
+        else D.validate c.conn
+      in
+      let check c = D.check c.conn in
+      let dispose c = D.disconnect c.conn in
+      Lwt_pool.create n ~validate ~check ~dispose (fun () ->
+          let%lwt conn = D.connect uri in
+          Lwt.return { conn; started_at = Unix.gettimeofday () })
 
     let use : connection_pool -> (connection -> 'a Lwt.t) -> 'a Lwt.t =
       Lwt_pool.use
@@ -67,14 +73,14 @@ module Make (D : Driver) = struct
     let execute ?(p = []) (c : connection) (sql : string) : unit Lwt.t =
       let p = p |> List.map Value.normalize in
       log sql p;
-      let%lwt stmt = D.prepare c sql in
-      D.execute_stmt c stmt p
+      let%lwt stmt = D.prepare c.conn sql in
+      D.execute_stmt c.conn stmt p
 
     let query ?(p = []) c sql =
       let p = p |> List.map Value.normalize in
       log sql p;
-      let%lwt stmt = D.prepare c sql in
-      D.query_stmt c stmt p
+      let%lwt stmt = D.prepare c.conn sql in
+      D.query_stmt c.conn stmt p
 
     let query_row ?(p = []) (c : connection) (sql : string) :
         single_query_result Lwt.t =
@@ -112,7 +118,7 @@ module Make (D : Driver) = struct
 
     let transaction (c : connection) (f : unit -> unit Lwt.t) : bool Lwt.t =
       log "BEGIN TRANSACTION" [];
-      D.transaction c f >|= fun r ->
+      D.transaction c.conn f >|= fun r ->
       if r then log "COMMIT TRANSACTION" [] else log "ROLLBACK TRANSACTION" [];
       r
   end
