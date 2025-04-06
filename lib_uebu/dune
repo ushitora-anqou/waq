@@ -1,0 +1,4 @@
+(library
+ (name uebu)
+ (libraries
+  oroutine))
