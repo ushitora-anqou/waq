@@ -171,8 +171,8 @@ module Make (D : Driver) = struct
 
   let global_pool = ref None
 
-  let initialize url =
-    let pool = Internal.connect_pool 10 url in
+  let initialize ?(pool_size = 10) url =
+    let pool = Internal.connect_pool pool_size url in
     global_pool := Some pool
 
   let e q =

@@ -56,7 +56,9 @@ let register_user ~username ~display_name ~email ~password =
   in
   Lwt.return (a, u)
 
-let initialize () = initialize (Config.db_url ())
+let initialize () =
+  initialize ~pool_size:(Config.db_pool_size ()) (Config.db_url ())
+
 let transaction f = e (fun c -> c#transaction f)
 
 let e x =
