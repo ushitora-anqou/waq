@@ -1,8 +1,62 @@
-module Rfc1945 = struct
-  (*
-    RFC 1945 https://www.rfc-editor.org/rfc/rfc1945.html
-      HTTP/0.9 and HTTP/1.0
-  *)
+module type Reader = sig
+  type t
+  type error = [ `Eof ]
+
+  val peek_char : t -> (char, error) result
+  val pop_char : t -> (char, error) result
+end
+
+(*
+  RFC 1945 https://www.rfc-editor.org/rfc/rfc1945.html
+    HTTP/0.9 and HTTP/1.0
+*)
+module Rfc1945 (Reader : Reader) = struct
+  module R = struct
+    type t = { r : Reader.t }
+    type error = [ `Eof | `Unexpected_char ]
+
+    let make ~reader = { r = reader }
+    let map_error = Result.map_error (fun e -> (e :> error))
+    let ( let* ) = Result.bind
+
+    let check checks chr =
+      let rec aux = function
+        | [] -> Error `Unexpected_char
+        | check :: checks -> (
+            match check chr with Ok _ -> Ok chr | Error _ -> aux checks)
+      in
+      aux checks
+
+    let map_check checks x = Result.bind x (check checks)
+
+    let check_char chr =
+      let code = Char.code chr in
+      if 0 <= code && code <= 127 then Ok chr else Error `Unexpected_char
+
+    let check_upalpha chr =
+      let code = Char.code chr in
+      if Char.code 'A' <= code && code <= Char.code 'Z' then Ok chr
+      else Error `Unexpected_char
+
+    let check_loalpha chr =
+      let code = Char.code chr in
+      if Char.code 'a' <= code && code <= Char.code 'z' then Ok chr
+      else Error `Unexpected_char
+
+    let peek_octet r = Reader.peek_char r.r |> map_error
+    let pop_octet r = Reader.pop_char r.r |> map_error
+    let peek_char r = peek_octet r |> map_check [ check_char ]
+    let pop_char r = pop_octet r |> map_check [ check_char ]
+    let peek_upalpha r = peek_octet r |> map_check [ check_upalpha ]
+    let pop_upalpha r = pop_octet r |> map_check [ check_upalpha ]
+    let peek_loalpha r = peek_octet r |> map_check [ check_loalpha ]
+    let pop_loalpha r = pop_octet r |> map_check [ check_loalpha ]
+
+    let peek_alpha r =
+      peek_octet r |> map_check [ check_loalpha; check_upalpha ]
+
+    let pop_alpha r = pop_octet r |> map_check [ check_loalpha; check_upalpha ]
+  end
 
   module URI = struct
     type scheme = string (* 1*( ALPHA | DIGIT | "+" | "-" | "." ) *)
