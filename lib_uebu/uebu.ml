@@ -1,39 +1,145 @@
-(*
-  RFC 1945 https://www.rfc-editor.org/rfc/rfc1945.html
-    HTTP/1.0
-*)
-module HTTP10 = struct
+module Rfc1945 = struct
+  (*
+    RFC 1945 https://www.rfc-editor.org/rfc/rfc1945.html
+      HTTP/0.9 and HTTP/1.0
+  *)
+
   module URI = struct
-    type absolute_uri = unit (* FIXME *)
-    type abs_path = unit (* FIXME *)
+    type scheme = string (* 1*( ALPHA | DIGIT | "+" | "-" | "." ) *)
+    type absolute_uri = scheme * string (* scheme ":" *( uchar | reserved ) *)
+    type segment = string (* *pchar *)
+    type fsegment = string (* 1*pchar *)
+    type path = fsegment * segment list (* fsegment *( "/" segment ) *)
+    type param = string (* *( pchar | "/" ) *)
+    type params = param list (* param *( ";" param ) *)
+    type query = string (* *( uchar | reserved ) *)
+
+    type rel_path =
+      path option
+      * params option
+      * query option (* [ path ] [ ";" params ] [ "?" query ] *)
+
+    type abs_path = rel_path (* "/" rel_path *)
+    type net_loc = string (* *( pchar | ";" | "?" ) *)
+    type net_path = net_loc * abs_path option (* "//" net_loc [ abs_path ] *)
+
+    type relative_uri =
+      [ `Net_path of net_path | `Abs_path of abs_path | `Rel_path of rel_path ]
+    (* net_path | abs_path | rel_path *)
+
+    type fragment = string (* *( uchar | reserved ) *)
+
+    type t =
+      [ `Absolute_uri of absolute_uri | `Relative_uri of relative_uri ]
+      * fragment option
+    (* URI = ( absoluteURI | relativeURI ) [ "#" fragment ] *)
+  end
+
+  type token = string (* any CHAR except CTLs or tspecials *)
+
+  module Media_type = struct
+    type type_ = token
+    type subtype = token
+    type attribute = token
+    type value = string (* token | quoted-string *)
+    type parameter = attribute * value (* attribute "=" value *)
+    type t = type_ * subtype * parameter list
+    (* media-type = type "/" subtype *( ";" parameter ) *)
+  end
+
+  module Http_date = struct
+    type month =
+      [ `Jan
+      | `Feb
+      | `Mar
+      | `Apr
+      | `May
+      | `Jun
+      | `Jul
+      | `Aug
+      | `Sep
+      | `Oct
+      | `Nov
+      | `Dec ]
+
+    type date1 = int * month * int (* 2DIGIT SP month SP 4DIGIT *)
+    type date2 = int * month * int (* 2DIGIT "-" month "-" 2DIGIT *)
+    type date3 = month * int (* month SP ( 2DIGIT | ( SP 1DIGIT )) *)
+    type wkday = [ `Mon | `Tue | `Wed | `Thu | `Fri | `Sat | `Sun ]
+    (*  "Mon" | "Tue" | "Wed"
+      | "Thu" | "Fri" | "Sat" | "Sun" *)
+
+    type weekday = wkday
+    (*  "Monday" | "Tuesday" | "Wednesday"
+      | "Thursday" | "Friday" | "Saturday" | "Sunday" *)
+
+    type time = int * int * int (* 2DIGIT ":" 2DIGIT ":" 2DIGIT *)
+
+    type rfc1123_date =
+      wkday * date1 * time (* wkday "," SP date1 SP time SP "GMT" *)
+
+    type rfc850_date =
+      weekday * date2 * time (* weekday "," SP date2 SP time SP "GMT" *)
+
+    type asctime_date =
+      wkday * date3 * time * int (* wkday SP date3 SP time SP 4DIGIT *)
+
+    type t =
+      [ `Rfc1123_date of rfc1123_date
+      | `Rfc850_date of rfc850_date
+      | `Asctime_date of asctime_date ]
+    (* HTTP-date = rfc1123-date | rfc850-date | asctime-date *)
   end
 
   module Message = struct
-    type token = string
+    type word = string (* token | quoted-string *)
     type field_name = token
     type field_value = string (* *( field-content | LWS ) *)
     type http_header = field_name * field_value option
-    type general_header = [ `Date | `Pragma ]
+
+    type pragma_directive =
+      [ `No_cache | `Extension_pragma of token * word option ]
+
+    type general_header =
+      [ `Date of Http_date.t | `Pragma of pragma_directive list (* non empty *) ]
+
     type entity_body = bytes
+    type method_ = [ `Get | `Head | `Post | `Extension_method of token ]
+    type content_coding = [ `X_gzip | `X_compress | `Content_coding of token ]
 
     type entity_header =
-      [ `Allow
-      | `Content_encoding
-      | `Content_length
-      | `Content_type
-      | `Expires
-      | `Last_modified
+      [ `Allow of method_ list (* non empty *)
+      | `Content_encoding of content_coding
+      | `Content_length of int
+      | `Content_type of Media_type.t
+      | `Expires of Http_date.t option (* "expires immediately" if None *)
+      | `Last_modified of Http_date.t
       | `Extension_header of http_header ]
 
     type request_uri =
       [ `Absolute_uri of URI.absolute_uri | `Abs_path of URI.abs_path ]
 
-    type method_ = [ `Get | `Head | `Post | `Extension_method of token ]
     type http_version = [ `HTTP_10 ]
     type request_line = method_ * request_uri * http_version
+    type auth_scheme = token
+    type auth_param = token * string
+    type userid_password = token (* user-ID *) * string (* password *)
+    type basic_cookie = userid_password (* base64 encoding *)
+    type basic_credentials = basic_cookie
+
+    type credentials =
+      [ `Basic_credentials of basic_credentials
+      | `Credential of auth_scheme * auth_param list ]
+
+    type mailbox = string
 
     type request_header =
-      [ `Authorization | `From | `If_modified_since | `Referer | `User_agent ]
+      [ `Authorization of credentials
+      | `From of mailbox
+      | `If_modified_since of Http_date.t
+      | `Referer of
+        [ `Absolute_uri of URI.absolute_uri | `Relative_uri of URI.relative_uri ]
+      | `User_agent of string ]
 
     type request =
       [ `Simple_request of request_uri
@@ -62,7 +168,14 @@ module HTTP10 = struct
 
     type reason_phrase = string
     type status_line = http_version * status_code * reason_phrase
-    type response_header = [ `Location | `Server | `WWW_authenticate ]
+    type realm_value = string
+    type realm = realm_value
+    type challenge = auth_scheme * realm * auth_param list
+
+    type response_header =
+      [ `Location of URI.absolute_uri
+      | `Server of string
+      | `WWW_authenticate of challenge list (* non empty *) ]
 
     type response =
       [ `Simple_response of entity_body option
