@@ -102,6 +102,60 @@ let test_r_alpha () =
   assert (R.pop_alpha r = Error `Unexpected_char);
   ()
 
+let test_r_digit () =
+  let reader = Fake_reader.make ~src:"09" in
+  let r = R.make ~reader in
+  assert (R.peek_digit r = Ok '0');
+  assert (R.pop_digit r = Ok '0');
+  assert (R.peek_digit r = Ok '9');
+  assert (R.pop_digit r = Ok '9');
+  assert (R.peek_digit r = Error `Eof);
+  assert (R.pop_digit r = Error `Eof);
+
+  let reader = Fake_reader.make ~src:"09a" in
+  let r = R.make ~reader in
+  assert (R.pop_digit r = Ok '0');
+  assert (R.pop_digit r = Ok '9');
+  assert (R.peek_digit r = Error `Unexpected_char);
+  assert (R.pop_digit r = Error `Unexpected_char);
+  ()
+
+let test_r_ctl () =
+  let reader = Fake_reader.make ~src:"\x00\x1f\x7f" in
+  let r = R.make ~reader in
+  assert (R.peek_ctl r = Ok '\x00');
+  assert (R.pop_ctl r = Ok '\x00');
+  assert (R.peek_ctl r = Ok '\x1f');
+  assert (R.pop_ctl r = Ok '\x1f');
+  assert (R.peek_ctl r = Ok '\x7f');
+  assert (R.pop_ctl r = Ok '\x7f');
+  assert (R.peek_ctl r = Error `Eof);
+  assert (R.pop_ctl r = Error `Eof);
+
+  let reader = Fake_reader.make ~src:"\x00\x1f\x7fa" in
+  let r = R.make ~reader in
+  assert (R.pop_ctl r = Ok '\x00');
+  assert (R.pop_ctl r = Ok '\x1f');
+  assert (R.pop_ctl r = Ok '\x7f');
+  assert (R.peek_ctl r = Error `Unexpected_char);
+  assert (R.pop_ctl r = Error `Unexpected_char);
+  ()
+
+let test_r_misc () =
+  let reader = Fake_reader.make ~src:"\x0d\x0a\x20\x09\x22" in
+  let r = R.make ~reader in
+  assert (R.peek_cr r = Ok '\x0d');
+  assert (R.pop_cr r = Ok '\x0d');
+  assert (R.peek_lf r = Ok '\x0a');
+  assert (R.pop_lf r = Ok '\x0a');
+  assert (R.peek_sp r = Ok '\x20');
+  assert (R.pop_sp r = Ok '\x20');
+  assert (R.peek_ht r = Ok '\x09');
+  assert (R.pop_ht r = Ok '\x09');
+  assert (R.peek_double_quote r = Ok '\x22');
+  assert (R.pop_double_quote r = Ok '\x22');
+  ()
+
 let () =
   let open Alcotest in
   run "uebu"
@@ -113,5 +167,8 @@ let () =
           test_case "upalpha" `Quick test_r_upalpha;
           test_case "loalpha" `Quick test_r_loalpha;
           test_case "alpha" `Quick test_r_alpha;
+          test_case "digit" `Quick test_r_digit;
+          test_case "ctl" `Quick test_r_ctl;
+          test_case "misc" `Quick test_r_misc;
         ] );
     ]

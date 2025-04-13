@@ -22,40 +22,51 @@ module Rfc1945 (Reader : Reader) = struct
     let check checks chr =
       let rec aux = function
         | [] -> Error `Unexpected_char
-        | check :: checks -> (
-            match check chr with Ok _ -> Ok chr | Error _ -> aux checks)
+        | check :: checks ->
+            if check (Char.code chr) then Ok chr else aux checks
       in
       aux checks
 
     let map_check checks x = Result.bind x (check checks)
-
-    let check_char chr =
-      let code = Char.code chr in
-      if 0 <= code && code <= 127 then Ok chr else Error `Unexpected_char
-
-    let check_upalpha chr =
-      let code = Char.code chr in
-      if Char.code 'A' <= code && code <= Char.code 'Z' then Ok chr
-      else Error `Unexpected_char
-
-    let check_loalpha chr =
-      let code = Char.code chr in
-      if Char.code 'a' <= code && code <= Char.code 'z' then Ok chr
-      else Error `Unexpected_char
-
+    let is_char code = 0 <= code && code <= 127
+    let is_upalpha code = Char.code 'A' <= code && code <= Char.code 'Z'
+    let is_loalpha code = Char.code 'a' <= code && code <= Char.code 'z'
+    let is_digit code = Char.code '0' <= code && code <= Char.code '9'
+    let is_ctl code = (0 <= code && code <= 31) || code = 127
+    let is_cr = ( = ) 13
+    let is_lf = ( = ) 10
+    let is_sp = ( = ) 32
+    let is_ht = ( = ) 9
+    let is_double_quote = ( = ) 34
     let peek_octet r = Reader.peek_char r.r |> map_error
     let pop_octet r = Reader.pop_char r.r |> map_error
-    let peek_char r = peek_octet r |> map_check [ check_char ]
-    let pop_char r = pop_octet r |> map_check [ check_char ]
-    let peek_upalpha r = peek_octet r |> map_check [ check_upalpha ]
-    let pop_upalpha r = pop_octet r |> map_check [ check_upalpha ]
-    let peek_loalpha r = peek_octet r |> map_check [ check_loalpha ]
-    let pop_loalpha r = pop_octet r |> map_check [ check_loalpha ]
+    let peek_char r = peek_octet r |> map_check [ is_char ]
+    let pop_char r = pop_octet r |> map_check [ is_char ]
+    let peek_upalpha r = peek_octet r |> map_check [ is_upalpha ]
+    let pop_upalpha r = pop_octet r |> map_check [ is_upalpha ]
+    let peek_loalpha r = peek_octet r |> map_check [ is_loalpha ]
+    let pop_loalpha r = pop_octet r |> map_check [ is_loalpha ]
+    let peek_alpha r = peek_octet r |> map_check [ is_loalpha; is_upalpha ]
+    let pop_alpha r = pop_octet r |> map_check [ is_loalpha; is_upalpha ]
+    let peek_digit r = peek_octet r |> map_check [ is_digit ]
+    let pop_digit r = pop_octet r |> map_check [ is_digit ]
+    let peek_ctl r = peek_octet r |> map_check [ is_ctl ]
+    let pop_ctl r = pop_octet r |> map_check [ is_ctl ]
+    let peek_cr r = peek_octet r |> map_check [ is_cr ]
+    let pop_cr r = pop_octet r |> map_check [ is_cr ]
+    let peek_lf r = peek_octet r |> map_check [ is_lf ]
+    let pop_lf r = pop_octet r |> map_check [ is_lf ]
+    let peek_sp r = peek_octet r |> map_check [ is_sp ]
+    let pop_sp r = pop_octet r |> map_check [ is_sp ]
+    let peek_ht r = peek_octet r |> map_check [ is_ht ]
+    let pop_ht r = pop_octet r |> map_check [ is_ht ]
+    let peek_double_quote r = peek_octet r |> map_check [ is_double_quote ]
+    let pop_double_quote r = pop_octet r |> map_check [ is_double_quote ]
 
-    let peek_alpha r =
-      peek_octet r |> map_check [ check_loalpha; check_upalpha ]
-
-    let pop_alpha r = pop_octet r |> map_check [ check_loalpha; check_upalpha ]
+    let expect_crlf r =
+      let* _ = pop_cr r in
+      let* _ = pop_lf r in
+      Ok ()
   end
 
   module URI = struct
