@@ -33,6 +33,5 @@ let get env req =
         ~id:(acc#id |> Model.Account.ID.to_int |> string_of_int)
         ~username ~acct ~display_name:acc#display_name
     in
-    [ ent ] |> yojson_of_t |> Yojson.Safe.to_string
-    |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]
+    [ ent ] |> yojson_of_t |> Helper.respond_yojson
   with _ -> Yume.Server.raise_error_response `Not_found

@@ -24,5 +24,4 @@ let post _ req =
     ~client_secret:app#secret
     ~vapid_key:(Config.vapid_public_key ())
     ()
-  |> yojson_of_res |> Yojson.Safe.to_string
-  |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> yojson_of_res |> Helper.respond_yojson

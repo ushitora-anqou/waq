@@ -9,9 +9,7 @@ let content_type_app_xrd_xml =
 let content_type_app_jrd_json =
   (`Content_type, "application/jrd+json; charset=utf-8")
 
-let content_type_app_json = (`Content_type, "application/json; charset=utf-8")
 let content_type_app_activity_json = (`Content_type, "application/activity+json")
-let content_type_text_html = (`Content_type, "text/html; charset=utf-8")
 let raise_error_response = Yume.Server.raise_error_response
 
 let authenticate_bearer = function
@@ -53,12 +51,8 @@ let bool_of_string s =
   | None -> raise_error_response `Bad_request
   | Some b -> b
 
-let respond_html ?(headers = []) s =
-  Yume.Server.respond ~headers:(content_type_text_html :: headers) s
-
-let respond_yojson ?(headers = []) y =
-  Yojson.Safe.to_string y
-  |> Yume.Server.respond ~headers:(content_type_app_json :: headers)
+let respond_html = Yume.Server.respond_html
+let respond_yojson = Yume.Server.respond_yojson
 
 let respond_activity_yojson y =
   Yojson.Safe.to_string y

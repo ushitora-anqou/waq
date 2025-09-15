@@ -49,5 +49,4 @@ let post _ req =
   make_res ~access_token:token#token ~token_type:"Bearer" ~scope
     ~created_at:
       (token#created_at |> Ptime.to_span |> Ptime.Span.to_int_s |> Option.get)
-  |> yojson_of_res |> Yojson.Safe.to_string
-  |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> yojson_of_res |> Helper.respond_yojson

@@ -13,8 +13,7 @@ let get _ req =
     with Sqlx.Error.NoRowFound -> Yume.Server.raise_error_response `Not_found
   in
   let s = make_status_from_model ?self_id s in
-  s |> yojson_of_status |> Yojson.Safe.to_string
-  |> Yume.Server.respond ~headers:[ content_type_app_json ]
+  s |> yojson_of_status |> Helper.respond_yojson
 
 (* Recv POST /api/v1/statuses *)
 let post env req =
@@ -86,8 +85,7 @@ let post env req =
 
   (* Return the result to the client *)
   let s = make_status_from_model ~self_id:self#id s in
-  s |> yojson_of_status |> Yojson.Safe.to_string
-  |> Yume.Server.respond ~headers:[ content_type_app_json ]
+  s |> yojson_of_status |> Helper.respond_yojson
 
 let delete env req =
   let self = authenticate_account req in
