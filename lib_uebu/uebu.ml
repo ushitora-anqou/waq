@@ -1,74 +1,8 @@
-module type Reader = sig
-  type t
-  type error = [ `Eof ]
-
-  val peek_char : t -> (char, error) result
-  val pop_char : t -> (char, error) result
-end
-
 (*
   RFC 1945 https://www.rfc-editor.org/rfc/rfc1945.html
     HTTP/0.9 and HTTP/1.0
 *)
-module Rfc1945 (Reader : Reader) = struct
-  module R = struct
-    type t = { r : Reader.t }
-    type error = [ `Eof | `Unexpected_char ]
-
-    let make ~reader = { r = reader }
-    let map_error = Result.map_error (fun e -> (e :> error))
-    let ( let* ) = Result.bind
-
-    let check checks chr =
-      let rec aux = function
-        | [] -> Error `Unexpected_char
-        | check :: checks ->
-            if check (Char.code chr) then Ok chr else aux checks
-      in
-      aux checks
-
-    let map_check checks x = Result.bind x (check checks)
-    let is_char code = 0 <= code && code <= 127
-    let is_upalpha code = Char.code 'A' <= code && code <= Char.code 'Z'
-    let is_loalpha code = Char.code 'a' <= code && code <= Char.code 'z'
-    let is_digit code = Char.code '0' <= code && code <= Char.code '9'
-    let is_ctl code = (0 <= code && code <= 31) || code = 127
-    let is_cr = ( = ) 13
-    let is_lf = ( = ) 10
-    let is_sp = ( = ) 32
-    let is_ht = ( = ) 9
-    let is_double_quote = ( = ) 34
-    let peek_octet r = Reader.peek_char r.r |> map_error
-    let pop_octet r = Reader.pop_char r.r |> map_error
-    let peek_char r = peek_octet r |> map_check [ is_char ]
-    let pop_char r = pop_octet r |> map_check [ is_char ]
-    let peek_upalpha r = peek_octet r |> map_check [ is_upalpha ]
-    let pop_upalpha r = pop_octet r |> map_check [ is_upalpha ]
-    let peek_loalpha r = peek_octet r |> map_check [ is_loalpha ]
-    let pop_loalpha r = pop_octet r |> map_check [ is_loalpha ]
-    let peek_alpha r = peek_octet r |> map_check [ is_loalpha; is_upalpha ]
-    let pop_alpha r = pop_octet r |> map_check [ is_loalpha; is_upalpha ]
-    let peek_digit r = peek_octet r |> map_check [ is_digit ]
-    let pop_digit r = pop_octet r |> map_check [ is_digit ]
-    let peek_ctl r = peek_octet r |> map_check [ is_ctl ]
-    let pop_ctl r = pop_octet r |> map_check [ is_ctl ]
-    let peek_cr r = peek_octet r |> map_check [ is_cr ]
-    let pop_cr r = pop_octet r |> map_check [ is_cr ]
-    let peek_lf r = peek_octet r |> map_check [ is_lf ]
-    let pop_lf r = pop_octet r |> map_check [ is_lf ]
-    let peek_sp r = peek_octet r |> map_check [ is_sp ]
-    let pop_sp r = pop_octet r |> map_check [ is_sp ]
-    let peek_ht r = peek_octet r |> map_check [ is_ht ]
-    let pop_ht r = pop_octet r |> map_check [ is_ht ]
-    let peek_double_quote r = peek_octet r |> map_check [ is_double_quote ]
-    let pop_double_quote r = pop_octet r |> map_check [ is_double_quote ]
-
-    let expect_crlf r =
-      let* _ = pop_cr r in
-      let* _ = pop_lf r in
-      Ok ()
-  end
-
+module Rfc1945 = struct
   module URI = struct
     type scheme = string (* 1*( ALPHA | DIGIT | "+" | "-" | "." ) *)
     type absolute_uri = scheme * string (* scheme ":" *( uchar | reserved ) *)
@@ -250,5 +184,59 @@ module Rfc1945 (Reader : Reader) = struct
         * entity_body option ]
 
     type http_message = [ request | response ]
+
+    module Parser = struct
+      let ( .%[] ) = Bytes.get
+
+      let is_invalid_method_octet ch =
+        (* FIXME: too strict according to RFC 1945? *)
+        (ch < 'A' || ch > 'Z') && ch <> '_' && ch <> '-'
+
+      type state = {
+        mutable state : [ `Start | `Method | `Spaces_before_uri ];
+        mutable request_start : int;
+        mutable method_ : method_ option;
+      }
+
+      let parse_request_line buf =
+        let method_ = ref None in
+        (* FIXME: should we avoid boxing of state for better performance? *)
+        let rec loop i state =
+          let ch = buf.%[i] in
+          match state with
+          | `Start when ch = '\r' || ch = '\n' -> loop (i + 1) state
+          | `Start when is_invalid_method_octet ch -> Error "invalid method"
+          | `Start -> loop (i + 1) (`Method i)
+          | `Method request_start when ch = ' ' -> (
+              let cmp3 a b c =
+                buf.%[i - 3] = a && buf.%[i - 2] = b && buf.%[i - 1] = c
+              in
+              let cmp4 a b c d =
+                buf.%[i - 4] = a
+                && buf.%[i - 3] = b
+                && buf.%[i - 2] = c
+                && buf.%[i - 1] = d
+              in
+              match i - request_start with
+              | 3 when cmp3 'G' 'E' 'T' ->
+                  method_ := Some `Get;
+                  loop (i + 1) `Spaces_before_uri
+              | 4 when cmp4 'P' 'O' 'S' 'T' ->
+                  method_ := Some `Post;
+                  loop (i + 1) `Spaces_before_uri
+              | 4 when cmp4 'H' 'E' 'A' 'D' ->
+                  method_ := Some `Head;
+                  loop (i + 1) `Spaces_before_uri
+              | n ->
+                  method_ :=
+                    Some
+                      (`Extension_header (Bytes.sub_string buf request_start n));
+                  loop (i + 1) `Spaces_before_uri)
+          | `Method _ when is_invalid_method_octet ch -> Error "invalid method"
+          | `Method _ -> loop (i + 1) state
+          | _ -> assert false
+        in
+        loop 0
+    end
   end
 end

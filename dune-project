@@ -1,3 +1,3 @@
-(lang dune 3.7)
+(lang dune 3.19)
 
 (name waq)
