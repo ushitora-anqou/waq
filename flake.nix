@@ -12,6 +12,11 @@
       };
     };
 
+    bombon = {
+      url = "github:nikstur/bombon";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     opam-repository = {
       url = "github:ocaml/opam-repository";
       flake = false;
@@ -28,6 +33,7 @@
     nixpkgs,
     flake-utils,
     opam-nix,
+    bombon,
     waq-external-repo,
     opam-repository,
   } @ inputs:
@@ -131,6 +137,7 @@
 
           docker = pkgs.callPackage nix/docker.nix {
             waq = main;
+            buildBom = bombon.lib.${system}.buildBom;
           };
         };
 

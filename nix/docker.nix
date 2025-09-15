@@ -1,12 +1,15 @@
 {
+  buildBom,
   busybox,
   cacert,
   dockerTools,
   iana-etc,
   imagemagick_light,
   lib,
-  waq,
   runtimeShell,
+  symlinkJoin,
+  waq,
+  writeText,
 }: let
   customImagemagick = imagemagick_light.override {
     # cf. https://github.com/NixOS/nixpkgs/blob/a79cfe0ebd24952b580b1cf08cd906354996d547/pkgs/applications/graphics/ImageMagick/default.nix
@@ -33,17 +36,37 @@
     libheifSupport = true;
     #fftwSupport = true;
   };
+
+  contents = symlinkJoin {
+    name = "contents";
+    paths = [
+      busybox
+      iana-etc
+      waq
+    ];
+  };
+
+  config = {
+    Entrypoint = ["waq"];
+    User = "waq:waq";
+    Env = [
+      "SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt"
+      "IMAGEMAGICK_CONVERT_PATH=${customImagemagick}/bin/convert"
+    ];
+  };
+
+  sbom = builtins.readFile (buildBom contents {
+    extraPaths = [
+      # take config into consideration
+      (writeText "waq-docker-image-config" (builtins.toJSON config))
+    ];
+  });
 in
   dockerTools.buildLayeredImage {
     name = "ghcr.io/ushitora-anqou/waq";
     tag = "dev";
     created = "now";
     extraCommands = "mkdir -m 1777 tmp";
-    contents = [
-      busybox
-      iana-etc
-      waq
-    ];
     fakeRootCommands = ''
       #!${runtimeShell}
       set -eux
@@ -52,12 +75,10 @@ in
       useradd -g waq waq
     '';
     enableFakechroot = true;
-    config = {
-      Entrypoint = ["waq"];
-      User = "waq:waq";
-      Env = [
-        "SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt"
-        "IMAGEMAGICK_CONVERT_PATH=${customImagemagick}/bin/convert"
-      ];
-    };
+    contents = contents;
+    config =
+      config
+      // {
+        Labels.SBOM = sbom;
+      };
   }
