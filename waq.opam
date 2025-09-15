@@ -45,7 +45,7 @@ depends: [
   "x509"
   "xml-light"
   "yojson"
-  "yume" {= "0.1.12+waq"}
+  "yume" {= "0.1.14+waq"}
 ]
 build: [
   ["dune" "subst"] {dev}
