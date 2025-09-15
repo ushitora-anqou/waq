@@ -31,5 +31,4 @@ let get _ _req =
     ~description:"Waq's long description" ~email:"admin@example.com"
     ~version:"0.0.1"
     ~urls:(make_v1_instance_urls ~streaming_api)
-  |> yojson_of_v1_instance |> Yojson.Safe.to_string
-  |> Yume.Server.respond ~headers:[ Helper.content_type_app_json ]
+  |> yojson_of_v1_instance |> Helper.respond_yojson

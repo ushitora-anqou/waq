@@ -27,6 +27,4 @@ let get _ req =
         |> List.map (fun (s : Db.Status.t) -> s#id)
         |> Entity.load_statuses_from_db ?self_id
       in
-      make ~ancestors ~descendants ()
-      |> yojson_of_t |> Yojson.Safe.to_string
-      |> Yume.Server.respond ~headers:[ content_type_app_json ]
+      make ~ancestors ~descendants () |> yojson_of_t |> Helper.respond_yojson
