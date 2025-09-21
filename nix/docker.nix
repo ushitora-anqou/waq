@@ -56,6 +56,7 @@
   };
 
   sbom = builtins.readFile (buildBom contents {
+    includeBuildtimeDependencies = true;
     extraPaths = [
       # take config into consideration
       (writeText "waq-docker-image-config" (builtins.toJSON config))
