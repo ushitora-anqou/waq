@@ -313,11 +313,11 @@
     "waq-external-repo": {
       "flake": false,
       "locked": {
-        "lastModified": 1757907251,
-        "narHash": "sha256-XW0ftpI0AJ4TulSTGyl/faSyku1xuFAk0wiGRcMdoFU=",
+        "lastModified": 1773840035,
+        "narHash": "sha256-cfxd8H1NTXdnluJhzsm9zcMTorAzcOf4I6ieBQYnYaI=",
         "owner": "ushitora-anqou",
         "repo": "waq-external-repo",
-        "rev": "24d584c3ebcf3b3c8b442579f4d9376516ac6127",
+        "rev": "d0b9151b864ec399dafcc0d8a98a2eae5fb16056",
         "type": "github"
       },
       "original": {
