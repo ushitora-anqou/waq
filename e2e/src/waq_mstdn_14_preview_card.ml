@@ -1,6 +1,6 @@
 open Common2
 
-let get_preview_card_from_a1 env (a0 : agent) (a1 : agent) content =
+let get_preview_card_from_a1 ?(wait_for_card = false) env (a0 : agent) (a1 : agent) content =
   (* a1: Follow a0 *)
   follow_agent env a1 a0;
 
@@ -8,14 +8,25 @@ let get_preview_card_from_a1 env (a0 : agent) (a1 : agent) content =
   let { uri; _ } = post env a0 ~content () in
   Eio.Time.sleep (Eio.Stdenv.clock env) 2.0;
 
-  (* a1: Check the post. The post should have been fetched in advance because a1 follows a0. *)
-  let _, [ s ], _ = search env a1 uri in
-  s
+  (* a1: Check the post. The post should have been fetched in advance because a1 follows a0.
+
+     Preview cards are generated asynchronously by crawling the linked page
+     (e.g. www.youtube.com), which can take more than the sleep above
+     depending on the external site's response time. When [wait_for_card] is
+     set, retry the search until the card shows up. *)
+  let rec loop i =
+    let _, [ s ], _ = search env a1 uri in
+    if (not wait_for_card) || Option.is_some s.card || i = 0 then s
+    else (
+      Eio.Time.sleep (Eio.Stdenv.clock env) 2.0;
+      loop (i - 1))
+  in
+  loop 10
 [@@warning "-8"]
 
 let f_case1 env (a0 : agent) (a1 : agent) =
   let url = "https://www.youtube.com/watch?v=OMv_EPMED8Y" in
-  let s = get_preview_card_from_a1 env a0 a1 url in
+  let s = get_preview_card_from_a1 ~wait_for_card:true env a0 a1 url in
   assert (Option.is_some s.card);
   let c = Option.get s.card in
   assert (c.url = url);
