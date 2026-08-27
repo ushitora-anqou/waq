@@ -9,8 +9,10 @@ homepage: "https://github.com/ushitora-anqou/waq"
 doc: "https://github.com/ushitora-anqou/waq"
 bug-reports: "https://github.com/ushitora-anqou/waq/issues"
 depends: [
-  "alcotest" {with-test}
-  "alcotest-lwt" {with-test}
+  "alcotest"
+  "alcotest-lwt"
+  "ambient-context"
+  "ambient-context-eio"
   "base64"
   "blurhash"
   "ca-certs"
@@ -29,9 +31,9 @@ depends: [
   "lwt_ppx"
   "mirage-crypto-rng" {>= "2.0.0"}
   "ocaml" {>= "5.1.0"}
-  "odoc" {with-doc}
-  "opentelemetry" {>= "0.11"}
-  "opentelemetry-client-ocurl" {>= "0.11"}
+  "odoc"
+  "opentelemetry" {>= "0.91.1"}
+  "opentelemetry-client-ocurl" {>= "0.91.1"}
   "pcre"
   "postgresql"
   "ppx_yojson_conv"
@@ -45,7 +47,7 @@ depends: [
   "x509"
   "xml-light"
   "yojson"
-  "yume" {= "0.1.14+waq"}
+  "yume" {= "0.1.16+waq"}
 ]
 build: [
   ["dune" "subst"] {dev}

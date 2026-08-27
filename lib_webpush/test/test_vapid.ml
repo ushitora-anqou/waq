@@ -15,5 +15,6 @@ let test_main_case1 () =
         = "BMjQIp55pdbU8pfCBKyXcZjlmER_mXt5LqNrN1hrXbdBS5EnhIbMu3Au-RV53iIpztzNXkGI56BFB1udQ8Bq_H4")
 
 let () =
+  Mirage_crypto_rng_unix.use_default ();
   let open Alcotest in
   run "vapid" [ ("main", [ test_case "case1" `Quick test_main_case1 ]) ]

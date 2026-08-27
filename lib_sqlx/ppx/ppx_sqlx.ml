@@ -418,7 +418,8 @@ let expand_let_string_of_column loc schema =
              ~rhs:(estring ~loc (sql_name_of_column c)))
   in
   [%stri
-    let string_of_column : column -> string = [%e pexp_function ~loc cases]]
+    let string_of_column : column -> string =
+      [%e pexp_function_cases ~loc cases]]
 
 let expand_type_args env loc schema =
   let decls =
@@ -1131,7 +1132,8 @@ let expand_let_load_fields env loc schema =
                   (* NOTE: It will NOT prevent all infinite loops,
                      if there are any mutual recursive reference. *)
                   Lwt.return_unit
-              | _ -> preload |> Lwt_list.iter_s [%e pexp_function ~loc cases]])
+              | _ ->
+                  preload |> Lwt_list.iter_s [%e pexp_function_cases ~loc cases]])
 
 let expand_let_load_related_field loc schema rel =
   let mod_name = rel.r_foregin_mod_name in

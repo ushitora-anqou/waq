@@ -246,11 +246,14 @@ let () =
   Db.initialize ();
 
   (* Parse command-line arguments and call a proper handler *)
+  (* NB: build the default term before [open Cmdliner] and outside
+     [Term.(...)], otherwise the eio environment [env] is shadowed by
+     [Cmdliner.Term.env]. *)
+  let env_term = Cmdliner.Term.const env in
+  let default_term = Cmdliner.Term.(const server $ env_term) in
   let open Cmdliner in
   Cmd.(
-    group
-      ~default:Term.(const server $ const env)
-      (info "waq")
+    group ~default:default_term (info "waq")
       [
         v (info "db:reset") Term.(const db_reset $ const ());
         v (info "db:migrate") Term.(const db_migrate $ const ());
@@ -284,17 +287,17 @@ let () =
                 value
                 & opt (some string) None
                 & info ~docv:"PASSWORD" [ "password" ]));
-        v (info "account:fetch") Term.(const account_fetch $ const env);
+        v (info "account:fetch") Term.(const account_fetch $ env_term);
         v
           (info "webpush:generate_vapid_key")
           Term.(const webpush_generate_vapid_key $ const ());
         v (info "webpush:deliver")
           Term.(
-            const webpush_deliver $ const env
+            const webpush_deliver $ env_term
             $ Arg.(
                 required & pos 0 (some string) None & info ~docv:"USERNAME" [])
             $ Arg.(
                 required & pos 1 (some string) None & info ~docv:"MESSAGE" []));
-        v (info "server") Term.(const server $ const env);
+        v (info "server") Term.(const server $ env_term);
       ])
   |> Cmd.eval |> exit

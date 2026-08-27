@@ -65,9 +65,9 @@
           // {
             ## You can force versions of certain packages here, e.g:
             ## - force the ocaml compiler to be taken from opam-repository:
-            #ocaml-base-compiler = "*";
+            ocaml-base-compiler = "*";
             ## - or force the compiler to be taken from nixpkgs and be a certain version:
-            ocaml-system = "*";
+            #ocaml-system = "*";
             ## - or force ocamlfind to be a certain version:
             #ocamlfind = "1.9.6";
           };
@@ -87,8 +87,10 @@
           on.buildOpamProject' {
             repos = [opam-repository waq-external-repo];
             resolveArgs = {
-              with-test = true;
-              with-doc = true;
+              # `dev = true` (the default of buildOpamProject') pulls in dev
+              # dependencies of every dependency, e.g. lambdasoup's
+              # bisect_ppx, which is incompatible with OCaml 5.4.
+              dev = false;
             };
           }
           src
