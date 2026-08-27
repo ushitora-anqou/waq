@@ -6,7 +6,7 @@ open Lwt.Infix
 (* Define two RDB schemas (accounts and statuses) *)
 [%%sqlx.schemas
 module rec Account = struct
-  name "accounts"
+  name "accounts";;
 
   class type t = object
     (* Table `accounts` has 3 columns ... *)
@@ -20,7 +20,7 @@ module rec Account = struct
 end
 
 and Status = struct
-  name "statuses"
+  name "statuses";;
 
   class type t = object
     (* Table `statuses` has 4 columns *)

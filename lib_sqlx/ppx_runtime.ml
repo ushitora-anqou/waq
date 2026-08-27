@@ -48,9 +48,9 @@ struct
     | _ ->
         chosen
         |> Lwt_list.iter_s (fun key ->
-               match List.assoc_opt key spec with
-               | None -> failwith "Can't find a preload function"
-               | Some f -> f rows c);%lwt
+            match List.assoc_opt key spec with
+            | None -> failwith "Can't find a preload function"
+            | Some f -> f rows c);%lwt
         Lwt.return rows
 
   let select id created_at updated_at order_by limit (c : connection) cond =
@@ -83,46 +83,46 @@ struct
   let update (xs : M.t list) (c : connection) =
     xs
     |> Lwt_list.map_s (fun x ->
-           let sql, param =
-             Sql.update ~table_name:M.table_name
-               ~columns:M.(columns |> List.map string_of_column)
-               ~unpacked:(M.unpack x)
-             @@ ([], [])
-           in
-           c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
-           >|= M.pack)
+        let sql, param =
+          Sql.update ~table_name:M.table_name
+            ~columns:M.(columns |> List.map string_of_column)
+            ~unpacked:(M.unpack x)
+          @@ ([], [])
+        in
+        c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
+        >|= M.pack)
 
   let insert (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
     let%lwt rows =
       xs
       |> Lwt_list.map_s (fun x ->
-             let sql, param =
-               Sql.insert ~table_name:M.table_name
-                 ~columns:M.(List.map string_of_column columns)
-                 ~unpacked:(M.unpack x)
-             in
-             c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
-             >|= M.pack)
+          let sql, param =
+            Sql.insert ~table_name:M.table_name
+              ~columns:M.(List.map string_of_column columns)
+              ~unpacked:(M.unpack x)
+          in
+          c#query_row sql ~p:(param : Value.t list :> Value.null_t list)
+          >|= M.pack)
     in
     rows
     |> Lwt_list.iter_s (fun row ->
-           !M.after_create_commit_callbacks
-           |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)));%lwt
+        !M.after_create_commit_callbacks
+        |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)));%lwt
     Lwt.return rows
 
   let delete (xs : M.t list) (c : connection) =
     (* FIXME: Efficient impl *)
     xs
     |> Lwt_list.iter_p (fun x ->
-           let sql, param =
-             Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
-           in
-           c#execute sql ~p:param);%lwt
+        let sql, param =
+          Sql.delete ~table_name:M.table_name ~id:(x |> M.id |> M.ID.to_int)
+        in
+        c#execute sql ~p:param);%lwt
     xs
     |> Lwt_list.iter_s (fun row ->
-           !M.after_destroy_commit_callbacks
-           |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)))
+        !M.after_destroy_commit_callbacks
+        |> Lwt_list.iter_s (fun f -> c#enqueue_task_after_commit (f row)))
 
   let after_create_commit f =
     M.after_create_commit_callbacks := f :: !M.after_create_commit_callbacks

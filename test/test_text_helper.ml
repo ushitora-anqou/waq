@@ -38,7 +38,7 @@ let test_substitute_with_match_mention () =
     Text_helper.substitute
       (spec
       |> List.map (fun (off, len, subtext) ->
-             Text_helper.make_subst ~off ~len ~subtext))
+          Text_helper.make_subst ~off ~len ~subtext))
   in
   let m = Text_helper.match_mention in
   assert (
@@ -54,7 +54,7 @@ let test_substitute () =
     Text_helper.substitute
       (spec
       |> List.map (fun (off, len, subtext) ->
-             Text_helper.make_subst ~off ~len ~subtext))
+          Text_helper.make_subst ~off ~len ~subtext))
   in
   assert (r [] "foo" = "foo");
   assert (r [ (0, 1, "bar") ] "foo" = "baroo");

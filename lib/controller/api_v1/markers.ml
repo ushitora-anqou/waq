@@ -5,8 +5,8 @@ open Lwt.Infix
 let serialize_markers xs =
   xs
   |> List.map (fun (timeline, marker) ->
-         marker |> Entity.serialize_marker |> Entity.yojson_of_marker
-         |> fun j -> (timeline, j))
+      marker |> Entity.serialize_marker |> Entity.yojson_of_marker |> fun j ->
+      (timeline, j))
   |> fun j -> `Assoc j
 
 let get _ req =
@@ -15,15 +15,15 @@ let get _ req =
   |> List.filter (function "home" | "notifications" -> true | _ -> false)
   |> List.sort_uniq compare
   |> List.map (fun timeline ->
-         let x =
-           try Some Db.(e Marker.(get_one ~timeline ~user_id:(Some user#id)))
-           with Sqlx.Error.NoRowFound -> None
-         in
-         let default =
-           Model.Marker.make ~updated_at:(Ptime.now ()) ~last_read_id:0
-             ~user_id:user#id ~timeline ()
-         in
-         (timeline, x |> Option.value ~default))
+      let x =
+        try Some Db.(e Marker.(get_one ~timeline ~user_id:(Some user#id)))
+        with Sqlx.Error.NoRowFound -> None
+      in
+      let default =
+        Model.Marker.make ~updated_at:(Ptime.now ()) ~last_read_id:0
+          ~user_id:user#id ~timeline ()
+      in
+      (timeline, x |> Option.value ~default))
   |> serialize_markers |> respond_yojson
 
 let post _ req =

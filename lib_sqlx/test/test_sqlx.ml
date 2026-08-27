@@ -7,7 +7,7 @@ open Util
 
 [%%sqlx.schemas
 module rec TestBool = struct
-  name "test_bool"
+  name "test_bool";;
 
   class type t = object
     val x : bool
@@ -15,7 +15,7 @@ module rec TestBool = struct
 end
 
 and Account = struct
-  name "accounts"
+  name "accounts";;
 
   class type t = object
     val username : string
@@ -26,7 +26,7 @@ and Account = struct
 end
 
 and AccountStat = struct
-  name "account_stats"
+  name "account_stats";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -38,7 +38,7 @@ and AccountStat = struct
 end
 
 and Status = struct
-  name "statuses"
+  name "statuses";;
 
   class type t = object
     val text : string
@@ -49,7 +49,7 @@ and Status = struct
 end
 
 and Favourite = struct
-  name "favourites"
+  name "favourites";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -58,7 +58,7 @@ and Favourite = struct
 end
 
 and Notification = struct
-  name "notifications"
+  name "notifications";;
 
   type activity_type_t = [ `Status | `Favourite | `Follow ]
 
@@ -109,10 +109,10 @@ module Notification = struct
         (* Load favourites *)
         ( ns
         |> List.filter_map (fun n ->
-               match (n#activity_type, n#typ) with
-               | `Favourite, _ | _, Some `favourite ->
-                   Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
-               | _ -> None)
+            match (n#activity_type, n#typ) with
+            | `Favourite, _ | _, Some `favourite ->
+                Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
+            | _ -> None)
         |> fun r ->
           Favourite.select ~id:(`In (map_fst_sort_uniq r)) c
           >|= List.map (fun x -> (x#status_id, List.assoc x#id r))
@@ -123,10 +123,10 @@ module Notification = struct
         (* Load reblogs *)
         ( ns
         |> List.filter_map (fun n ->
-               match (n#activity_type, n#typ) with
-               | `Status, _ | _, Some `reblog ->
-                   Some (Status.ID.of_int n#activity_id, n#set_target_status)
-               | _ -> None)
+            match (n#activity_type, n#typ) with
+            | `Status, _ | _, Some `reblog ->
+                Some (Status.ID.of_int n#activity_id, n#set_target_status)
+            | _ -> None)
         |> fun r ->
           Status.select ?preload ~id:(`In (map_fst_sort_uniq r)) c
           >|= List.iter (fun x -> (List.assoc x#id r) (Some x)) );%lwt

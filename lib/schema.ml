@@ -1,6 +1,6 @@
 [%%sqlx.schemas
 module rec Account = struct
-  name "accounts"
+  name "accounts";;
 
   type actor_type_t = [ `Person | `Service ]
 
@@ -35,7 +35,7 @@ module rec Account = struct
 end
 
 and AccountStat = struct
-  name "account_stats"
+  name "account_stats";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -47,7 +47,7 @@ and AccountStat = struct
 end
 
 and Status = struct
-  name "statuses"
+  name "statuses";;
 
   class type t = object
     val uri : string
@@ -70,7 +70,7 @@ and Status = struct
 end
 
 and StatusStat = struct
-  name "status_stats"
+  name "status_stats";;
 
   class type t = object
     val status_id : Status.ID.t
@@ -81,7 +81,7 @@ and StatusStat = struct
 end
 
 and MediaAttachment = struct
-  name "media_attachments"
+  name "media_attachments";;
 
   class type t = object
     val status_id : Status.ID.t option
@@ -94,7 +94,7 @@ and MediaAttachment = struct
 end
 
 and User = struct
-  name "users"
+  name "users";;
 
   class type t = object
     val email : string
@@ -104,7 +104,7 @@ and User = struct
 end
 
 and Follow = struct
-  name "follows"
+  name "follows";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -114,7 +114,7 @@ and Follow = struct
 end
 
 and FollowRequest = struct
-  name "follow_requests"
+  name "follow_requests";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -124,7 +124,7 @@ and FollowRequest = struct
 end
 
 and OAuthApplication = struct
-  name "oauth_applications"
+  name "oauth_applications";;
 
   class type t = object
     val name : string
@@ -136,7 +136,7 @@ and OAuthApplication = struct
 end
 
 and OAuthAccessGrant = struct
-  name "oauth_access_grants"
+  name "oauth_access_grants";;
 
   class type t = object
     val token : string
@@ -149,7 +149,7 @@ and OAuthAccessGrant = struct
 end
 
 and OAuthAccessToken = struct
-  name "oauth_access_tokens"
+  name "oauth_access_tokens";;
 
   class type t = object
     val token : string
@@ -160,7 +160,7 @@ and OAuthAccessToken = struct
 end
 
 and Favourite = struct
-  name "favourites"
+  name "favourites";;
 
   class type t = object
     val account_id : Account.ID.t
@@ -169,7 +169,7 @@ and Favourite = struct
 end
 
 and Notification = struct
-  name "notifications"
+  name "notifications";;
 
   type activity_type_t = [ `Status | `Favourite | `Follow | `Mention ]
 
@@ -214,7 +214,7 @@ and Notification = struct
 end
 
 and Mention = struct
-  name "mentions"
+  name "mentions";;
 
   class type t = object
     val status_id : Status.ID.t option
@@ -223,7 +223,7 @@ and Mention = struct
 end
 
 and Marker = struct
-  name "markers"
+  name "markers";;
 
   class type t = object
     val user_id : User.ID.t option
@@ -233,7 +233,7 @@ and Marker = struct
 end
 
 and WebPushSubscription = struct
-  name "web_push_subscriptions"
+  name "web_push_subscriptions";;
 
   class type t = object
     val endpoint : string
@@ -245,7 +245,7 @@ and WebPushSubscription = struct
 end
 
 and PreviewCard = struct
-  name "preview_cards"
+  name "preview_cards";;
 
   class type t = object
     val url : string
@@ -266,7 +266,7 @@ and PreviewCard = struct
 end
 
 and PreviewCardStatus = struct
-  name "preview_cards_statuses"
+  name "preview_cards_statuses";;
 
   class type t = object
     val preview_card_id : PreviewCard.ID.t

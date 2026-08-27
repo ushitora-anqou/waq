@@ -195,12 +195,12 @@ let serialize_media_attachment (ma : Model.MediaAttachment.t) : media_attachment
       let url =
         ma#file_file_name
         |> Option.fold ~none:"" ~some:(fun n ->
-               K.original_media_attachments_url (id, n))
+            K.original_media_attachments_url (id, n))
       in
       let preview_url =
         ma#file_file_name
         |> Option.fold ~none:"" ~some:(fun n ->
-               K.small_media_attachments_url (id, n))
+            K.small_media_attachments_url (id, n))
       in
       let remote_url =
         match ma#file_file_name with
@@ -368,7 +368,7 @@ let load_statuses_from_db ?visibility ?(self_id : Model.Account.ID.t option)
   let statuses = statuses |> index_by (fun x -> x#id) in
   status_ids
   |> List.map (fun id ->
-         Hashtbl.find statuses id |> serialize_status ?visibility ?self_id)
+      Hashtbl.find statuses id |> serialize_status ?visibility ?self_id)
 
 let make_status_from_model ?(visibility = "public") ?self_id (s : Db.Status.t) :
     status =
@@ -435,13 +435,13 @@ let serialize_push_notification (n : Model.Notification.t) : push_notification =
     ~body:
       (n#target_status
       |> Option.fold ~none:n#from_account#username ~some:(fun s ->
-             let t = s#spoiler_text in
-             let t =
-               if t = "" then Text_helper.eliminate_html_tags s#text else t
-             in
-             let max_length = 140 in
-             if String.length t > max_length then String.sub t 0 max_length
-             else t))
+          let t = s#spoiler_text in
+          let t =
+            if t = "" then Text_helper.eliminate_html_tags s#text else t
+          in
+          let max_length = 140 in
+          if String.length t > max_length then String.sub t 0 max_length else t)
+      )
     ~icon:
       (n#from_account#avatar_remote_url
       |> Option.value ~default:(Config.notfound_avatar_url ()))
@@ -502,11 +502,11 @@ let load_notifications_from_db ?self_id
   in
   noti_ids
   |> List.filter_map (fun id ->
-         let n = Hashtbl.find notis id in
-         match (n#typ, n#target_status) with
-         | Some (`reblog | `favourite | `mention), Some _ | Some `follow, _ ->
-             Some (serialize_notification ?self_id n)
-         | _ -> None)
+      let n = Hashtbl.find notis id in
+      match (n#typ, n#target_status) with
+      | Some (`reblog | `favourite | `mention), Some _ | Some `follow, _ ->
+          Some (serialize_notification ?self_id n)
+      | _ -> None)
 
 (* Entity marker *)
 type marker = { last_read_id : string; version : int; updated_at : string }

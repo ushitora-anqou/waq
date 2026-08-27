@@ -49,14 +49,12 @@ let post env req =
   let mentioned_accts =
     Text_helper.match_mention status
     |> List.filter_map (fun (_off, _len, username, domain) ->
-           try
-             Some (Activity.search_account env (`Webfinger (domain, username)))
-           with _ ->
-             Logs.debug (fun m ->
-                 m "Couldn't find the mentioned account: %s"
-                   (username
-                   ^ match domain with None -> "" | Some s -> "@" ^ s));
-             None)
+        try Some (Activity.search_account env (`Webfinger (domain, username)))
+        with _ ->
+          Logs.debug (fun m ->
+              m "Couldn't find the mentioned account: %s"
+                (username ^ match domain with None -> "" | Some s -> "@" ^ s));
+          None)
   in
 
   (* Insert status and mentions *)

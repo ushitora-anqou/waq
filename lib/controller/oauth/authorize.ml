@@ -39,7 +39,7 @@ let post _env req =
     let u =
       state
       |> Option.fold ~none:u ~some:(fun s ->
-             Uri.add_query_param u ("state", [ s ]))
+          Uri.add_query_param u ("state", [ s ]))
     in
     Yume.Server.respond ~status:`Found
       ~headers:[ (`Location, Uri.to_string u) ]
@@ -64,7 +64,7 @@ let get _ req =
   let models =
     state
     |> Option.fold ~none:models ~some:(fun state ->
-           ("state", Tstr state) :: models)
+        ("state", Tstr state) :: models)
   in
 
   respond_html

@@ -37,11 +37,11 @@ let f =
     ws_recv_msgs
     |> List.map (fun x -> x |> Yojson.Safe.from_string |> expect_assoc)
     |> List.filter_map (fun (l : (string * Yojson.Safe.t) list) ->
-           if
-             List.assoc "stream" l = `List [ `String "user" ]
-             && List.assoc "event" l = `String "delete"
-           then Some (List.assoc "payload" l |> expect_string)
-           else None)
+        if
+          List.assoc "stream" l = `List [ `String "user" ]
+          && List.assoc "event" l = `String "delete"
+        then Some (List.assoc "payload" l |> expect_string)
+        else None)
   in
   assert (
     List.sort compare ws_delete_events = List.sort compare [ "1"; "2"; "3" ]);

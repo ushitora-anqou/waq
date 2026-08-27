@@ -22,8 +22,8 @@ let get_commited_versions ~config (c : Connection.t) =
   c#execute sql1;%lwt
   c#query sql2
   >|= List.map (function
-        | [ ("version", v) ] -> Value.expect_int v
-        | _ -> assert false)
+    | [ ("version", v) ] -> Value.expect_int v
+    | _ -> assert false)
 
 let verify_migration_status ~config ~migrations c =
   get_commited_versions ~config c >|= fun versions ->

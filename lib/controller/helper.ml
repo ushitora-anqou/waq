@@ -70,8 +70,8 @@ let render ~default routes req =
     | Some accept ->
         routes
         |> List.find_map (fun (content_type, route) ->
-               if List.mem content_type accept then Some (content_type, route)
-               else None)
+            if List.mem content_type accept then Some (content_type, route)
+            else None)
         |> Option.value ~default
   in
   Logs.debug (fun m -> m "[render] Choose %s" content_type);

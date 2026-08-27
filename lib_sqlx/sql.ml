@@ -186,9 +186,9 @@ let update ~table_name ~columns ~unpacked
   let set =
     columns
     |> List.filter_map (function
-         | "id" | "created_at" -> None
-         | "updated_at" -> Some ("updated_at", `Raw "now()")
-         | c -> Some (c, `M c))
+      | "id" | "created_at" -> None
+      | "updated_at" -> Some ("updated_at", `Raw "now()")
+      | c -> Some (c, `M c))
   in
   let table, returning = (table_name, Some "*") in
   let exprs, param =
@@ -213,9 +213,9 @@ let insert ~table_name ~columns ~unpacked =
   let columns, values =
     columns
     |> List.filter_map (function
-         | "id" -> None
-         | ("created_at" | "updated_at") as c -> Some (c, `Raw "now()")
-         | c -> Some (c, `M c))
+      | "id" -> None
+      | ("created_at" | "updated_at") as c -> Some (c, `Raw "now()")
+      | c -> Some (c, `M c))
     |> List.split
   in
   let table, returning = (table_name, Some "*") in

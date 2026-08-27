@@ -17,15 +17,13 @@ let respond_xrd w () =
             |> List.map (fun alias -> Element ("Alias", [], [ PCData alias ])))
           @ (w.links
             |> List.map (fun link ->
-                   let link = webfinger_link_of_yojson link in
-                   Element
-                     ( "Link",
-                       [
-                         ("href", link.href);
-                         ("rel", link.rel);
-                         ("type", link.typ);
-                       ],
-                       [] ))) )
+                let link = webfinger_link_of_yojson link in
+                Element
+                  ( "Link",
+                    [
+                      ("href", link.href); ("rel", link.rel); ("type", link.typ);
+                    ],
+                    [] ))) )
       |> to_string))
   |> Yume.Server.respond ~headers:[ Helper.content_type_app_xrd_xml ]
 

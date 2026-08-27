@@ -8,8 +8,8 @@ let aux env ~account_id ~status_id ~status =
     let key = make_key ~user_id ~stream:`User in
     status :: reblogs
     |> List.iter (fun (status : Db.Status.t) ->
-           let payload = status#id |> Model.Status.ID.to_int |> string_of_int in
-           push ~key ~event:"delete" ~payload ())
+        let payload = status#id |> Model.Status.ID.to_int |> string_of_int in
+        push ~key ~event:"delete" ~payload ())
   in
 
   (* Deliver to self if necessary *)

@@ -138,14 +138,14 @@ let f =
     ws_recv_msgs
     |> List.map (fun x -> x |> Yojson.Safe.from_string |> expect_assoc)
     |> List.filter_map (fun (l : (string * Yojson.Safe.t) list) ->
-           if
-             List.assoc "stream" l = `List [ `String "user" ]
-             && List.assoc "event" l = `String "notification"
-           then
-             Some
-               (List.assoc "payload" l |> expect_string
-              |> Yojson.Safe.from_string |> notification_of_yojson)
-           else None)
+        if
+          List.assoc "stream" l = `List [ `String "user" ]
+          && List.assoc "event" l = `String "notification"
+        then
+          Some
+            (List.assoc "payload" l |> expect_string |> Yojson.Safe.from_string
+           |> notification_of_yojson)
+        else None)
   in
   let got_notifications = get_notifications env `Waq ~token in
   assert (

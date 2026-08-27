@@ -4,16 +4,16 @@ let deliver_to_local env ~(targets : Db.User.t list) ~(status : Db.Status.t) :
     unit =
   targets
   |> List.iter (fun (u : Db.User.t) ->
-         Insert_to_feed.kick env ~account_id:u#account_id ~status_id:status#id
-           ~user_id:u#id ~stream:`User)
+      Insert_to_feed.kick env ~account_id:u#account_id ~status_id:status#id
+        ~user_id:u#id ~stream:`User)
 
 let deliver_to_remote env ~(targets : Db.Account.t list) ~(status : Db.Status.t)
     : unit =
   targets |> Db.Account.preferred_inbox_urls
   |> List.iter (fun url ->
-         match status#reblog_of_id with
-         | None -> Create_note.kick env ~status ~url
-         | Some _ -> Announce.kick env ~status ~url)
+      match status#reblog_of_id with
+      | None -> Create_note.kick env ~status ~url
+      | Some _ -> Announce.kick env ~status ~url)
 
 let kick env (s : Db.Status.t) =
   Job.kick env ~name:__FUNCTION__ @@ fun () ->
@@ -29,8 +29,8 @@ let kick env (s : Db.Status.t) =
       @@ Mention.select ~status_id:(`Eq s#id) ~account_id:`NeqNone
            ~preload:[ `account [ `user [] ]; `status [ `account [] ] ])
     |> List.partition_map (fun x ->
-           let acct = Option.get x#account in
-           match acct#user with None -> Right x | Some _ -> Left x)
+        let acct = Option.get x#account in
+        match acct#user with None -> Right x | Some _ -> Left x)
   in
 
   (* Deliver to self *)
