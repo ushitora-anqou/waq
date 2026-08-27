@@ -130,6 +130,20 @@ module Internal = struct
         ignore
       |> fst |> expect_wexited_0
     in
+    (* Wait until every waq-web pod is completely deleted. Otherwise, during
+       the termination grace period, a request may still be load-balanced to a
+       terminating pod. That breaks the streaming tests in particular: the
+       WebSocket connection and the API request can hit different pods, so
+       streaming events are never delivered to the WebSocket. *)
+    let () =
+      kubectl
+        [
+          "wait"; "--for=delete"; "pod"; "-l"; "app=waq-web"; "-n"; "e2e";
+          "--timeout=60s";
+        ]
+        ignore
+      |> fst |> expect_wexited_0
+    in
     let _ =
       kubectl [ "delete"; "job"; "reset-waq-database"; "-n"; "e2e" ] ignore
     in
