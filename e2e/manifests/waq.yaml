@@ -48,6 +48,10 @@ spec:
         - name: ca-bundle
           configMap:
             name: ca-bundle
+      # Shorten the termination grace period so that scale-downs in the e2e
+      # tests remove the old pod quickly; each test recreates the pod from a
+      # freshly reset database anyway.
+      terminationGracePeriodSeconds: 3
 ---
 apiVersion: v1
 kind: Secret
