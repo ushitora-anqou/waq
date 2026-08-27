@@ -2,13 +2,13 @@ let may_subscribe ~user_id ~stream ~ws_conn subscription_ref =
   match !subscription_ref with
   | Some _ -> ()
   | None ->
-      let key = Streaming.make_key ~user_id ~stream in
-      let conn_id = Streaming.(add key (`WebSocket ws_conn)) in
+      let key = Waq__Streaming.make_key ~user_id ~stream in
+      let conn_id = Waq__Streaming.(add key (`WebSocket ws_conn)) in
       subscription_ref := Some (key, conn_id)
 
 let may_unsubscribe subscription_ref =
   !subscription_ref
-  |> Option.iter (fun (key, conn_id) -> Streaming.remove key conn_id);
+  |> Option.iter (fun (key, conn_id) -> Waq__Streaming.remove key conn_id);
   subscription_ref := None
 
 let get _env req =
