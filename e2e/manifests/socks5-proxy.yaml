@@ -16,8 +16,14 @@ spec:
     spec:
       containers:
         - name: socks5-proxy
-          image: serjs/go-socks5-proxy
+          # The image is pinned by digest: the floating "latest" tag was
+          # replaced on 2025-10-09 with an implementation whose REQUIRE_AUTH
+          # defaults to true, which crashes without PROXY_USER/PROXY_PASSWORD.
+          image: serjs/go-socks5-proxy@sha256:0af522996f402c03ecd985a87997158eabeb28935365e3a384df37eafcf740ea
           imagePullPolicy: IfNotPresent
+          env:
+            - name: REQUIRE_AUTH
+              value: "false"
           ports:
             - containerPort: 1080
               name: socks
