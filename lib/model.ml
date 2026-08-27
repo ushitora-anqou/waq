@@ -190,19 +190,19 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
           ~last_status_at:s#created_at c;%lwt
         s#reblog_of_id
         |> Lwt_option.iter (fun status_id ->
-               StatusStat.increment ~status_id ~reblogs_count:1 c);%lwt
+            StatusStat.increment ~status_id ~reblogs_count:1 c);%lwt
         s#in_reply_to_id
         |> Lwt_option.iter (fun status_id ->
-               StatusStat.increment ~status_id ~replies_count:1 c);%lwt
+            StatusStat.increment ~status_id ~replies_count:1 c);%lwt
         Lwt.return_unit);
     after_discard_with_reblogs (fun s c ->
         AccountStat.decrement ~account_id:s#account_id ~statuses_count:1 c;%lwt
         s#reblog_of_id
         |> Lwt_option.iter (fun status_id ->
-               StatusStat.decrement ~status_id ~reblogs_count:1 c);%lwt
+            StatusStat.decrement ~status_id ~reblogs_count:1 c);%lwt
         s#in_reply_to_id
         |> Lwt_option.iter (fun status_id ->
-               StatusStat.decrement ~status_id ~replies_count:1 c);%lwt
+            StatusStat.decrement ~status_id ~replies_count:1 c);%lwt
         Lwt.return_unit)
 
   let () =
@@ -251,9 +251,9 @@ SELECT * FROM statuses WHERE id IN (SELECT * FROM t)|}
         let targets =
           targets
           |> List.map (fun (s_id, f) ->
-                 ( Hashtbl.find_all tbl s_id
-                   |> List.map (fun x -> x#preview_card_id),
-                   f ))
+              ( Hashtbl.find_all tbl s_id
+                |> List.map (fun x -> x#preview_card_id),
+                f ))
         in
         PreviewCard.select ?preload
           ~id:(`In (targets |> List.map fst |> List.concat))
@@ -333,11 +333,10 @@ module Notification = struct
         (let targets =
            ns
            |> List.filter_map (fun n ->
-                  match (n#activity_type, n#typ) with
-                  | `Favourite, _ | _, Some `favourite ->
-                      Some
-                        (Favourite.ID.of_int n#activity_id, n#set_target_status)
-                  | _ -> None)
+               match (n#activity_type, n#typ) with
+               | `Favourite, _ | _, Some `favourite ->
+                   Some (Favourite.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
          in
          let%lwt tbl =
            Favourite.select ~id:(`In (map_fst_sort_uniq targets)) c
@@ -346,8 +345,8 @@ module Notification = struct
          let targets =
            targets
            |> List.filter_map (fun (fav_id, f) ->
-                  Hashtbl.find_opt tbl fav_id
-                  |> Option.map (fun x -> (x#status_id, f)))
+               Hashtbl.find_opt tbl fav_id
+               |> Option.map (fun x -> (x#status_id, f)))
          in
          Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
          >|= index_by (fun x -> x#id)
@@ -360,10 +359,10 @@ module Notification = struct
         (let targets =
            ns
            |> List.filter_map (fun n ->
-                  match (n#activity_type, n#typ) with
-                  | `Status, _ | _, Some `reblog ->
-                      Some (Status.ID.of_int n#activity_id, n#set_target_status)
-                  | _ -> None)
+               match (n#activity_type, n#typ) with
+               | `Status, _ | _, Some `reblog ->
+                   Some (Status.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
          in
          Status.select
            ~preload:[ `reblog_of (preload |> Option.value ~default:[]) ]
@@ -373,18 +372,18 @@ module Notification = struct
          >|= fun tbl ->
          targets
          |> List.iter (fun (status_id, f) ->
-                match Hashtbl.find_opt tbl status_id with
-                | None -> ()
-                | Some s -> f (Some s#reblog_of)));%lwt
+             match Hashtbl.find_opt tbl status_id with
+             | None -> ()
+             | Some s -> f (Some s#reblog_of)));%lwt
 
         (* Load mentions *)
         (let targets =
            ns
            |> List.filter_map (fun n ->
-                  match (n#activity_type, n#typ) with
-                  | `Mention, _ | _, Some `mention ->
-                      Some (Mention.ID.of_int n#activity_id, n#set_target_status)
-                  | _ -> None)
+               match (n#activity_type, n#typ) with
+               | `Mention, _ | _, Some `mention ->
+                   Some (Mention.ID.of_int n#activity_id, n#set_target_status)
+               | _ -> None)
          in
          let%lwt tbl =
            Mention.select ~id:(`In (map_fst_sort_uniq targets)) c
@@ -393,8 +392,8 @@ module Notification = struct
          let targets =
            targets
            |> List.filter_map (fun (men_id, f) ->
-                  (Hashtbl.find tbl men_id)#status_id
-                  |> Option.map (fun id -> (id, f)))
+               (Hashtbl.find tbl men_id)#status_id
+               |> Option.map (fun id -> (id, f)))
          in
          Status.select ?preload ~id:(`In (map_fst_sort_uniq targets)) c
          >|= index_by (fun x -> x#id)
@@ -557,4 +556,4 @@ let get_local_followers ~account_id c : User.t list Lwt.t =
 let get_remote_followers ~account_id c : Account.t list Lwt.t =
   Follow.get_many ~target_account_id:account_id c ~preload:[ `account [] ]
   >|= List.filter_map (fun x ->
-          x#account#domain |> Option.map (fun _ -> x#account))
+      x#account#domain |> Option.map (fun _ -> x#account))

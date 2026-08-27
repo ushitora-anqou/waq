@@ -559,7 +559,7 @@ let lookup env ~token kind ?domain ~username () =
     search env ~token kind
       (domain
       |> Option.fold ~none:("@" ^ username) ~some:(fun domain ->
-             "@" ^ username ^ "@" ^ domain))
+          "@" ^ username ^ "@" ^ domain))
   with
   | [ acct ], _, _ -> (acct.id, acct.username, acct.acct)
   | accts, _, _ ->
@@ -612,7 +612,7 @@ let post_markers env ?token kind values =
   let body =
     values
     |> List.map (fun (timeline, last_read_id) ->
-           (timeline, `Assoc [ ("last_read_id", `String last_read_id) ]))
+        (timeline, `Assoc [ ("last_read_id", `String last_read_id) ]))
     |> fun l -> `Assoc l |> Yojson.Safe.to_string
   in
   do_fetch env ~meth:`POST ?token kind ~body "/api/v1/markers"
@@ -669,7 +669,7 @@ let post env ~token kind ?spoiler_text ?content ?in_reply_to_id
     let l =
       in_reply_to_id
       |> Option.fold ~none:l ~some:(fun id ->
-             ("in_reply_to_id", `String id) :: l)
+          ("in_reply_to_id", `String id) :: l)
     in
     let l =
       spoiler_text

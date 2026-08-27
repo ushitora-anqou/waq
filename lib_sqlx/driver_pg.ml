@@ -166,13 +166,12 @@ let query_stmt (c : connection) (stmt : statement) (params : value list) :
 
   r#ntuples |> iota
   |> List.map (fun row ->
-         stmt.fields
-         |> List.mapi (fun col (name, ty) ->
-                let s =
-                  if r#getisnull row col then None
-                  else Some (r#getvalue row col)
-                in
-                (name, value_of_string_for_pg ~ty s)))
+      stmt.fields
+      |> List.mapi (fun col (name, ty) ->
+          let s =
+            if r#getisnull row col then None else Some (r#getvalue row col)
+          in
+          (name, value_of_string_for_pg ~ty s)))
   |> Lwt.return
 
 let connect (uri : string) =

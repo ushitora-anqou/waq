@@ -580,7 +580,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
         let l =
           r.to_
           |> Option.fold ~none:l ~some:(fun xs ->
-                 (To, `List (xs |> List.map (fun x -> `String x))) :: l)
+              (To, `List (xs |> List.map (fun x -> `String x))) :: l)
         in
         l
     | Update r ->
@@ -611,7 +611,7 @@ let rec to_yojson ?(context = Some "https://www.w3.org/ns/activitystreams") v =
   let l =
     context
     |> Option.fold ~none:l ~some:(fun context ->
-           ("@context", `String context) :: l)
+        ("@context", `String context) :: l)
   in
   assert (l |> List.mem_assoc "type");
   `Assoc l
@@ -786,7 +786,7 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
        let url =
          ma#file_file_name
          |> Option.fold ~none:ma#remote_url ~some:(fun n ->
-                K.original_media_attachments_url (id, n))
+             K.original_media_attachments_url (id, n))
        in
        make_document ~url () |> document
   in
@@ -802,13 +802,13 @@ let serialize_status (s : Model.Status.t) (self : Model.Account.t) : ap_note =
     tag =
       mentions
       |> List.map (fun m ->
-             let a = Option.get m#account in
-             `Assoc
-               [
-                 ("type", `String "Mention");
-                 ("href", `String a#uri);
-                 ("name", `String ("@" ^ Model.Account.acct a));
-               ]);
+          let a = Option.get m#account in
+          `Assoc
+            [
+              ("type", `String "Mention");
+              ("href", `String a#uri);
+              ("name", `String ("@" ^ Model.Account.acct a));
+            ]);
     summary = s#spoiler_text;
     url = s#url;
   }
@@ -861,32 +861,32 @@ let rec status_of_note' env (note : ap_note) : Db.Status.t =
   note.attachment
   |> List.filter_map get_document
   |> List.iter (fun (d : ap_document) ->
-         let blurhash =
-           match (d.blurhash, d.url) with
-           | Some h, _ -> h
-           | None, "" -> Image.dummy_blurhash
-           | None, url ->
-               let body = Throttle_fetch.http_get env url in
-               let _, _, h = Lwt_eio.run_lwt (fun () -> Image.inspect body) in
-               h
-         in
-         Db.(
-           e
-             MediaAttachment.(
-               make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
-                 ~status_id:status#id ~blurhash ()
-               |> save_one))
-         |> ignore);
+      let blurhash =
+        match (d.blurhash, d.url) with
+        | Some h, _ -> h
+        | None, "" -> Image.dummy_blurhash
+        | None, url ->
+            let body = Throttle_fetch.http_get env url in
+            let _, _, h = Lwt_eio.run_lwt (fun () -> Image.inspect body) in
+            h
+      in
+      Db.(
+        e
+          MediaAttachment.(
+            make ~type_:0 ~remote_url:d.url ~account_id:status#account_id
+              ~status_id:status#id ~blurhash ()
+            |> save_one))
+      |> ignore);
 
   (* Handle mentions *)
   (* FIXME: can be processed in parallel *)
   note.cc @ note.to_
   |> List.filter_map (fun uri -> search_account_opt env (`Uri uri))
   |> List.iter (fun acct ->
-         let m =
-           Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
-         in
-         Db.(e @@ Mention.(save_one m)) |> ignore);
+      let m =
+        Model.Mention.(make ~account_id:acct#id ~status_id:status#id ())
+      in
+      Db.(e @@ Mention.(save_one m)) |> ignore);
 
   status
 

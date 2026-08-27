@@ -4,7 +4,7 @@ open Util [@@warning "-33"]
 let server env =
   Config.verify_for_server ()
   |> Result.iter_error (fun msg ->
-         failwith (Printf.sprintf "config is invalid: %s" msg));
+      failwith (Printf.sprintf "config is invalid: %s" msg));
 
   let host, port = Config.(listen_host (), listen_port ()) in
 
@@ -50,13 +50,12 @@ let db_reset () =
     (* Generate some users for tests *)
     [ 1; 2; 3 ] |> List.rev
     |> Lwt_list.iter_s (fun i ->
-           let open Printf in
-           let username = sprintf "user%d" i in
-           let display_name = sprintf "User %d's display name" i in
-           let email = sprintf "user%d@example.com" i in
-           let password = sprintf "user%dpassword" i in
-           Db.register_user ~username ~display_name ~email ~password
-           |> ignore_lwt)
+        let open Printf in
+        let username = sprintf "user%d" i in
+        let display_name = sprintf "User %d's display name" i in
+        let email = sprintf "user%d@example.com" i in
+        let password = sprintf "user%dpassword" i in
+        Db.register_user ~username ~display_name ~email ~password |> ignore_lwt)
   else Lwt.return_unit
 
 let db_generate_migration name =
@@ -223,8 +222,8 @@ let setup_logs () =
        | _ -> failwith "invalid log level"));
   Logs.Src.list ()
   |> List.iter (fun src ->
-         if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
-           Logs.Src.set_level src (Some Logs.Info));
+      if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
+        Logs.Src.set_level src (Some Logs.Info));
   ()
 
 let () =

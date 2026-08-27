@@ -39,17 +39,15 @@ let push ~(key : key) ~(event : string) ?payload () =
   | Some h ->
       h
       |> Hashtbl.iter (fun _id -> function
-           | `WebSocket conn ->
-               let _, stream = key in
-               let stream = match stream with `User -> "user" in
-               let l =
-                 [
-                   ("stream", `List [ `String stream ]); ("event", `String event);
-                 ]
-               in
-               let l =
-                 payload
-                 |> Option.fold ~none:l ~some:(fun payload ->
-                        ("payload", `String payload) :: l)
-               in
-               `Assoc l |> Yojson.Safe.to_string |> Yume.Server.ws_send conn)
+        | `WebSocket conn ->
+            let _, stream = key in
+            let stream = match stream with `User -> "user" in
+            let l =
+              [ ("stream", `List [ `String stream ]); ("event", `String event) ]
+            in
+            let l =
+              payload
+              |> Option.fold ~none:l ~some:(fun payload ->
+                  ("payload", `String payload) :: l)
+            in
+            `Assoc l |> Yojson.Safe.to_string |> Yume.Server.ws_send conn)

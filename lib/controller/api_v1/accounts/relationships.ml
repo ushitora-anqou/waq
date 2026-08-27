@@ -10,8 +10,8 @@ let get _ req =
   in
   account_ids
   |> List.map (fun account_id ->
-         Db.e (Model.Account.get_one ~id:account_id)
-         |> make_relationship_from_model self)
+      Db.e (Model.Account.get_one ~id:account_id)
+      |> make_relationship_from_model self)
   |> List.map yojson_of_relationship
   |> (fun l -> `List l)
   |> respond_yojson

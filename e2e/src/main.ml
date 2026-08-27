@@ -64,8 +64,8 @@ let setup_logs () =
   Logs.set_level (Some Logs.Debug);
   Logs.Src.list ()
   |> List.iter (fun src ->
-         if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
-           Logs.Src.set_level src (Some Logs.Info));
+      if String.starts_with ~prefix:"tls" (Logs.Src.name src) then
+        Logs.Src.set_level src (Some Logs.Info));
   ()
 
 let () =

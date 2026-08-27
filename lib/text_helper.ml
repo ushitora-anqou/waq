@@ -8,18 +8,18 @@ let match_mention =
   fun s ->
     Regex.match_ r s
     |> List.map (fun r ->
-           let open Regex in
-           let username = Option.get r.(1) in
-           let domain = r.(2) in
-           match domain with
-           | None ->
-               (username.offset - 1, username.length + 1, username.substr, None)
-           | Some domain ->
-               ( username.offset - 1,
-                 domain.offset + domain.length - username.offset + 1,
-                 username.substr,
-                 if domain.substr = Config.server_name () then None
-                 else Some domain.substr ))
+        let open Regex in
+        let username = Option.get r.(1) in
+        let domain = r.(2) in
+        match domain with
+        | None ->
+            (username.offset - 1, username.length + 1, username.substr, None)
+        | Some domain ->
+            ( username.offset - 1,
+              domain.offset + domain.length - username.offset + 1,
+              username.substr,
+              if domain.substr = Config.server_name () then None
+              else Some domain.substr ))
 
 type subst = { off : int; len : int; subtext : string } [@@deriving make]
 
@@ -50,13 +50,13 @@ let format_status_text (status : Model.Status.t) =
     let subst_links =
       status#text |> match_urls
       |> List.map (fun g ->
-             let open Jingoo.Jg_types in
-             let html =
-               Jingoo.Jg_template.from_string
-                 ~models:[ ("url", Tstr g.Regex.substr) ]
-                 {|<a href="{{ url }}" target="_blank" rel="nofollow noopener noreferrer">{{ url }}</a>|}
-             in
-             make_subst ~off:g.offset ~len:g.length ~subtext:html)
+          let open Jingoo.Jg_types in
+          let html =
+            Jingoo.Jg_template.from_string
+              ~models:[ ("url", Tstr g.Regex.substr) ]
+              {|<a href="{{ url }}" target="_blank" rel="nofollow noopener noreferrer">{{ url }}</a>|}
+          in
+          make_subst ~off:g.offset ~len:g.length ~subtext:html)
     in
 
     (* Handle mentions *)
