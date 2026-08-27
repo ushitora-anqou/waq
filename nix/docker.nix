@@ -53,6 +53,9 @@
       "SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt"
       "IMAGEMAGICK_CONVERT_PATH=${customImagemagick}/bin/convert"
     ];
+    # Previously set by metadata-action in CI; imagetools create cannot inject
+    # labels, so set it here to keep the GHCR <-> repository link.
+    Labels."org.opencontainers.image.source" = "https://github.com/ushitora-anqou/waq";
   };
 
   sbom = builtins.readFile (buildBom contents {
@@ -80,6 +83,7 @@ in
     config =
       config
       // {
-        Labels.SBOM = sbom;
+        # merge Labels instead of overwriting so config-side labels survive
+        Labels = (config.Labels or {}) // {SBOM = sbom;};
       };
   }
