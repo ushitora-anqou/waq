@@ -10,11 +10,19 @@ permissions: read-all
 
 jobs:
   e2e-test:
-    runs-on: ubuntu-latest
+    name: e2e-test - ${{ matrix.platform }}
+    runs-on: ${{ contains(matrix.platform, 'arm64') && 'ubuntu-26.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     steps:
       - name: Checkout tree
         uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@v14

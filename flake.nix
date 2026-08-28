@@ -152,6 +152,7 @@
               kind
               kubectl
               kubernetes-helm
+              lsof
               (callPackage ./nix/kneesocks.nix {})
             ]);
         };
