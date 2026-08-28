@@ -13,7 +13,11 @@ stdenv.mkDerivation {
   };
   nativeBuildInputs = [makeWrapper];
   buildPhase = ''
-    cc -O2 -Wall -Werror -shared -fPIC -o libkneesocks.so libkneesocks.c -ldl
+    # Note: do not link with -ldl. libdl.so.2 from nix's glibc 2.42+ requires
+    # the GLIBC_ABI_DT_X86_64_PLT symbol version, which the host glibc (e.g.
+    # 2.39 on the CI runner) does not provide, breaking LD_PRELOAD into
+    # system binaries. dlsym is part of libc since glibc 2.34 anyway.
+    cc -O2 -Wall -Werror -shared -fPIC -o libkneesocks.so libkneesocks.c
   '';
   installPhase = ''
     install -D -m 755 kneesocks $out/bin/kneesocks
