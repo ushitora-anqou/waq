@@ -35,7 +35,19 @@ let handle_query_uri env resolve q =
       None
   in
   let try_fetch_status uri =
-    try Some (Activity.fetch_status env ~uri)
+    try
+      let is_new =
+        try
+          ignore Db.(e Status.(get_one ~uri));
+          false
+        with Sqlx.Error.NoRowFound -> true
+      in
+      let s = Activity.fetch_status env ~uri in
+      (* Crawl links in the newly fetched status to generate its preview
+         card, as Mastodon enqueues LinkCrawlWorker for statuses fetched via
+         search. *)
+      if is_new then Worker.Link_crawl.kick env s#id;
+      Some s
     with e ->
       Logs.debug (fun m ->
           m "try_fetch_status failed: %s\n%s" (Printexc.to_string e)
