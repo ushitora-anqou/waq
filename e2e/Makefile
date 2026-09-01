@@ -62,12 +62,13 @@ create-cluster:
 	$(MAKE) $(KUBECONFIG)
 	KUBECONFIG=$(KUBECONFIG) helm install --create-namespace --namespace cert-manager --repo https://charts.jetstack.io cert-manager cert-manager --version $(CERT_MANAGER_CHART_VERSION) --set crds.enabled=true --wait
 	KUBECONFIG=$(KUBECONFIG) helm install --namespace cert-manager --repo https://charts.jetstack.io trust-manager trust-manager --version $(TRUST_MANAGER_CHART_VERSION) --wait
-	kubectl patch -n kube-system cm coredns --type=json -p='[{"op":"replace","path":"/data/Corefile","value":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    rewrite name mastodon.waq-e2e.anqou.net mastodon-gateway-tls.e2e.svc.cluster.local\n    rewrite name waq.waq-e2e.anqou.net waq-gateway-tls.e2e.svc.cluster.local\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}"}]'
+	kubectl patch -n kube-system cm coredns --type=json -p='[{"op":"replace","path":"/data/Corefile","value":".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    rewrite name mastodon.waq-e2e.anqou.net mastodon-gateway-tls.e2e.svc.cluster.local\n    rewrite name waq.waq-e2e.anqou.net waq-gateway-tls.e2e.svc.cluster.local\n    rewrite name ogp.waq-e2e.anqou.net ogp-server.e2e.svc.cluster.local\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}"}]'
 	KUBECONFIG=$(KUBECONFIG) helm install --repo https://ushitora-anqou.github.io/magout magout-cluster-wide magout-cluster-wide --wait
 	kubectl create namespace e2e
 	$(MAKE) setup-selfsigned-certs
 	kubectl apply -f $(WD)/manifests/postgres.yaml
 	kubectl apply -f $(WD)/manifests/socks5-proxy.yaml
+	kubectl apply -f $(WD)/manifests/ogp-server.yaml
 
 .PHONY: start-elk
 start-elk:
