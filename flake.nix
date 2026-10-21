@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs-master.url = "github:nixos/nixpkgs/master";
     flake-utils.url = "github:numtide/flake-utils";
 
     opam-nix = {
@@ -31,6 +32,7 @@
   outputs = {
     self,
     nixpkgs,
+    nixpkgs-master,
     flake-utils,
     opam-nix,
     bombon,
@@ -140,6 +142,7 @@
           docker = pkgs.callPackage nix/docker.nix {
             waq = main;
             buildBom = bombon.lib.${system}.buildBom;
+            cacert = nixpkgs-master.legacyPackages.${system}.cacert;
           };
         };
 

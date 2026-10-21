@@ -102,6 +102,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-master": {
+      "locked": {
+        "lastModified": 1792592727,
+        "narHash": "sha256-T2h/nBjnrj8pjB3OA8OO/C9DizEHFmsCb7S2BDgUxiI=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "49674fd557d84df438c428963009c415dd9d473e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs-python38": {
       "locked": {
         "lastModified": 1708815994,
@@ -226,6 +242,7 @@
         "bombon": "bombon",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-master": "nixpkgs-master",
         "opam-nix": "opam-nix",
         "opam-repository": "opam-repository",
         "waq-external-repo": "waq-external-repo"
